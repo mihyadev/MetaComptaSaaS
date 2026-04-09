@@ -1,8 +1,8 @@
-@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DocumentDto>
+﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DocumentDto>
 @{
     ViewData["Title"] = "Documents";
     var categorie = ViewBag.Categorie as string;
-    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
 }
 
 <div class="page-header">
@@ -17,6 +17,17 @@
     </div>
 </div>
 
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+        <i class="bi bi-building fs-5"></i>
+        <div>
+            <strong>@client.RaisonSociale</strong>
+            @if (!string.IsNullOrEmpty(client.ICE)) { <span class="ms-2 text-muted small">ICE: @client.ICE</span> }
+        </div>
+    </div>
+}
+
 <!-- Filters -->
 <div class="mc-card mb-4">
     <div class="card-body p-3">
@@ -25,20 +36,17 @@
                 <label class="form-label">Catégorie</label>
                 <select name="categorie" class="form-select">
                     <option value="">Toutes</option>
-                    <option value="PieceJustificative" selected="@(categorie == "PieceJustificative")">Pièces
-                        justificatives</option>
+                    <option value="PieceJustificative" selected="@(categorie == "PieceJustificative")">Pièces justificatives</option>
                     <option value="Contrat" selected="@(categorie == "Contrat")">Contrats & Statuts</option>
                     <option value="Formulaire" selected="@(categorie == "Formulaire")">Formulaires officiels</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Recherche</label>
-                <input type="text" name="search" class="form-control" placeholder="Nom du document..."
-                    value="@ViewBag.Search" />
+                <input type="text" name="search" class="form-control" placeholder="Nom du document..." value="@ViewBag.Search" />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i>
-                    Filtrer</button>
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>
@@ -55,7 +63,6 @@
                 <thead>
                     <tr>
                         <th>Nom</th>
-                        <th>Client</th>
                         <th>Catégorie</th>
                         <th>Type</th>
                         <th>Taille</th>
@@ -77,7 +84,6 @@
                                         <span class="fw-medium">@doc.Nom</span>
                                     </div>
                                 </td>
-                                <td>@doc.ClientNom</td>
                                 <td><span class="badge bg-light text-dark">@doc.Categorie</span></td>
                                 <td>@doc.TypeDocument</td>
                                 <td>@doc.TailleFichier</td>
@@ -94,14 +100,11 @@
                                     }
                                 </td>
                                 <td>
-                                    <a href="@Url.Action("Details", "Documents", new { id = doc.Id })"
-                                        class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                    <a href="@Url.Action("Details", "Documents", new { id = doc.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
                                     <form method="post" action="@Url.Action("ToggleShare", "Documents")" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@doc.Id" />
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Basculer partage">
-                                            <i class="bi bi-share"></i>
-                                        </button>
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Basculer partage"><i class="bi bi-share"></i></button>
                                     </form>
                                 </td>
                             </tr>
@@ -110,9 +113,9 @@
                     else
                     {
                         <tr>
-                            <td colspan="9" class="text-center py-4 text-muted">
+                            <td colspan="8" class="text-center py-4 text-muted">
                                 <i class="bi bi-folder fs-1 d-block mb-2"></i>
-                                Aucun document trouvé.
+                                Aucun document trouvé pour ce client.
                             </td>
                         </tr>
                     }

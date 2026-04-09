@@ -1,4 +1,4 @@
-@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EtatFiscalDto>
+﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EtatFiscalDto>
 @{
     var type = ViewBag.TypeEtat as string;
     var typeName = type switch
@@ -12,7 +12,7 @@
         _ => "Déclarations & États fiscaux"
     };
     ViewData["Title"] = typeName;
-    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
 }
 
 <div class="page-header">
@@ -29,6 +29,17 @@
         <i class="bi bi-file-earmark-plus me-1"></i> Générer un état
     </button>
 </div>
+
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+        <i class="bi bi-building fs-5"></i>
+        <div>
+            <strong>@client.RaisonSociale</strong>
+            @if (!string.IsNullOrEmpty(client.ICE)) { <span class="ms-2 text-muted small">ICE: @client.ICE</span> }
+        </div>
+    </div>
+}
 
 <!-- Type Cards -->
 <div class="row g-3 mb-4">
@@ -100,7 +111,6 @@
                 <thead>
                     <tr>
                         <th>Référence</th>
-                        <th>Client</th>
                         <th>Type</th>
                         <th>Exercice</th>
                         <th>Statut</th>
@@ -115,7 +125,6 @@
                         {
                             <tr>
                                 <td class="fw-medium">@e.Reference</td>
-                                <td>@e.ClientNom</td>
                                 <td><span class="badge bg-light text-dark">@e.TypeEtat</span></td>
                                 <td>@e.Exercice</td>
                                 <td><span class="badge badge-@e.Statut?.ToLower()">@e.Statut</span></td>
@@ -129,9 +138,9 @@
                     else
                     {
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">
+                            <td colspan="6" class="text-center py-4 text-muted">
                                 <i class="bi bi-file-earmark fs-1 d-block mb-2"></i>
-                                Aucun état fiscal trouvé.
+                                Aucun état fiscal trouvé pour ce client.
                             </td>
                         </tr>
                     }

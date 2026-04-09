@@ -1,7 +1,7 @@
-@model MetaCompta.Application.DTOs.DossierJuridiqueCreateDto
+﻿@model MetaCompta.Application.DTOs.DossierJuridiqueCreateDto
 @{
     ViewData["Title"] = "Nouveau dossier juridique";
-    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
 }
 
 <div class="page-header">
@@ -27,18 +27,12 @@
             @Html.AntiForgeryToken()
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">Client <span class="text-danger">*</span></label>
-                    <select asp-for="ClientId" class="form-select">
-                        <option value="">— Sélectionner —</option>
-                        @if (clients != null)
-                        {
-                            foreach (var c in clients)
-                            {
-                                <option value="@c.Id">@c.RaisonSociale</option>
-                            }
-                        }
-                    </select>
-                </div>
+                    <label class="form-label">Client</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-building"></i></span>
+                        <input type="text" class="form-control bg-light" value="@client?.RaisonSociale" readonly />
+                        <input type="hidden" asp-for="ClientId" value="@client?.Id" />
+                    </div>
                 <div class="col-md-6">
                     <label class="form-label">Type de dossier <span class="text-danger">*</span></label>
                     <select asp-for="TypeDossier" class="form-select">

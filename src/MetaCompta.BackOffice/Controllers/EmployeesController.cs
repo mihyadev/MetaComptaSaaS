@@ -31,16 +31,17 @@ public class EmployeesController : BaseController
     {
         try
         {
-            ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+            ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         }
         catch
         {
-            ViewBag.Clients = new List<ClientDto>();
+            ViewBag.Client = null;
         }
     }
 
     public async Task<IActionResult> Index(int? clientId = null, int page = 1, string? search = null, string? typeContrat = null)
     {
+        clientId ??= SelectedClientId;
         var result = await _employees.GetAllAsync(clientId, page, search);
 
         await LoadClientsAsync();
@@ -62,6 +63,7 @@ public class EmployeesController : BaseController
     [HttpGet]
     public async Task<IActionResult> Create(int? clientId = null)
     {
+        clientId ??= SelectedClientId;
         await LoadClientsAsync();
         await LoadReferenceDataToViewBagAsync(EmpRefCategories);
         var dto = new EmployeeCreateDto();

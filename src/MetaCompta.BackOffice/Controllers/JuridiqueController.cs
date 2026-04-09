@@ -27,10 +27,10 @@ public class JuridiqueController : BaseController
 
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, string? statut = null, int page = 1, string? search = null)
     {
+        clientId ??= SelectedClientId;
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE", "STATUT_DOSSIER");
         var result = await _juridique.GetAllAsync(clientId, type, statut, page, search);
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
-        ViewBag.ClientId = clientId;
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.TypeDossier = type;
         ViewBag.Statut = statut;
         ViewBag.Search = search;
@@ -49,7 +49,7 @@ public class JuridiqueController : BaseController
     public async Task<IActionResult> Create()
     {
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE");
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         return View(new DossierJuridiqueCreateDto());
     }
 
@@ -60,7 +60,7 @@ public class JuridiqueController : BaseController
         if (!ModelState.IsValid)
         {
             await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE");
-            ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+            ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
             return View(dto);
         }
         var result = await _juridique.CreateAsync(dto);
@@ -71,7 +71,7 @@ public class JuridiqueController : BaseController
         }
         SetApiError(result, "Erreur lors de la création du dossier juridique.");
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE");
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         return View(dto);
     }
 

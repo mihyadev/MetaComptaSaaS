@@ -1,7 +1,7 @@
-@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DossierJuridiqueDto>
+﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DossierJuridiqueDto>
 @{
     ViewData["Title"] = "Juridique";
-    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
 }
 
 <div class="page-header">
@@ -19,6 +19,17 @@
     </a>
 </div>
 
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+        <i class="bi bi-building fs-5"></i>
+        <div>
+            <strong>@client.RaisonSociale</strong>
+            @if (!string.IsNullOrEmpty(client.ICE)) { <span class="ms-2 text-muted small">ICE: @client.ICE</span> }
+        </div>
+    </div>
+}
+
 <!-- Filters -->
 <div class="mc-card mb-4">
     <div class="card-body p-3">
@@ -27,16 +38,11 @@
                 <label class="form-label">Type</label>
                 <select name="type" class="form-select">
                     <option value="">Tous</option>
-                    <option value="CreationSociete" selected="@(ViewBag.TypeDossier?.ToString() == "CreationSociete")">
-                        Création société</option>
-                    <option value="ModificationStatuts"
-                        selected="@(ViewBag.TypeDossier?.ToString() == "ModificationStatuts")">Modification statuts
-                    </option>
+                    <option value="CreationSociete" selected="@(ViewBag.TypeDossier?.ToString() == "CreationSociete")">Création société</option>
+                    <option value="ModificationStatuts" selected="@(ViewBag.TypeDossier?.ToString() == "ModificationStatuts")">Modification statuts</option>
                     <option value="PVAG" selected="@(ViewBag.TypeDossier?.ToString() == "PVAG")">PV AG</option>
-                    <option value="DepotLegal" selected="@(ViewBag.TypeDossier?.ToString() == "DepotLegal")">Dépôt légal
-                    </option>
-                    <option value="RC" selected="@(ViewBag.TypeDossier?.ToString() == "RC")">Registre de commerce
-                    </option>
+                    <option value="DepotLegal" selected="@(ViewBag.TypeDossier?.ToString() == "DepotLegal")">Dépôt légal</option>
+                    <option value="RC" selected="@(ViewBag.TypeDossier?.ToString() == "RC")">Registre de commerce</option>
                 </select>
             </div>
             <div class="col-md-2">
@@ -51,12 +57,10 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label">Recherche</label>
-                <input type="text" name="search" class="form-control" value="@ViewBag.Search"
-                    placeholder="Référence..." />
+                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Référence..." />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i>
-                    Filtrer</button>
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>
@@ -71,7 +75,6 @@
                 <thead>
                     <tr>
                         <th>Référence</th>
-                        <th>Client</th>
                         <th>Type</th>
                         <th>Objet</th>
                         <th>Date ouverture</th>
@@ -87,15 +90,13 @@
                         {
                             <tr>
                                 <td class="fw-medium">@d.Reference</td>
-                                <td>@d.ClientNom</td>
                                 <td><span class="badge bg-light text-dark">@d.TypeDossier</span></td>
                                 <td>@d.Objet</td>
                                 <td>@(d.DateOuverture.ToString("dd/MM/yyyy"))</td>
                                 <td><span class="badge badge-@d.Statut?.ToLower()">@d.Statut</span></td>
                                 <td>@d.Responsable</td>
                                 <td>
-                                    <a href="@Url.Action("Details", "Juridique", new { id = d.Id })"
-                                        class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                    <a href="@Url.Action("Details", "Juridique", new { id = d.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
                                 </td>
                             </tr>
                         }
@@ -103,9 +104,9 @@
                     else
                     {
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">
+                            <td colspan="7" class="text-center py-4 text-muted">
                                 <i class="bi bi-briefcase fs-1 d-block mb-2"></i>
-                                Aucun dossier juridique trouvé.
+                                Aucun dossier juridique trouvé pour ce client.
                             </td>
                         </tr>
                     }

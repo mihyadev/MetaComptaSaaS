@@ -1,7 +1,7 @@
 ﻿@model EmployeeCreateDto
 @{
     ViewData["Title"] = "Nouvel Employé";
-    var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
+    var client = ViewBag.Client as ClientDto;
 }
 
 <div class="page-header mb-4">
@@ -72,23 +72,11 @@
         <div class="card-body px-4 pb-4 pt-3">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">Client / Entreprise <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">Client / Entreprise</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-building text-muted"></i></span>
-                        <select name="ClientId" class="form-select border-start-0" required>
-                            <option value="">— Sélectionner un client —</option>
-                            @foreach (var c in clients)
-                            {
-                                if (Model?.ClientId == c.Id)
-                                {
-                                    <option value="@c.Id" selected>@c.RaisonSociale</option>
-                                }
-                                else
-                                {
-                                    <option value="@c.Id">@c.RaisonSociale</option>
-                                }
-                            }
-                        </select>
+                        <input type="text" class="form-control border-start-0 bg-light" value="@client?.RaisonSociale" readonly />
+                        <input type="hidden" name="ClientId" value="@client?.Id" />
                     </div>
                 </div>
                 <div class="col-md-6">

@@ -1,4 +1,4 @@
-﻿using MetaCompta.BackOffice.Filters;
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,9 +26,10 @@ public class EtatsFiscauxController : BaseController
 
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, int? exercice = null, int page = 1, string? search = null)
     {
+        clientId ??= SelectedClientId;
         await LoadReferenceDataToViewBagAsync("TYPE_ETAT_FISCAL", "STATUT_ETAT");
         var result = await _etats.GetAllAsync(clientId, type, exercice, page, search);
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.ClientId = clientId;
         ViewBag.TypeEtat = type;
         ViewBag.Exercice = exercice;
@@ -72,39 +73,46 @@ public class EtatsFiscauxController : BaseController
 
     public async Task<IActionResult> Etat9421(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("Etat9421", clientId, exercice, page);
     }
 
     public async Task<IActionResult> LiasseFiscale(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("LiasseFiscale", clientId, exercice, page);
     }
 
     public async Task<IActionResult> Bilan(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("Bilan", clientId, exercice, page);
     }
 
     public async Task<IActionResult> CPC(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("CPC", clientId, exercice, page);
     }
 
     public async Task<IActionResult> Amortissements(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("Amortissements", clientId, exercice, page);
     }
 
     public async Task<IActionResult> EtatsSynthese(int? clientId = null, int? exercice = null, int page = 1)
     {
+        clientId ??= SelectedClientId;
         return await TypedIndex("EtatsSynthese", clientId, exercice, page);
     }
 
     private async Task<IActionResult> TypedIndex(string type, int? clientId, int? exercice, int page)
     {
+        clientId ??= SelectedClientId;
         await LoadReferenceDataToViewBagAsync("TYPE_ETAT_FISCAL", "STATUT_ETAT");
         var result = await _etats.GetAllAsync(clientId, type, exercice, page, null);
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.ClientId = clientId;
         ViewBag.TypeEtat = type;
         ViewBag.Exercice = exercice;

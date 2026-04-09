@@ -1,4 +1,4 @@
-﻿using MetaCompta.Application.DTOs;
+using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +29,7 @@ public class ComptabiliteController : BaseController
     /// <summary>Load selected client info for all views.</summary>
     private async Task LoadClientAsync(int? clientId)
     {
+        clientId ??= SelectedClientId;
         if (clientId.HasValue)
         {
             var client = await _clients.GetByIdAsync(clientId.Value);
@@ -39,6 +40,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> Ecritures(int? clientId = null, string? journal = null, int page = 1, string? search = null)
     {
+        clientId ??= SelectedClientId;
         await LoadClientAsync(clientId);
         var result = await _compta.GetEcrituresAsync(clientId, journal, page, search);
         ViewBag.Journal = journal;
@@ -75,6 +77,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> Journaux(int? clientId = null)
     {
+        clientId ??= SelectedClientId;
         await LoadClientAsync(clientId);
         var journaux = await _compta.GetJournauxAsync(clientId);
         return View(journaux);
@@ -82,6 +85,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> GrandLivre(int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
+        clientId ??= SelectedClientId;
         if (!clientId.HasValue) return RedirectToAction("Ecritures");
         await LoadClientAsync(clientId);
         var data = await _compta.GetGrandLivreAsync(clientId.Value, dateDebut, dateFin);
@@ -92,6 +96,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> Balance(int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
+        clientId ??= SelectedClientId;
         if (!clientId.HasValue) return RedirectToAction("Ecritures");
         await LoadClientAsync(clientId);
         var data = await _compta.GetBalanceAsync(clientId.Value, dateDebut, dateFin);
@@ -102,6 +107,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> BalanceAgee(int? clientId = null)
     {
+        clientId ??= SelectedClientId;
         if (!clientId.HasValue) return RedirectToAction("Ecritures");
         await LoadClientAsync(clientId);
         var data = await _compta.GetBalanceAgeeAsync(clientId.Value);
@@ -110,6 +116,7 @@ public class ComptabiliteController : BaseController
 
     public async Task<IActionResult> Rapprochements(int? clientId = null)
     {
+        clientId ??= SelectedClientId;
         await LoadClientAsync(clientId);
         var data = await _compta.GetRapprochementsAsync(clientId);
         return View(data);

@@ -1,8 +1,8 @@
-@using MetaCompta.Application.DTOs
+﻿@using MetaCompta.Application.DTOs
 @model List<PayrollPeriodDto>
 @{
     ViewData["Title"] = "Paie";
-    var clients = ViewBag.Clients as List<ClientDto> ?? new();
+    var client = ViewBag.Client as ClientDto;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -13,16 +13,16 @@
     <button type="button" class="btn btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#initModal"><i class="bi bi-plus-circle me-1"></i> Initialiser Periode</button>
 </div>
 
-<div class="card border-0 shadow-sm rounded-4 mb-3">
-    <div class="card-body">
-        <form method="get" class="row g-2 align-items-end">
-
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary rounded-pill w-100"><i class="bi bi-search me-1"></i>Filtrer</button>
-            </div>
-        </form>
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+        <i class="bi bi-building fs-5"></i>
+        <div>
+            <strong>@client.RaisonSociale</strong>
+            @if (!string.IsNullOrEmpty(client.ICE)) { <span class="ms-2 text-muted small">ICE: @client.ICE</span> }
+        </div>
     </div>
-</div>
+}
 
 <div class="card border-0 shadow-sm rounded-4">
     <div class="card-body p-0">
@@ -30,8 +30,7 @@
             <table class="table table-hover align-middle mb-0 mc-table">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-4">Client</th>
-                        <th>Periode</th>
+                        <th class="ps-4">Periode</th>
                         <th class="text-center">Employes</th>
                         <th class="text-end">Brut Global</th>
                         <th class="text-end">Net Global</th>
@@ -48,8 +47,7 @@
                             var label = (p.Month >= 1 && p.Month <= 12 ? moisNoms[p.Month] : p.Month.ToString()) + " " + p.Year;
                             var statusBadge = p.Status == RefCodes.StatutPaie.Valide ? "bg-success-subtle text-success" : p.Status == RefCodes.StatutPaie.Calcule ? "bg-info-subtle text-info" : "bg-warning-subtle text-warning";
                             <tr>
-                                <td class="ps-4 fw-semibold">@p.ClientName</td>
-                                <td>@label</td>
+                                <td class="ps-4 fw-semibold">@label</td>
                                 <td class="text-center"><span class="badge bg-primary-subtle text-primary rounded-pill">@p.TotalEmployees</span></td>
                                 <td class="text-end">@(p.TotalBrutGlobal.HasValue ? p.TotalBrutGlobal.Value.ToString("N0") : "-") MAD</td>
                                 <td class="text-end">@(p.TotalNetPay.HasValue ? p.TotalNetPay.Value.ToString("N0") : "-") MAD</td>
@@ -62,9 +60,9 @@
                     }
                     else
                     {
-                        <tr><td colspan="7" class="text-center py-5 text-muted">
+                        <tr><td colspan="6" class="text-center py-5 text-muted">
                             <i class="bi bi-cash-stack display-4 d-block mb-2 opacity-25"></i>
-                            <p class="mb-0">Aucune periode de paie</p>
+                            <p class="mb-0">Aucune periode de paie pour ce client.</p>
                         </td></tr>
                     }
                 </tbody>
@@ -83,7 +81,6 @@
             <form asp-action="Initialize" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-body">
-
                     <div class="row g-3">
                         <div class="col-6">
                             <label class="form-label">Annee</label>

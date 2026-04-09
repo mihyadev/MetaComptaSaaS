@@ -26,6 +26,7 @@ public class RapportsController : BaseController
 
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, int page = 1, string? search = null)
     {
+        clientId ??= SelectedClientId;
         var result = await _rapports.GetAllAsync(clientId, type, page, search);
         ViewBag.TypeRapport = type;
         ViewBag.Search = search;
@@ -50,6 +51,7 @@ public class RapportsController : BaseController
 
     private async Task<IActionResult> TypedIndex(string type, int? clientId, int page, string? search)
     {
+        clientId ??= SelectedClientId;
         var result = await _rapports.GetAllAsync(clientId, type, page, search);
         ViewBag.TypeRapport = type;
         ViewBag.Search = search;
@@ -68,6 +70,7 @@ public class RapportsController : BaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Generate(string type, int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
+        clientId ??= SelectedClientId;
         var result = await _rapports.GenerateAsync(type, clientId, dateDebut, dateFin);
         if (result?.Success == true)
         {

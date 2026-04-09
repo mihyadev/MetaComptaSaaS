@@ -27,8 +27,9 @@ public class DocumentsController : BaseController
 
     public async Task<IActionResult> Index(int? clientId = null, string? categorie = null, int page = 1, string? search = null)
     {
+        clientId ??= SelectedClientId;
         var result = await _documents.GetAllAsync(clientId, categorie, page, search);
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.ClientId = clientId;
         ViewBag.Categorie = categorie;
         ViewBag.Search = search;

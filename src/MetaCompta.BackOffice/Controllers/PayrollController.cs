@@ -1,4 +1,4 @@
-using MetaCompta.Application.DTOs;
+﻿using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -24,9 +24,10 @@ public class PayrollController : BaseController
 
     public async Task<IActionResult> Index(int? clientId = null)
     {
+        clientId ??= SelectedClientId;
         var periods = await _payroll.GetAllPeriodsAsync(clientId);
 
-        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.ClientId = clientId;
         await LoadReferenceDataToViewBagAsync("STATUT_PAIE");
         return View(periods);

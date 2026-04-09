@@ -1,67 +1,110 @@
 ﻿@using MetaCompta.Application.DTOs
+@using MetaCompta.Domain.Common
 @model PayrollPeriodDto
 @{
-    var moisNoms = new[] { "", "Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre" };
+    var moisNoms = new[] { "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre" };
     var moisLabel = Model.Month >= 1 && Model.Month <= 12 ? moisNoms[Model.Month] : Model.Month.ToString();
-    ViewData["Title"] = $"Paie - {moisLabel} {Model.Year}";
+    ViewData["Title"] = $"Paie — {moisLabel} {Model.Year}";
     var paySlips = ViewBag.PaySlips as List<PaySlipDto> ?? new List<PaySlipDto>();
-    var refStatuts = ViewData["Ref_STATUT_PAIE"] as List<ReferenceDataDto> ?? new();
+    var isBrouillon = Model.Status == RefCodes.StatutPaie.Brouillon;
+    var isCalcule = Model.Status == RefCodes.StatutPaie.Calcule || Model.Status == RefCodes.StatutPaie.EnCours;
+    var isValide = Model.Status == RefCodes.StatutPaie.Validee || Model.Status == RefCodes.StatutPaie.Valide;
+    var statusBadge = isValide ? "bg-success" : isCalcule ? "bg-info" : "bg-warning text-dark";
+    var statusLabel = isValide ? "Validée" : isCalcule ? "Calculée" : "Brouillon";
+    var totalCNSSSalarial = paySlips.Sum(s => s.CotisationCNSS);
+    var totalAMOSalarial = paySlips.Sum(s => s.CotisationAMO);
+    var totalCIMR = paySlips.Sum(s => s.CotisationCIMR);
+    var totalIR = paySlips.Sum(s => s.IR);
+    var totalCNSSPatronal = paySlips.Sum(s => s.CNSSPatronal);
+    var totalAMOPatronal = paySlips.Sum(s => s.AMOPatronal);
+    var totalFP = paySlips.Sum(s => s.FormationProfessionnelle);
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
     <div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
-                <li class="breadcrumb-item"><a href="/Payroll">Paie</a></li>
+                <li class="breadcrumb-item"><a href="/Payroll"><i class="bi bi-cash-stack me-1"></i>Paie</a></li>
                 <li class="breadcrumb-item active">@moisLabel @Model.Year</li>
             </ol>
         </nav>
-        <h4 class="fw-bold mb-0">@Model.ClientName - @moisLabel @Model.Year</h4>
+        <h4 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff text-primary me-2"></i>@Model.ClientName — @moisLabel @Model.Year</h4>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge @statusBadge rounded-pill px-3 py-2">@statusLabel</span>
+            <span class="text-muted small">@Model.TotalEmployees employé(s)</span>
+            @if (Model.DateValidation.HasValue)
+            {
+                <span class="text-muted small">| Validée le @Model.DateValidation.Value.ToString("dd/MM/yyyy HH:mm")</span>
+            }
+        </div>
     </div>
-    <div class="btn-group">
+    <div class="d-flex gap-2 flex-wrap">
+        @if (isBrouillon)
+        {
+            <form asp-action="Calculate" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-primary rounded-pill px-3" onclick="return confirm('Lancer le calcul de paie pour tous les employés ?')">
+                    <i class="bi bi-calculator me-1"></i> Calculer la Paie
+                </button>
+            </form>
+        }
+        @if (isCalcule)
+        {
+            <form asp-action="Calculate" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-outline-primary rounded-pill px-3">
+                    <i class="bi bi-arrow-repeat me-1"></i> Recalculer
+                </button>
+            </form>
+            <form asp-action="Validate" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-success rounded-pill px-3" onclick="return confirm('Valider définitivement cette paie ? Cette action est irréversible.')">
+                    <i class="bi bi-check-circle me-1"></i> Valider la Paie
+                </button>
+            </form>
+        }
         <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i> Retour
         </a>
     </div>
 </div>
 
+<!-- KPI Cards -->
 <div class="row g-3 mb-4">
     <div class="col-xl-3 col-md-6">
         <div class="stat-card" style="border-left: 4px solid var(--mc-primary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
-                    <div class="stat-label">Employes</div>
+                    <div class="stat-label">Employés</div>
                     <div class="stat-value">@Model.TotalEmployees</div>
                 </div>
-                <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);">
-                    <i class="bi bi-people"></i>
-                </div>
+                <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);"><i class="bi bi-people"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left: 4px solid var(--mc-accent);">
+        <div class="stat-card" style="border-left: 4px solid #f59e0b;">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Brut Global</div>
-                    <div class="stat-value">@(Model.TotalBrutGlobal.HasValue ? Model.TotalBrutGlobal.Value.ToString("N0") : "-")</div>
+                    <div class="stat-value">@(Model.TotalBrutGlobal.HasValue ? Model.TotalBrutGlobal.Value.ToString("N2") : "—") <small class="text-muted fw-normal">MAD</small></div>
                 </div>
-                <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--mc-accent);">
-                    <i class="bi bi-cash"></i>
-                </div>
+                <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;"><i class="bi bi-cash"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left: 4px solid var(--mc-secondary);">
+        <div class="stat-card" style="border-left: 4px solid #059669;">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
-                    <div class="stat-label">Net Global</div>
-                    <div class="stat-value">@(Model.TotalNetPay.HasValue ? Model.TotalNetPay.Value.ToString("N0") : "-")</div>
+                    <div class="stat-label">Net à Payer</div>
+                    <div class="stat-value">@(Model.TotalNetPay.HasValue ? Model.TotalNetPay.Value.ToString("N2") : "—") <small class="text-muted fw-normal">MAD</small></div>
                 </div>
-                <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: var(--mc-secondary);">
-                    <i class="bi bi-wallet2"></i>
-                </div>
+                <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: #059669;"><i class="bi bi-wallet2"></i></div>
             </div>
         </div>
     </div>
@@ -70,12 +113,309 @@
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Charges Patronales</div>
-                    <div class="stat-value">@(Model.TotalChargesPatronales.HasValue ? Model.TotalChargesPatronales.Value.ToString("N0") : "-")</div>
+                    <div class="stat-value">@(Model.TotalChargesPatronales.HasValue ? Model.TotalChargesPatronales.Value.ToString("N2") : "—") <small class="text-muted fw-normal">MAD</small></div>
                 </div>
-                <div class="stat-icon" style="background: rgba(239,68,68,0.1); color: #ef4444;">
-                    <i class="bi bi-building"></i>
-                </div>
+                <div class="stat-icon" style="background: rgba(239,68,68,0.1); color: #ef4444;"><i class="bi bi-building"></i></div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Cotisations Summary -->
+@if (isCalcule || isValide)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-transparent border-0 fw-bold"><i class="bi bi-person-dash me-2 text-danger"></i>Retenues Salariales</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr><td class="ps-4">CNSS Salariale</td><td class="text-end pe-4 fw-semibold">@totalCNSSSalarial.ToString("N2") MAD</td></tr>
+                            <tr><td class="ps-4">AMO Salariale</td><td class="text-end pe-4 fw-semibold">@totalAMOSalarial.ToString("N2") MAD</td></tr>
+                            <tr><td class="ps-4">CIMR</td><td class="text-end pe-4 fw-semibold">@totalCIMR.ToString("N2") MAD</td></tr>
+                            <tr><td class="ps-4">IR (Impôt sur le Revenu)</td><td class="text-end pe-4 fw-semibold">@totalIR.ToString("N2") MAD</td></tr>
+                            <tr class="table-light fw-bold"><td class="ps-4">Total Retenues</td><td class="text-end pe-4">@((totalCNSSSalarial + totalAMOSalarial + totalCIMR + totalIR).ToString("N2")) MAD</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-transparent border-0 fw-bold"><i class="bi bi-building me-2 text-primary"></i>Charges Patronales</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr><td class="ps-4">CNSS Patronale</td><td class="text-end pe-4 fw-semibold">@totalCNSSPatronal.ToString("N2") MAD</td></tr>
+                            <tr><td class="ps-4">AMO Patronale</td><td class="text-end pe-4 fw-semibold">@totalAMOPatronal.ToString("N2") MAD</td></tr>
+                            <tr><td class="ps-4">Formation Professionnelle</td><td class="text-end pe-4 fw-semibold">@totalFP.ToString("N2") MAD</td></tr>
+                            <tr class="table-light fw-bold"><td class="ps-4">Total Charges</td><td class="text-end pe-4">@((totalCNSSPatronal + totalAMOPatronal + totalFP).ToString("N2")) MAD</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Pay Slips Table -->
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-table me-2"></i>Bulletins de Paie (@paySlips.Count)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table" id="payslipsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Employé</th>
+                        <th>Matricule</th>
+                        <th class="text-end">Salaire Base</th>
+                        <th class="text-end">Primes</th>
+                        <th class="text-end">H.Supp</th>
+                        <th class="text-end">Brut</th>
+                        <th class="text-end">CNSS</th>
+                        <th class="text-end">AMO</th>
+                        <th class="text-end">IR</th>
+                        <th class="text-end fw-bold">Net à Payer</th>
+                        @if (isBrouillon || isCalcule)
+                        {
+                            <th class="text-center">Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (paySlips.Any())
+                    {
+                        @foreach (var slip in paySlips)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-semibold">@slip.EmployeeName</div>
+                                </td>
+                                <td><code>@(slip.Matricule ?? "—")</code></td>
+                                <td class="text-end">@slip.SalaireBase.ToString("N2")</td>
+                                <td class="text-end">@slip.PrimesFixesTotales.ToString("N2")</td>
+                                <td class="text-end">@slip.MontantHeuresSupp.ToString("N2")</td>
+                                <td class="text-end fw-semibold">@slip.SalaireBrut.ToString("N2")</td>
+                                <td class="text-end text-danger">@slip.CotisationCNSS.ToString("N2")</td>
+                                <td class="text-end text-danger">@slip.CotisationAMO.ToString("N2")</td>
+                                <td class="text-end text-danger">@slip.IR.ToString("N2")</td>
+                                <td class="text-end fw-bold text-success">@slip.SalaireNet.ToString("N2")</td>
+                                @if (isBrouillon || isCalcule)
+                                {
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill"
+                                            data-bs-toggle="modal" data-bs-target="#modalVars"
+                                            data-emp-id="@slip.EmployeeId"
+                                            data-emp-name="@slip.EmployeeName"
+                                            data-hs25="@slip.HeuresSupp25"
+                                            data-hs50="@slip.HeuresSupp50"
+                                            data-hs100="@slip.HeuresSupp100"
+                                            data-primes="@slip.PrimesExceptionnelles"
+                                            data-avances="@slip.AvancesSalaire"
+                                            data-absences="@slip.AbsencesNonRemunerees">
+                                            <i class="bi bi-pencil-square me-1"></i>Variables
+                                        </button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="@(isBrouillon || isCalcule ? 11 : 10)" class="text-center py-5 text-muted">
+                                <i class="bi bi-receipt display-4 d-block mb-2 opacity-25"></i>
+                                <p class="mb-1 fw-semibold">Aucun bulletin de paie</p>
+                                <p class="mb-0 small">Initialisez la période depuis la liste de paie pour créer les bulletins automatiquement.</p>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                @if (paySlips.Any())
+                {
+                    <tfoot class="table-light">
+                        <tr class="fw-bold">
+                            <td class="ps-4" colspan="2">TOTAUX</td>
+                            <td class="text-end">@paySlips.Sum(s => s.SalaireBase).ToString("N2")</td>
+                            <td class="text-end">@paySlips.Sum(s => s.PrimesFixesTotales).ToString("N2")</td>
+                            <td class="text-end">@paySlips.Sum(s => s.MontantHeuresSupp).ToString("N2")</td>
+                            <td class="text-end">@paySlips.Sum(s => s.SalaireBrut).ToString("N2")</td>
+                            <td class="text-end text-danger">@totalCNSSSalarial.ToString("N2")</td>
+                            <td class="text-end text-danger">@totalAMOSalarial.ToString("N2")</td>
+                            <td class="text-end text-danger">@totalIR.ToString("N2")</td>
+                            <td class="text-end text-success">@paySlips.Sum(s => s.SalaireNet).ToString("N2")</td>
+                            @if (isBrouillon || isCalcule)
+                            {
+                                <td></td>
+                            }
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Charges Patronales Detail Table -->
+@if ((isCalcule || isValide) && paySlips.Any())
+{
+    <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card-header bg-transparent border-0 fw-bold">
+            <i class="bi bi-building me-2 text-danger"></i>Détail Charges Patronales par Employé
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 mc-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Employé</th>
+                            <th class="text-end">Brut</th>
+                            <th class="text-end">CNSS Patronale</th>
+                            <th class="text-end">AMO Patronale</th>
+                            <th class="text-end">Form. Prof.</th>
+                            <th class="text-end fw-bold">Total Charges</th>
+                            <th class="text-end fw-bold">Coût Total Employeur</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var slip in paySlips)
+                        {
+                            var coutTotal = slip.SalaireBrut + slip.TotalChargesPatronales;
+                            <tr>
+                                <td class="ps-4 fw-semibold">@slip.EmployeeName</td>
+                                <td class="text-end">@slip.SalaireBrut.ToString("N2")</td>
+                                <td class="text-end">@slip.CNSSPatronal.ToString("N2")</td>
+                                <td class="text-end">@slip.AMOPatronal.ToString("N2")</td>
+                                <td class="text-end">@slip.FormationProfessionnelle.ToString("N2")</td>
+                                <td class="text-end fw-bold text-danger">@slip.TotalChargesPatronales.ToString("N2")</td>
+                                <td class="text-end fw-bold">@coutTotal.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr class="fw-bold">
+                            <td class="ps-4">TOTAUX</td>
+                            <td class="text-end">@paySlips.Sum(s => s.SalaireBrut).ToString("N2")</td>
+                            <td class="text-end">@totalCNSSPatronal.ToString("N2")</td>
+                            <td class="text-end">@totalAMOPatronal.ToString("N2")</td>
+                            <td class="text-end">@totalFP.ToString("N2")</td>
+                            <td class="text-end text-danger">@paySlips.Sum(s => s.TotalChargesPatronales).ToString("N2")</td>
+                            <td class="text-end">@((paySlips.Sum(s => s.SalaireBrut) + paySlips.Sum(s => s.TotalChargesPatronales)).ToString("N2"))</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Edit Variables -->
+@if (isBrouillon || isCalcule)
+{
+    <div class="modal fade" id="modalVars" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content rounded-4">
+                <form asp-action="UpdateVariables" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="periodId" value="@Model.Id" />
+                    <input type="hidden" name="dto.EmployeeId" id="varEmpId" />
+                    <div class="modal-header border-0 bg-primary bg-opacity-10">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-sliders me-2"></i>Variables de Paie — <span id="varEmpName"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info rounded-3 small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Saisissez les éléments variables du mois. Les calculs (brut, CNSS, AMO, IR, net) seront effectués automatiquement lors du calcul de la paie.
+                        </div>
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-clock-history me-1"></i>Heures Supplémentaires</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Heures à 25%</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-clock text-muted"></i></span>
+                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp25" id="varHs25" class="form-control" />
+                                    <span class="input-group-text bg-light">h</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Heures à 50%</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-clock text-muted"></i></span>
+                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp50" id="varHs50" class="form-control" />
+                                    <span class="input-group-text bg-light">h</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Heures à 100%</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-clock text-muted"></i></span>
+                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp100" id="varHs100" class="form-control" />
+                                    <span class="input-group-text bg-light">h</span>
+                                </div>
+                            </div>
+                        </div>
+                        <h6 class="fw-bold text-success mb-3"><i class="bi bi-plus-circle me-1"></i>Primes & Indemnités</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Primes Exceptionnelles</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-gift text-muted"></i></span>
+                                    <input type="number" step="0.01" min="0" name="dto.PrimesExceptionnelles" id="varPrimes" class="form-control" />
+                                    <span class="input-group-text bg-light">MAD</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Avances sur Salaire</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-arrow-down-circle text-muted"></i></span>
+                                    <input type="number" step="0.01" min="0" name="dto.AvancesSalaire" id="varAvances" class="form-control" />
+                                    <span class="input-group-text bg-light">MAD</span>
+                                </div>
+                            </div>
+                        </div>
+                        <h6 class="fw-bold text-danger mb-3"><i class="bi bi-dash-circle me-1"></i>Absences</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Jours d'Absence Non Rémunérée</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-calendar-x text-muted"></i></span>
+                                    <input type="number" step="0.5" min="0" name="dto.AbsencesNonRemunerees" id="varAbsences" class="form-control" />
+                                    <span class="input-group-text bg-light">jours</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            var modal = document.getElementById('modalVars');
+            if (modal) {
+                modal.addEventListener('show.bs.modal', function (e) {
+                    var btn = e.relatedTarget;
+                    $('#varEmpId').val(btn.dataset.empId);
+                    $('#varEmpName').text(btn.dataset.empName);
+                    $('#varHs25').val(btn.dataset.hs25 || 0);
+                    $('#varHs50').val(btn.dataset.hs50 || 0);
+                    $('#varHs100').val(btn.dataset.hs100 || 0);
+                    $('#varPrimes').val(btn.dataset.primes || 0);
+                    $('#varAvances').val(btn.dataset.avances || 0);
+                    $('#varAbsences').val(btn.dataset.absences || 0);
+                });
+            }
+        });
+    </script>
+}
