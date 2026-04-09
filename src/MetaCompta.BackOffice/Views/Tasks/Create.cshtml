@@ -1,0 +1,76 @@
+@model MetaCompta.Application.DTOs.TaskItemDto
+@{
+    ViewData["Title"] = "Nouvelle tâche";
+    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-plus-circle me-2"></i>Nouvelle tâche</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Tasks")">Tâches</a></li>
+                <li class="breadcrumb-item active">Nouvelle</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Index", "Tasks")" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Retour
+    </a>
+</div>
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-pencil me-2"></i>Informations de la tâche</div>
+    <div class="card-body">
+        <form method="post" asp-action="Create">
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="display:none;"></div>
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label">Titre <span class="text-danger">*</span></label>
+                    <input asp-for="Titre" class="form-control" placeholder="Titre de la tâche" />
+                    <span asp-validation-for="Titre" class="text-danger small"></span>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Client</label>
+                    <select asp-for="ClientId" class="form-select">
+                        <option value="">— Sélectionner —</option>
+                        @if (clients != null)
+                        {
+                            foreach (var c in clients)
+                            {
+                                <option value="@c.Id">@c.RaisonSociale</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Description</label>
+                    <textarea asp-for="Description" class="form-control" rows="4" placeholder="Description de la tâche..."></textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Priorité</label>
+                    <select asp-for="Priorite" class="form-select">
+                        <option value="Faible">Faible</option>
+                        <option value="Moyenne" selected>Moyenne</option>
+                        <option value="Haute">Haute</option>
+                        <option value="Urgente">Urgente</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Assignée à</label>
+                    <input asp-for="AssigneA" class="form-control" placeholder="Nom de l'employé" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Date d'échéance</label>
+                    <input asp-for="DateEcheance" type="date" class="form-control" />
+                </div>
+            </div>
+            <div class="mt-4">
+                <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Créer la tâche</button>
+                <a href="@Url.Action("Index", "Tasks")" class="btn btn-outline-secondary ms-2">Annuler</a>
+            </div>
+        </form>
+    </div>
+</div>

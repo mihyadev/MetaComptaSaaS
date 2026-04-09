@@ -1,0 +1,47 @@
+@model List<PaySlipDto>
+@{
+    ViewData["Title"] = "Mes Bulletins de Paie";
+}
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Période</th>
+                        <th class="text-end">Salaire Brut</th>
+                        <th class="text-end">CNSS</th>
+                        <th class="text-end">AMO</th>
+                        <th class="text-end">IR</th>
+                        <th class="text-end">Net à Payer</th>
+                        <th class="text-end pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        @foreach (var p in Model)
+                        {
+                            <tr>
+                                <td class="ps-4 fw-medium">@p.PeriodLabel</td>
+                                <td class="text-end">@p.SalaireBrut.ToString("N2")</td>
+                                <td class="text-end text-danger">@p.CotisationCNSS.ToString("N2")</td>
+                                <td class="text-end text-danger">@p.CotisationAMO.ToString("N2")</td>
+                                <td class="text-end text-danger">@p.IR.ToString("N2")</td>
+                                <td class="text-end fw-bold text-success">@p.SalaireNet.ToString("N2") MAD</td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-outline-primary btn-sm rounded-pill"><i class="bi bi-printer me-1"></i>Imprimer</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="7" class="text-center py-5 text-muted">Aucun bulletin de paie disponible</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

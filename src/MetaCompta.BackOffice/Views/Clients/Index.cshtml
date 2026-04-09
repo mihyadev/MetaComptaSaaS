@@ -1,0 +1,254 @@
+@using MetaCompta.Application.DTOs
+@model PagedResult<ClientDto>
+@{
+    ViewData["Title"] = "Gestion des Clients";
+    var refFormesJuridiques = ViewData["Ref_FORME_JURIDIQUE"] as List<ReferenceDataDto> ?? new();
+    var refStatuts = ViewData["Ref_STATUT_CLIENT"] as List<ReferenceDataDto> ?? new();
+}
+
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-building text-primary me-2"></i>Gestion des Clients</h4>
+        <p class="text-muted mb-0">Gérer les entreprises clientes du cabinet</p>
+    </div>
+    <a asp-action="Create" class="btn btn-mc-primary rounded-pill px-4">
+        <i class="bi bi-plus-circle me-2"></i> Nouveau Client
+    </a>
+</div>
+
+<!-- Stats Cards -->
+@if (Model != null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card" style="border-left: 4px solid var(--mc-primary);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Total Clients</div>
+                        <div class="stat-value">@Model.TotalCount</div>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);">
+                        <i class="bi bi-building"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card" style="border-left: 4px solid var(--mc-secondary);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Clients Actifs</div>
+                        <div class="stat-value">@(Model.Items?.Count(c => c.Statut == "Active") ?? 0)</div>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: var(--mc-secondary);">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card" style="border-left: 4px solid var(--mc-accent);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Total Employés</div>
+                        <div class="stat-value">@(Model.Items?.Sum(c => c.EmployeeCount) ?? 0)</div>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--mc-accent);">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card" style="border-left: 4px solid #8b5cf6;">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Total Déclarations</div>
+                        <div class="stat-value">@(Model.Items?.Sum(c => c.DeclarationCount) ?? 0)</div>
+                    </div>
+                    <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #8b5cf6;">
+                        <i class="bi bi-file-earmark-text"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
+                    <input type="text" name="search" class="form-control border-start-0"
+                        placeholder="Rechercher par raison sociale, ICE, IF..." value="@ViewBag.Search" />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select name="formeJuridique" class="form-select">
+                    <option value="">Toutes les formes</option>
+                    @foreach (var fj in refFormesJuridiques)
+                    {
+                        var sel = ViewBag.FormeJuridique?.ToString() == fj.Code ? "selected" : "";
+                        <option value="@fj.Code" @sel>@fj.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="statut" class="form-select">
+                    <option value="">Tous les statuts</option>
+                    @foreach (var st in refStatuts)
+                    {
+                        var sel = ViewBag.Statut?.ToString() == st.Code ? "selected" : "";
+                        <option value="@st.Code" @sel>@st.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100 rounded-3"><i class="bi bi-funnel me-1"></i> Filtrer</button>
+            </div>
+            <div class="col-md-2">
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary w-100 rounded-3"><i class="bi bi-arrow-clockwise me-1"></i> Réinitialiser</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Clients Table -->
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table" id="clientsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Client</th>
+                        <th>ICE</th>
+                        <th>Forme Juridique</th>
+                        <th>Ville</th>
+                        <th class="text-center">Employés</th>
+                        <th class="text-center">Déclarations</th>
+                        <th>Statut</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        @foreach (var client in Model.Items)
+                        {
+                            var initials = client.RaisonSociale?.Length >= 2
+                                ? client.RaisonSociale.Substring(0, 2).ToUpper()
+                                : client.RaisonSociale?.ToUpper() ?? "??";
+                            var refStat = refStatuts.FirstOrDefault(s => s.Code == client.Statut);
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                            style="width:40px;height:40px;min-width:40px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-weight:600;font-size:0.8rem;">
+                                            @initials
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold">@client.RaisonSociale</div>
+                                            <small class="text-muted">@(client.SecteurActivite ?? "—")</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><code class="text-primary">@client.ICE</code></td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(client.FormeJuridique))
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary rounded-pill">@client.FormeJuridique</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>@(client.VilleSiegeSocial ?? "—")</td>
+                                <td class="text-center">
+                                    <span class="badge bg-info-subtle text-info rounded-pill fw-semibold">@client.EmployeeCount</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-warning-subtle text-warning rounded-pill fw-semibold">@client.DeclarationCount</span>
+                                </td>
+                                <td>
+                                    @if (refStat != null)
+                                    {
+                                        <span class="badge rounded-pill" style="background-color:@(refStat.CssClass ?? (client.Statut == "Active" ? "#059669" : "#dc2626"));color:#fff;">
+                                            <i class="bi @(refStat.Icone ?? "bi-circle-fill") me-1" style="font-size:0.5rem;"></i>@refStat.Label
+                                        </span>
+                                    }
+                                    else if (client.Statut == "Active")
+                                    {
+                                        <span class="badge bg-success-subtle text-success rounded-pill"><i class="bi bi-check-circle me-1"></i>Actif</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger rounded-pill"><i class="bi bi-x-circle me-1"></i>@client.Statut</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="Details" asp-route-id="@client.Id" class="btn btn-outline-primary" title="Détails">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a asp-action="Edit" asp-route-id="@client.Id" class="btn btn-outline-warning" title="Modifier">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form asp-action="Delete" asp-route-id="@client.Id" method="post" style="display:inline;"
+                                            onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce client ? Toutes les données associées seront perdues.');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-building display-4 d-block mb-2 opacity-25"></i>
+                                <p class="mb-2">Aucun client trouvé.</p>
+                                <a asp-action="Create" class="btn btn-sm btn-mc-primary rounded-pill mt-1">
+                                    <i class="bi bi-plus-circle me-1"></i> Ajouter un client
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination -->
+@if (Model != null && Model.TotalPages > 1)
+{
+    <nav class="mt-4 d-flex justify-content-center">
+        <ul class="pagination">
+            <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { page = Model.Page - 1, search = ViewBag.Search, statut = ViewBag.Statut, formeJuridique = ViewBag.FormeJuridique })">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <li class="page-item @(i == Model.Page ? "active" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { page = i, search = ViewBag.Search, statut = ViewBag.Statut, formeJuridique = ViewBag.FormeJuridique })">@i</a>
+                </li>
+            }
+            <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { page = Model.Page + 1, search = ViewBag.Search, statut = ViewBag.Statut, formeJuridique = ViewBag.FormeJuridique })">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+}

@@ -1,0 +1,66 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.GrandLivreDto>
+@{
+    ViewData["Title"] = "Grand Livre";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-journal-bookmark me-2"></i>Grand Livre</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Comptabilité</li>
+                <li class="breadcrumb-item active">Grand Livre</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-building me-1"></i> Client : <strong>@client.RaisonSociale</strong>
+        @if (ViewBag.DateDebut != null)
+        {
+            <span class="ms-3">Période : @(((DateTime)ViewBag.DateDebut).ToString("dd/MM/yyyy")) - @(((DateTime?)ViewBag.DateFin)?.ToString("dd/MM/yyyy") ?? "...")</span>
+        }
+    </div>
+}
+
+<div class="mc-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-table me-2"></i>Grand Livre</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i> Imprimer</button>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mc-datatable mb-0">
+                <thead>
+                    <tr>
+                        <th>Compte</th>
+                        <th>Libellé compte</th>
+                        <th class="text-end">Débit</th>
+                        <th class="text-end">Crédit</th>
+                        <th class="text-end">Solde</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null)
+                    {
+                        foreach (var ligne in Model)
+                        {
+                            <tr>
+                                <td class="fw-medium">@ligne.NumeroCompte</td>
+                                <td>@ligne.LibelleCompte</td>
+                                <td class="text-end">@(ligne.TotalDebit.ToString("N2"))</td>
+                                <td class="text-end">@(ligne.TotalCredit.ToString("N2"))</td>
+                                <td class="text-end fw-bold @(ligne.Solde >= 0 ? "text-success" : "text-danger")">@(ligne.Solde.ToString("N2")) MAD</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

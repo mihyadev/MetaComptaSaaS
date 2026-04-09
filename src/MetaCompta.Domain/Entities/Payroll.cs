@@ -1,0 +1,94 @@
+using MetaCompta.Domain.Common;
+
+namespace MetaCompta.Domain.Entities;
+
+/// <summary>
+/// Payroll period for a client (one month)
+/// </summary>
+public class PayrollPeriod : TenantEntity
+{
+    public int ClientId { get; set; }
+    public virtual Client? Client { get; set; }
+    public int Annee { get; set; }
+    public int Mois { get; set; }
+    public string Statut { get; set; } = RefCodes.StatutPaie.Brouillon; // Brouillon, EnCours, EnAttenteValidation, Validee, Cloturee
+
+    // Totals
+    public decimal TotalSalairesBruts { get; set; }
+    public decimal TotalCotisationsSalariales { get; set; }
+    public decimal TotalCotisationsPatronales { get; set; }
+    public decimal TotalIRRetenu { get; set; }
+    public decimal TotalNetAPayer { get; set; }
+    public decimal TotalCoutEmployeur { get; set; }
+
+    // Generated files
+    public string? LivrePaieUrl { get; set; }
+    public string? JournalComptableUrl { get; set; }
+    public string? FichierVirementUrl { get; set; }
+
+    public string? ValidateurId { get; set; }
+    public virtual ApplicationUser? Validateur { get; set; }
+    public DateTime? DateValidation { get; set; }
+
+    // Navigation
+    public virtual ICollection<PaySlip> PaySlips { get; set; } = new List<PaySlip>();
+}
+
+/// <summary>
+/// Individual pay slip for an employee
+/// </summary>
+public class PaySlip : TenantEntity
+{
+    public int PayrollPeriodId { get; set; }
+    public virtual PayrollPeriod? PayrollPeriod { get; set; }
+    public int EmployeeId { get; set; }
+    public virtual Employee? Employee { get; set; }
+
+    // Base
+    public decimal SalaireBase { get; set; }
+    public decimal PrimesFixesTotales { get; set; }
+
+    // Variables
+    public decimal HeuresSupp25 { get; set; }
+    public decimal HeuresSupp50 { get; set; }
+    public decimal HeuresSupp100 { get; set; }
+    public decimal MontantHeuresSupp { get; set; }
+    public decimal PrimesExceptionnelles { get; set; }
+    public decimal IndemnitesExceptionnelles { get; set; }
+    public decimal AvancesSalaire { get; set; }
+    public decimal AbsencesNonRemunerees { get; set; } // in days
+    public decimal MontantAbsences { get; set; }
+
+    // Gross
+    public decimal SalaireBrutGlobal { get; set; }
+
+    // Employee deductions
+    public decimal CotisationCNSS { get; set; }
+    public decimal CotisationAMO { get; set; }
+    public decimal CotisationCIMR { get; set; }
+    public decimal SalaireNetImposable { get; set; }
+    public decimal IRRetenu { get; set; }
+    public decimal AutresRetenues { get; set; }
+
+    // Net
+    public decimal SalaireNetAPayer { get; set; }
+
+    // Employer charges
+    public decimal CotisationPatronaleCNSS { get; set; }
+    public decimal CotisationPatronaleAMO { get; set; }
+    public decimal FormationProfessionnelle { get; set; }
+    public decimal AssurancesComplementaires { get; set; }
+    public decimal CoutTotalEmployeur { get; set; }
+
+    // Cumulative annual
+    public decimal CumulBrutAnnuel { get; set; }
+    public decimal CumulNetImposableAnnuel { get; set; }
+    public decimal CumulIRAnnuel { get; set; }
+    public decimal CumulCNSSAnnuel { get; set; }
+
+    // PDF
+    public string? PdfUrl { get; set; }
+
+    // JSON details for extensibility
+    public string? DetailsJson { get; set; }
+}

@@ -1,0 +1,419 @@
+﻿@model ClientCreateDto
+@{
+    ViewData["Title"] = "Nouveau Client";
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-plus-circle text-primary me-2"></i>Créer un Nouveau Client</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Clients")">Clients</a></li>
+                <li class="breadcrumb-item active">Nouveau client</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Index", "Clients")" class="btn btn-outline-secondary rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i> Retour à la liste
+    </a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Erreur de validation :</strong>
+        @Html.ValidationSummary(true)
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<form method="post" asp-action="Create" id="formCreateClient">
+    @Html.AntiForgeryToken()
+
+    <!-- Wizard Progress Bar -->
+    <div class="mc-card mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center" id="wizardProgress">
+                <div class="wizard-step active" data-step="0">
+                    <div class="wizard-step-circle"><i class="bi bi-building"></i></div>
+                    <span class="wizard-step-label">Identité</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="1">
+                    <div class="wizard-step-circle"><i class="bi bi-person-lines-fill"></i></div>
+                    <span class="wizard-step-label">Contact</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="2">
+                    <div class="wizard-step-circle"><i class="bi bi-calculator"></i></div>
+                    <span class="wizard-step-label">Fiscal</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Identity -->
+    <div class="mc-card step-panel" id="step0">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-building"></i></div>
+            <div>
+                <h5 class="mb-0 fw-bold">Identité de l'Entreprise</h5>
+                <small class="text-muted">Informations légales et administratives du client</small>
+            </div>
+        </div>
+        <div class="card-body px-4 pb-4 pt-3">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">Raison Sociale <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-building text-muted"></i></span>
+                        <input type="text" name="RaisonSociale" class="form-control border-start-0" value="@Model?.RaisonSociale"
+                            required placeholder="Ex: ABC Consulting SARL" />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Forme Juridique</label>
+                    <select name="FormeJuridique" class="form-select">
+                        <option value="">— Sélectionner —</option>
+                        <option value="SARL">SARL</option>
+                        <option value="SA">SA</option>
+                        <option value="SNC">SNC</option>
+                        <option value="SCS">SCS</option>
+                        <option value="SCA">SCA</option>
+                        <option value="Auto-Entrepreneur">Auto-Entrepreneur</option>
+                        <option value="Personne Physique">Personne Physique</option>
+                        <option value="Association">Association</option>
+                        <option value="Coopérative">Coopérative</option>
+                    </select>
+                </div>
+
+                <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">ICE <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-fingerprint text-muted"></i></span>
+                        <input type="text" name="ICE" class="form-control border-start-0" value="@Model?.ICE" required
+                            placeholder="15 chiffres" maxlength="15" />
+                    </div>
+                    <div class="form-text">Identifiant Commun de l'Entreprise</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">IF <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-hash text-muted"></i></span>
+                        <input type="text" name="IF" class="form-control border-start-0" value="@Model?.IF" required
+                            placeholder="Identifiant Fiscal" />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">RC</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-journal-text text-muted"></i></span>
+                        <input type="text" name="RC" class="form-control border-start-0" value="@Model?.RC"
+                            placeholder="Registre du Commerce" />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">N° CNSS</label>
+                    <input type="text" name="NumeroCNSS" class="form-control" value="@Model?.NumeroCNSS"
+                        placeholder="Numéro CNSS" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">N° Patente</label>
+                    <input type="text" name="NumeroPatente" class="form-control" value="@Model?.NumeroPatente"
+                        placeholder="Numéro Patente" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Capital Social (MAD)</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" name="CapitalSocial" class="form-control"
+                            value="@Model?.CapitalSocial" placeholder="0.00" />
+                        <span class="input-group-text bg-light">MAD</span>
+                    </div>
+                </div>
+
+                <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Secteur d'Activité</label>
+                    <input type="text" name="SecteurActivite" class="form-control" value="@Model?.SecteurActivite"
+                        placeholder="Ex: Technologies, Commerce..." />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Code Activité</label>
+                    <input type="text" name="CodeActivite" class="form-control" value="@Model?.CodeActivite"
+                        placeholder="Code activité" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Date Création</label>
+                    <input type="date" name="DateCreation" class="form-control"
+                        value="@(Model?.DateCreation?.ToString("yyyy-MM-dd"))" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Contact -->
+    <div class="mc-card step-panel" id="step1" style="display:none;">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+            <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-person-lines-fill"></i></div>
+            <div>
+                <h5 class="mb-0 fw-bold">Coordonnées &amp; Contact</h5>
+                <small class="text-muted">Adresse, téléphone, email et personne de contact</small>
+            </div>
+        </div>
+        <div class="card-body px-4 pb-4 pt-3">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label class="form-label fw-semibold">Adresse Siège Social</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo-alt text-muted"></i></span>
+                        <textarea name="AdresseSiegeSocial" class="form-control border-start-0" rows="2"
+                            placeholder="Adresse complète du siège social">@Model?.AdresseSiegeSocial</textarea>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Ville</label>
+                    <select name="VilleSiegeSocial" class="form-select">
+                        <option value="">— Sélectionner —</option>
+                        <option value="Casablanca">Casablanca</option>
+                        <option value="Rabat">Rabat</option>
+                        <option value="Marrakech">Marrakech</option>
+                        <option value="Fès">Fès</option>
+                        <option value="Tanger">Tanger</option>
+                        <option value="Agadir">Agadir</option>
+                        <option value="Meknès">Meknès</option>
+                        <option value="Oujda">Oujda</option>
+                        <option value="Kénitra">Kénitra</option>
+                        <option value="Tétouan">Tétouan</option>
+                        <option value="Salé">Salé</option>
+                        <option value="Nador">Nador</option>
+                        <option value="Mohammédia">Mohammédia</option>
+                        <option value="El Jadida">El Jadida</option>
+                        <option value="Béni Mellal">Béni Mellal</option>
+                        <option value="Khouribga">Khouribga</option>
+                        <option value="Settat">Settat</option>
+                        <option value="Safi">Safi</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Téléphone Principal</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-telephone text-muted"></i></span>
+                        <input type="tel" name="TelephonePrincipal" class="form-control border-start-0"
+                            value="@Model?.TelephonePrincipal" placeholder="+212 5XX-XXXXXX" />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Email Principal</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
+                        <input type="email" name="EmailPrincipal" class="form-control border-start-0"
+                            value="@Model?.EmailPrincipal" placeholder="contact@societe.ma" />
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="d-flex align-items-center gap-2 mt-2 mb-1">
+                        <i class="bi bi-person-badge text-primary"></i>
+                        <span class="fw-semibold">Personne de Contact</span>
+                        <hr class="flex-grow-1 opacity-25 my-0" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Nom</label>
+                    <input type="text" name="ContactNom" class="form-control" value="@Model?.ContactNom"
+                        placeholder="Nom complet" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Fonction</label>
+                    <input type="text" name="ContactFonction" class="form-control" value="@Model?.ContactFonction"
+                        placeholder="Ex: Gérant" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Téléphone</label>
+                    <input type="tel" name="ContactTelephone" class="form-control" value="@Model?.ContactTelephone"
+                        placeholder="+212 6XX-XXXXXX" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Email</label>
+                    <input type="email" name="ContactEmail" class="form-control" value="@Model?.ContactEmail"
+                        placeholder="gerant@societe.ma" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Fiscal — also includes contract info & notes -->
+    <div class="mc-card step-panel" id="step2" style="display:none;">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-calculator"></i></div>
+            <div>
+                <h5 class="mb-0 fw-bold">Informations Fiscales</h5>
+                <small class="text-muted">Régime TVA et exercice comptable</small>
+            </div>
+        </div>
+        <div class="card-body px-4 pb-4 pt-3">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Régime TVA</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <input class="btn-check" type="radio" name="TypeTVA" id="tva_Mensuelle" value="@RefCodes.Frequence.Mensuelle" checked />
+                        <label class="btn btn-outline-primary rounded-pill px-3" for="tva_Mensuelle">Mensuelle</label>
+                        <input class="btn-check" type="radio" name="TypeTVA" id="tva_Trimestrielle" value="Trimestrielle" />
+                        <label class="btn btn-outline-primary rounded-pill px-3" for="tva_Trimestrielle">Trimestrielle</label>
+                        <input class="btn-check" type="radio" name="TypeTVA" id="tva_Exonere" value="Exonéré" />
+                        <label class="btn btn-outline-primary rounded-pill px-3" for="tva_Exonere">Exonéré</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Mois de Clôture de l'Exercice</label>
+                    <select name="MoisClotureExercice" class="form-select">
+                        <option value="1">Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6">Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12" selected>Décembre</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Date Début Activité</label>
+                    <input type="date" name="DateDebutActivite" class="form-control"
+                        value="@(Model?.DateDebutActivite?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Date Début Contrat</label>
+                    <input type="date" name="DateDebutContrat" class="form-control"
+                        value="@(Model?.DateDebutContrat?.ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-01-01"))" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Manager Principal (ID)</label>
+                    <input type="text" name="ManagerPrincipalId" class="form-control"
+                        value="@Model?.ManagerPrincipalId" placeholder="ID du manager responsable" />
+                </div>
+            </div>
+
+            <hr class="opacity-25 my-4" />
+
+            <!-- Services info banner — Contract-driven architecture -->
+            <div class="alert alert-info border-0 rounded-3 d-flex align-items-start gap-3 mb-4" style="background: linear-gradient(135deg, rgba(37,99,235,0.06), rgba(124,58,237,0.06));">
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:44px;height:44px;">
+                    <i class="bi bi-briefcase"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-1 text-primary"><i class="bi bi-shield-check me-1"></i>Services Fiduciaires — Gestion par Contrat</h6>
+                    <p class="mb-1" style="font-size:0.88rem;">
+                        Les services fiduciaires (TVA, IS, IR, CNSS, Paie, Comptabilité…) sont <strong>activés automatiquement</strong>
+                        lors de la <strong>validation d'un Contrat Commercial</strong>.
+                    </p>
+                    <p class="mb-0 text-muted" style="font-size:0.82rem;">
+                        <i class="bi bi-arrow-right me-1"></i>
+                        Après création du client, rendez-vous dans
+                        <strong>Commercial → Contrats</strong> pour créer et valider un contrat.
+                        Les services, fréquences et délais seront automatiquement configurés selon le calendrier fiscal marocain.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Notes Internes</label>
+                    <textarea name="NotesInternes" class="form-control" rows="3"
+                        placeholder="Informations confidentielles, observations, particularités du dossier...">@Model?.NotesInternes</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <button type="button" class="btn btn-outline-secondary rounded-pill px-4" id="prevBtn" style="display:none;">
+            <i class="bi bi-arrow-left me-1"></i> Précédent
+        </button>
+        <div class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-primary rounded-pill px-4" id="nextBtn">
+                Suivant <i class="bi bi-arrow-right ms-1"></i>
+            </button>
+            <button type="submit" class="btn btn-success rounded-pill px-4" id="submitBtn" style="display:none;">
+                <i class="bi bi-check-lg me-1"></i> Enregistrer le Client
+            </button>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <style>
+        .wizard-step { text-align: center; flex: 0 0 auto; cursor: pointer; }
+        .wizard-step-circle {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: #e9ecef; color: #6c757d;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 6px; font-size: 1.1rem;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .wizard-step.active .wizard-step-circle {
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            color: #fff; border-color: rgba(37, 99, 235, 0.3);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+        .wizard-step.completed .wizard-step-circle {
+            background: #059669; color: #fff;
+        }
+        .wizard-step-label { font-size: 0.75rem; color: #6c757d; font-weight: 600; }
+        .wizard-step.active .wizard-step-label { color: #2563eb; }
+        .wizard-step.completed .wizard-step-label { color: #059669; }
+        .wizard-connector {
+            flex: 1; height: 2px; background: #e9ecef;
+            margin: 0 8px; margin-bottom: 22px;
+            transition: background 0.3s ease;
+        }
+        .wizard-connector.active { background: linear-gradient(90deg, #059669, #2563eb); }
+        .step-panel { transition: opacity 0.3s ease; }
+    </style>
+    <script>
+        $(function () {
+            var currentStep = 0;
+            var totalSteps = 3;
+
+            function showStep(step) {
+                $('.step-panel').hide();
+                $('#step' + step).fadeIn(200);
+                currentStep = step;
+
+                // Update wizard progress
+                $('.wizard-step').each(function () {
+                    var s = parseInt($(this).data('step'));
+                    $(this).removeClass('active completed');
+                    if (s === step) $(this).addClass('active');
+                    else if (s < step) $(this).addClass('completed');
+                });
+                $('.wizard-connector').each(function (i) {
+                    $(this).toggleClass('active', i < step);
+                });
+
+                // Update buttons
+                $('#prevBtn').toggle(step > 0);
+                $('#nextBtn').toggle(step < totalSteps - 1);
+                $('#submitBtn').toggle(step === totalSteps - 1);
+            }
+
+            $('#nextBtn').click(function () { if (currentStep < totalSteps - 1) showStep(currentStep + 1); });
+            $('#prevBtn').click(function () { if (currentStep > 0) showStep(currentStep - 1); });
+            $('.wizard-step').click(function () { showStep(parseInt($(this).data('step'))); });
+
+            showStep(0);
+        });
+    </script>
+}

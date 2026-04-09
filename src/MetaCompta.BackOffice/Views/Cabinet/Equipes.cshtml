@@ -1,0 +1,67 @@
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.CabinetEmployeeDto>
+@{
+    ViewData["Title"] = "Équipes";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-people-fill me-2"></i>Équipes</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Cabinet</li>
+                <li class="breadcrumb-item active">Équipes</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+@{
+    var items = Model?.Items?.GroupBy(e => e.Departement ?? "Non défini").OrderBy(g => g.Key);
+}
+
+@if (items != null && items.Any())
+{
+    foreach (var groupe in items)
+    {
+        <div class="mc-card mb-4">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-people-fill text-primary"></i>
+                <span>Équipe @groupe.Key</span>
+                <span class="badge bg-primary ms-auto">@groupe.Count() membres</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table mc-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Email</th>
+                                <th>Rôle</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var emp in groupe)
+                            {
+                                <tr>
+                                    <td class="fw-medium">@emp.NomComplet</td>
+                                    <td>@emp.Email</td>
+                                    <td>@emp.Role</td>
+                                    <td><span class="badge @(emp.EstActif ? "bg-success" : "bg-secondary")">@(emp.EstActif ? "Actif" : "Inactif")</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="mc-card p-4 text-center text-muted">
+        <i class="bi bi-people fs-1 d-block mb-2"></i>
+        Aucune équipe trouvée.
+    </div>
+}

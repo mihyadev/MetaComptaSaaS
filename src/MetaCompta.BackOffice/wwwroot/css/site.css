@@ -1,0 +1,19 @@
+/* MetaCompta BackOffice - Custom Styles */
+/* All main styles are loaded from CDN (Bootstrap 5.3.3) */
+/* Add custom overrides here */
+
+:root {
+    --mc-primary: #2563eb;
+    --mc-primary-dark: #1d4ed8;
+    --mc-secondary: #7c3aed;
+    --mc-success: #059669;
+    --mc-warning: #d97706;
+    --mc-danger: #dc2626;
+    --mc-sidebar-bg: #0f172a;
+    --mc-sidebar-text: #94a3b8;
+    --mc-sidebar-active: #2563eb;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}

@@ -1,0 +1,554 @@
+@using MetaCompta.Application.DTOs
+@model ClientDto
+@{
+    ViewData["Title"] = "Details Client - " + Model.RaisonSociale;
+    var services = Model.ServicesFiduciaires ?? new List<ServiceContratDto>();
+    var refFormes = ViewData["Ref_FORME_JURIDIQUE"] as List<ReferenceDataDto> ?? new();
+    var refStatuts = ViewData["Ref_STATUT_CLIENT"] as List<ReferenceDataDto> ?? new();
+    var refTva = ViewData["Ref_TYPE_TVA"] as List<ReferenceDataDto> ?? new();
+    var contratsValides = ViewBag.ContratsValides as List<ContratCommercialDto> ?? new();
+    var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new();
+    var wfInstances = ViewBag.WorkflowInstances as List<WorkflowInstanceDto> ?? new();
+    var wfPendingSteps = ViewBag.WorkflowPendingSteps as List<WorkflowStepInstanceDto> ?? new();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Clients">Clients</a></li>
+                <li class="breadcrumb-item active">@Model.RaisonSociale</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-building text-primary me-2"></i>@Model.RaisonSociale</h4>
+    </div>
+    <div class="btn-group">
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i
+                class="bi bi-pencil me-1"></i> Modifier</a>
+        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i>
+            Retour</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-primary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Employes</div>
+                    <div class="stat-value">@Model.EmployeeCount</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:var(--mc-primary);"><i
+                        class="bi bi-people"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-secondary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Declarations</div>
+                    <div class="stat-value">@Model.DeclarationCount</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:var(--mc-secondary);"><i
+                        class="bi bi-file-earmark-text"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-accent);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Services Actifs</div>
+                    <div class="stat-value">@(services.Count(s => s.Actif))</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--mc-accent);"><i
+                        class="bi bi-briefcase"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid #8b5cf6;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Statut</div>
+                    <div class="stat-value" style="font-size:1rem;">@Model.Statut</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(139,92,246,0.1);color:#8b5cf6;"><i
+                        class="bi bi-check-circle"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-pills mb-3" id="clientTabs" role="tablist">
+    <li class="nav-item"><a class="nav-link active rounded-pill" data-bs-toggle="pill" href="#tabIdentite">Identite</a>
+    </li>
+    <li class="nav-item"><a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabContact">Contact</a></li>
+    <li class="nav-item"><a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabFiscal">Fiscal</a></li>
+    <li class="nav-item">
+        <a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabServices">
+            Services
+            <span class="badge bg-info bg-opacity-10 text-info ms-1 rounded-pill" style="font-size:0.68rem;">
+                <i class="bi bi-shield-check"></i> Contrat
+            </span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabWorkflow">
+            <i class="bi bi-lightning-charge-fill me-1" style="color:#7c3aed;"></i>Workflow
+            @if (wfInstances.Any(i => i.Status == "InProgress"))
+            {
+                <span class="badge bg-success bg-opacity-10 text-success ms-1 rounded-pill"
+                    style="font-size:0.62rem;">@wfInstances.Count(i => i.Status == "InProgress") en cours</span>
+            }
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <!-- ??????????? IDENTITE ??????????? -->
+    <div class="tab-pane fade show active" id="tabIdentite">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label text-muted small">Raison Sociale</label>
+                        <div class="fw-semibold">@Model.RaisonSociale</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Forme Juridique</label>
+                        <div>@(Model.FormeJuridique ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Capital Social</label>
+                        <div>@(Model.CapitalSocial.HasValue? Model.CapitalSocial.Value.ToString("N0") + " MAD" : "-")
+                        </div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">ICE</label>
+                        <div>@(Model.ICE ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">IF</label>
+                        <div>@(Model.IF ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">RC</label>
+                        <div>@(Model.RC ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">CNSS</label>
+                        <div>@(Model.NumeroCNSS ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Patente</label>
+                        <div>@(Model.NumeroPatente ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Secteur</label>
+                        <div>@(Model.SecteurActivite ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Date Creation</label>
+                        <div>@(Model.DateCreation.HasValue? Model.DateCreation.Value.ToString("dd/MM/yyyy") : "-")
+                        </div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Debut Activite</label>
+                        <div>@(Model.DateDebutActivite.HasValue ? Model.DateDebutActivite.Value.ToString("dd/MM/yyyy") :
+                                                        "-")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ??????????? CONTACT ??????????? -->
+    <div class="tab-pane fade" id="tabContact">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label text-muted small">Adresse Siege</label>
+                        <div>@(Model.AdresseSiegeSocial ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Ville</label>
+                        <div>@(Model.VilleSiegeSocial ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Telephone</label>
+                        <div>@(Model.TelephonePrincipal ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Email</label>
+                        <div>@(Model.EmailPrincipal ?? "-")</div>
+                    </div>
+                    <div class="col-12">
+                        <hr />
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Contact Nom</label>
+                        <div>@(Model.ContactNom ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Fonction</label>
+                        <div>@(Model.ContactFonction ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Tel Contact</label>
+                        <div>@(Model.ContactTelephone ?? "-")</div>
+                    </div>
+                    <div class="col-md-3"><label class="form-label text-muted small">Email Contact</label>
+                        <div>@(Model.ContactEmail ?? "-")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ??????????? FISCAL ??????????? -->
+    <div class="tab-pane fade" id="tabFiscal">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4"><label class="form-label text-muted small">Type TVA</label>
+                        <div>@Model.TypeTVA</div>
+                    </div>
+                    <div class="col-md-4"><label class="form-label text-muted small">Mois Cloture Exercice</label>
+                        <div>@Model.MoisClotureExercice</div>
+                    </div>
+                    <div class="col-md-4"><label class="form-label text-muted small">Date Debut Contrat</label>
+                        <div>@(Model.DateDebutContrat.HasValue ? Model.DateDebutContrat.Value.ToString("dd/MM/yyyy") :
+                                                        "-")</div>
+                    </div>
+                    <div class="col-md-4"><label class="form-label text-muted small">Manager Principal</label>
+                        <div>@(Model.ManagerPrincipalName ?? "-")</div>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(Model.NotesInternes))
+                {
+                    <hr />
+                    <label class="form-label text-muted small">Notes Internes</label>
+                    <div class="p-3 bg-light rounded-3">@Model.NotesInternes</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ??????????? SERVICES ??????????? -->
+    <div class="tab-pane fade" id="tabServices">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="alert alert-info border-0 rounded-3 py-2 px-3 mb-3"
+                    style="font-size:0.85rem; background: linear-gradient(135deg, rgba(37,99,235,0.05), rgba(124,58,237,0.05));">
+                    <i class="bi bi-shield-check me-1"></i>
+                    Les services fiduciaires sont <strong>activ&#233;s automatiquement</strong> lors de la validation
+                    d'un
+                    <a href="/Commercial" class="fw-semibold text-decoration-none">Contrat Commercial</a>.
+                </div>
+                @if (!services.Any() && contratsValides.Any())
+                {
+                    <div class="alert alert-warning border-0 rounded-3 py-2 px-3 mb-3 d-flex align-items-center justify-content-between"
+                        style="font-size:0.85rem;">
+                        <span>
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Ce client poss&#232;de @contratsValides.Count contrat(s) valid&#233;(s) mais <strong>aucun
+                                service actif</strong>.
+                        </span>
+                        <div class="d-flex gap-1">
+                            @foreach (var contrat in contratsValides)
+                            {
+                                <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 btn-sync-services"
+                                    data-contrat-id="@contrat.Id" data-contrat-ref="@contrat.Reference">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Sync @contrat.Reference
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 mc-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Service</th>
+                                <th>Cat&#233;gorie</th>
+                                <th>Frequence</th>
+                                <th>Debut</th>
+                                <th>Fin</th>
+                                <th class="text-end">Tarif</th>
+                                <th>Actif</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (services.Any())
+                            {
+                                @foreach (var svc in services)
+                                {
+                                    <tr>
+                                        <td class="ps-4 fw-semibold">@(svc.LibelleService ?? svc.TypeService)</td>
+                                        <td><span class="badge bg-light text-dark rounded-pill">@(svc.Categorie ?? "-")</span>
+                                        </td>
+                                        <td>@svc.Frequence</td>
+                                        <td>@svc.DateDebut.ToString("dd/MM/yyyy")</td>
+                                        <td>@(svc.DateFin.HasValue? svc.DateFin.Value.ToString("dd/MM/yyyy") : "-")</td>
+                                        <td class="text-end">@(svc.HonorairesMensuels.HasValue ?
+                                                                            svc.HonorairesMensuels.Value.ToString("N0") + " MAD/mois" :
+                                                                        (svc.HonorairesAnnuels.HasValue ? svc.HonorairesAnnuels.Value.ToString("N0") + "                                    MAD/an" : "-"))</td>
+                                        <td>
+                                            @if (svc.Actif)
+                                            {
+                                                <span class="badge bg-success-subtle text-success">Actif</span>
+                                            }
+                                            else
+                                            {
+
+                                                <span class="badge bg-secondary">Inactif</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <div class="text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Aucun service
+                                            actif.</div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ??????????? WORKFLOW ??????????? -->
+    <div class="tab-pane fade" id="tabWorkflow">
+
+        <!-- Row 1: Quick summary cards -->
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center py-3">
+                        <div style="font-size:1.6rem; font-weight:800; color:#4f46e5;">@wfInstances.Count</div>
+                        <div class="text-muted" style="font-size:0.78rem;">Workflows total</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center py-3">
+                        <div style="font-size:1.6rem; font-weight:800; color:#059669;">@wfInstances.Count(i => i.Status
+                                                        == "InProgress")</div>
+                        <div class="text-muted" style="font-size:0.78rem;">En cours</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-body text-center py-3">
+                        <div style="font-size:1.6rem; font-weight:800; color:#d97706;">@wfPendingSteps.Count</div>
+                        <div class="text-muted" style="font-size:0.78rem;">&#201;tapes en attente</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2: Start Workflow -->
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-play-circle-fill text-success me-2"></i>D&#233;marrer un
+                        workflow</h6>
+                </div>
+                @if (wfTemplates.Any())
+                {
+                    <div class="row g-2">
+                        @foreach (var tpl in wfTemplates.Take(6))
+                        {
+                            var bgColor = tpl.DeclarationType switch
+                            {
+                                "TVA" => "#dbeafe",
+                                "IS" => "#fce7f3",
+                                "IR" => "#ede9fe",
+                                "CNSS" => "#d1fae5",
+                                "Paie" => "#fef3c7",
+                                _ => "#f1f5f9"
+                            };
+                            var fgColor = tpl.DeclarationType switch
+                            {
+                                "TVA" => "#2563eb",
+                                "IS" => "#be185d",
+                                "IR" => "#7c3aed",
+                                "CNSS" => "#059669",
+                                "Paie" => "#d97706",
+                                _ => "#475569"
+                            };
+                            <div class="col-md-4 col-lg-3">
+                                <form asp-controller="Workflow" asp-action="StartWorkflow" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="WorkflowTemplateId" value="@tpl.Id" />
+                                    <input type="hidden" name="ClientId" value="@Model.Id" />
+                                    <button type="submit" class="btn w-100 text-start p-2"
+                                        style="background:@bgColor; border:1px solid transparent; border-radius:10px;"
+                                        onclick="return confirm('D&#233;marrer le workflow \'@tpl.Name\' ?')">
+                                        <div class="fw-bold" style="font-size:0.8rem; color:@fgColor;">@tpl.Name</div>
+                                        <div style="font-size:0.68rem; color:#94a3b8;">@tpl.DeclarationType &middot;
+                                            @tpl.StepCount &#233;tapes</div>
+                                    </button>
+                                </form>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-3" style="font-size:0.85rem;">
+                        <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
+                        Aucun mod&#232;le disponible. <a href="@Url.Action("Templates", "Workflow")">Cr&#233;er un
+                            mod&#232;le</a>.
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Row 3: Active Workflow Instances -->
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-collection-fill text-primary me-2"></i>Workflows actifs
+                    </h6>
+                    <a href="@Url.Action("Instances", "Workflow", new { clientId = Model.Id })"
+                        class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size:0.75rem;">Voir
+                        tout</a>
+                </div>
+                @if (wfInstances.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Workflow</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                    <th>&#201;tape</th>
+                                    <th>D&#233;marr&#233;</th>
+                                    <th class="text-end pe-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var inst in wfInstances.OrderByDescending(i => i.StartedAt).Take(10))
+                                {
+                                    var statusBadge = inst.Status switch
+                                    {
+                                        "InProgress" => "bg-success-subtle text-success",
+                                        "Completed" => "bg-primary-subtle text-primary",
+                                        "Cancelled" => "bg-danger-subtle text-danger",
+                                        "Paused" => "bg-warning-subtle text-warning",
+                                        _ => "bg-secondary-subtle text-secondary"
+                                    };
+                                    var statusLabel = inst.Status switch
+                                    {
+                                        "InProgress" => "En cours",
+                                        "Completed" => "Termin&#233;",
+                                        "Cancelled" => "Annul&#233;",
+                                        "Paused" => "En pause",
+                                        _ => inst.Status
+                                    };
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">@inst.WorkflowTemplateName</td>
+                                        <td><span class="badge bg-light text-dark rounded-pill">@inst.DeclarationType</span>
+                                        </td>
+                                        <td><span class="badge @statusBadge rounded-pill">@statusLabel</span></td>
+                                        <td>@(inst.CurrentStepName ?? "-")</td>
+                                        <td>@inst.StartedAt.ToString("dd/MM/yyyy")</td>
+                                        <td class="text-end pe-3">
+                                            <a href="@Url.Action("InstanceDetails", "Workflow", new { id = inst.Id })"
+                                                class="btn btn-sm btn-outline-primary rounded-pill px-2"
+                                                style="font-size:0.7rem;"><i class="bi bi-eye me-1"></i>D&#233;tails</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-3" style="font-size:0.85rem;">
+                        <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
+                        Aucun workflow lanc&#233; pour ce client.
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Row 4: Pending Steps for this client -->
+        @if (wfPendingSteps.Any())
+        {
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split text-warning me-2"></i>&#201;tapes en attente
+                    </h6>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">&#201;tape</th>
+                                    <th>Workflow</th>
+                                    <th>Assign&#233; &#224;</th>
+                                    <th>SLA</th>
+                                    <th class="text-end pe-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var step in wfPendingSteps)
+                                {
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">@step.StepName</td>
+                                        <td>@step.WorkflowInstanceId</td>
+                                        <td>@(step.AssignedToUserName ?? "Non assigné")</td>
+                                        <td>@(step.DueDate.HasValue? step.DueDate.Value.ToString("dd/MM HH:mm") : "-")</td>
+                                        <td class="text-end pe-3">
+                                            <a href="@Url.Action("InstanceDetails", "Workflow", new { id = step.WorkflowInstanceId })"
+                                                class="btn btn-sm btn-outline-success rounded-pill px-2"
+                                                style="font-size:0.7rem;"><i
+                                                    class="bi bi-arrow-right-circle me-1"></i>Traiter</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mt-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-lightning text-warning me-2"></i>Actions Rapides</h6>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/Employees" class="btn btn-outline-primary rounded-pill px-3"><i class="bi bi-people me-1"></i>
+                Voir Employes</a>
+            <a href="/Declarations" class="btn btn-outline-success rounded-pill px-3"><i
+                    class="bi bi-file-earmark-text me-1"></i> Voir Declarations</a>
+            <a href="/Payroll" class="btn btn-outline-info rounded-pill px-3"><i class="bi bi-cash me-1"></i> Paie</a>
+            <a href="/Commercial" class="btn btn-outline-warning rounded-pill px-3"><i class="bi bi-briefcase me-1"></i>
+                Contrats Commerciaux</a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.btn-sync-services').forEach(btn => {
+            btn.addEventListener('click', async function () {
+                const contratId = this.dataset.contratId;
+                const original = this.innerHTML;
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sync...';
+                try {
+                    const resp = await fetch('@Url.Action("SyncServicesFromContrat", "Clients")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || '' },
+                        body: 'contratId=' + contratId
+                    });
+                    const data = await resp.json();
+                    if (data.success) { location.reload(); }
+                    else { alert(data.message || 'Erreur.'); this.disabled = false; this.innerHTML = original; }
+                } catch { alert('Erreur r\u00e9seau.'); this.disabled = false; this.innerHTML = original; }
+            });
+        });
+    </script>
+    @Html.AntiForgeryToken()
+}

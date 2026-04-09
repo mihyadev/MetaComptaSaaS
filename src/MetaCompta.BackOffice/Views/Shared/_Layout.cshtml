@@ -1,0 +1,2026 @@
+@{
+    Layout = null;
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
+
+    // Global Client Context from Session
+    var selectedClientId = Context.Session.GetString("SelectedClientId");
+    var selectedClientName = Context.Session.GetString("SelectedClientName");
+    var hasClient = !string.IsNullOrEmpty(selectedClientId);
+
+    // Active services for selected client (stored in session on client selection)
+    var activeServicesJson = Context.Session.GetString("ActiveServices") ?? "[]";
+    var activeServices = System.Text.Json.JsonSerializer.Deserialize<List<string>>(activeServicesJson) ?? new List<string>();
+    // If client has NO services configured yet, show everything (backwards compatible)
+    var noServicesConfigured = hasClient && !activeServices.Any();
+    bool HasService(params string[] codes) => noServicesConfigured || codes.Any(c => activeServices.Contains(c, StringComparer.OrdinalIgnoreCase));
+
+    // Contract status: determines if declaration create/edit actions are allowed
+    var hasActiveContract = bool.TryParse(Context.Session.GetString("HasActiveContract"), out var _hac) && _hac;
+    // readOnlyDeclarations = client selected but no active contract â†’ view-only mode
+    var readOnlyDeclarations = hasClient && !hasActiveContract;
+
+    // Client-dependent controllers
+    var clientControllers = new[] { "Declarations", "Documents", "Comptabilite", "Payroll", "Employees", "Juridique", "EtatsFiscaux", "Rapports" };
+    var isClientSection = clientControllers.Contains(currentController);
+    var isWorkspacePage = currentController == "Home" && currentAction == "Workspace";
+}
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - MetaCompta</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
+    <style>
+        /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+        /* â•â•â•  THEME SYSTEM â€” CSS CUSTOM PROPS    â•â•â• */
+        /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+        :root {
+            --mc-primary: #2563eb;
+            --mc-primary-dark: #1d4ed8;
+            --mc-primary-light: #3b82f6;
+            --mc-secondary: #059669;
+            --mc-accent: #f59e0b;
+            --mc-danger: #dc2626;
+            --mc-sidebar-bg: #0f172a;
+            --mc-sidebar-bg2: #111827;
+            --mc-sidebar-hover: rgba(255,255,255,0.06);
+            --mc-sidebar-text: #94a3b8;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(37,99,235,0.9), rgba(79,70,229,0.85));
+            --mc-sidebar-active-shadow: rgba(37,99,235,0.25);
+            --mc-sidebar-active-bar: #60a5fa;
+            --mc-sidebar-divider: rgba(255,255,255,0.06);
+            --mc-sidebar-brand-text: #ffffff;
+            --mc-sidebar-section-text: #475569;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #2563eb, #7c3aed);
+            --mc-body-bg: #f1f5f9;
+            --mc-card-bg: #ffffff;
+            --mc-border: #e2e8f0;
+            --mc-text: #1e293b;
+            --mc-text-secondary: #64748b;
+            --mc-topbar-bg: #ffffff;
+            --mc-sidebar-width: 270px;
+        }
+
+        /* â”€â”€ Theme: Slate Dark â”€â”€ */
+        [data-theme="slate"] {
+            --mc-primary: #6366f1;
+            --mc-primary-dark: #4f46e5;
+            --mc-primary-light: #818cf8;
+            --mc-sidebar-bg: #1e1e2e;
+            --mc-sidebar-bg2: #252538;
+            --mc-sidebar-hover: rgba(255,255,255,0.07);
+            --mc-sidebar-text: #a1a1b5;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(99,102,241,0.9), rgba(139,92,246,0.85));
+            --mc-sidebar-active-shadow: rgba(99,102,241,0.25);
+            --mc-sidebar-active-bar: #a5b4fc;
+            --mc-sidebar-divider: rgba(255,255,255,0.06);
+            --mc-sidebar-brand-text: #e2e2f0;
+            --mc-sidebar-section-text: #6b6b80;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #6366f1, #a855f7);
+            --mc-body-bg: #f5f5f7;
+            --mc-card-bg: #ffffff;
+            --mc-border: #e5e5ea;
+            --mc-text: #1c1c2e;
+            --mc-text-secondary: #6b6b80;
+            --mc-topbar-bg: #ffffff;
+        }
+
+        /* â”€â”€ Theme: Emerald â”€â”€ */
+        [data-theme="emerald"] {
+            --mc-primary: #059669;
+            --mc-primary-dark: #047857;
+            --mc-primary-light: #10b981;
+            --mc-sidebar-bg: #022c22;
+            --mc-sidebar-bg2: #064e3b;
+            --mc-sidebar-hover: rgba(255,255,255,0.07);
+            --mc-sidebar-text: #86efac;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(5,150,105,0.9), rgba(16,185,129,0.85));
+            --mc-sidebar-active-shadow: rgba(5,150,105,0.3);
+            --mc-sidebar-active-bar: #6ee7b7;
+            --mc-sidebar-divider: rgba(255,255,255,0.08);
+            --mc-sidebar-brand-text: #ecfdf5;
+            --mc-sidebar-section-text: #4ade80;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #059669, #14b8a6);
+            --mc-body-bg: #f0fdf4;
+            --mc-card-bg: #ffffff;
+            --mc-border: #d1fae5;
+            --mc-text: #064e3b;
+            --mc-text-secondary: #4ade80;
+            --mc-topbar-bg: #ffffff;
+        }
+
+        /* â”€â”€ Theme: Royal Purple â”€â”€ */
+        [data-theme="purple"] {
+            --mc-primary: #7c3aed;
+            --mc-primary-dark: #6d28d9;
+            --mc-primary-light: #8b5cf6;
+            --mc-sidebar-bg: #1a1025;
+            --mc-sidebar-bg2: #2d1b4e;
+            --mc-sidebar-hover: rgba(255,255,255,0.07);
+            --mc-sidebar-text: #c4b5fd;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(124,58,237,0.9), rgba(192,132,252,0.7));
+            --mc-sidebar-active-shadow: rgba(124,58,237,0.3);
+            --mc-sidebar-active-bar: #c4b5fd;
+            --mc-sidebar-divider: rgba(255,255,255,0.07);
+            --mc-sidebar-brand-text: #f5f3ff;
+            --mc-sidebar-section-text: #8b5cf6;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #7c3aed, #ec4899);
+            --mc-body-bg: #faf5ff;
+            --mc-card-bg: #ffffff;
+            --mc-border: #e9d5ff;
+            --mc-text: #2d1b4e;
+            --mc-text-secondary: #8b5cf6;
+            --mc-topbar-bg: #ffffff;
+        }
+
+        /* â”€â”€ Theme: Warm Sunset â”€â”€ */
+        [data-theme="sunset"] {
+            --mc-primary: #ea580c;
+            --mc-primary-dark: #c2410c;
+            --mc-primary-light: #f97316;
+            --mc-sidebar-bg: #27150a;
+            --mc-sidebar-bg2: #3b1f0e;
+            --mc-sidebar-hover: rgba(255,255,255,0.07);
+            --mc-sidebar-text: #fdba74;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(234,88,12,0.9), rgba(249,115,22,0.85));
+            --mc-sidebar-active-shadow: rgba(234,88,12,0.3);
+            --mc-sidebar-active-bar: #fb923c;
+            --mc-sidebar-divider: rgba(255,255,255,0.07);
+            --mc-sidebar-brand-text: #fff7ed;
+            --mc-sidebar-section-text: #fb923c;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #ea580c, #eab308);
+            --mc-body-bg: #fffbeb;
+            --mc-card-bg: #ffffff;
+            --mc-border: #fed7aa;
+            --mc-text: #431407;
+            --mc-text-secondary: #f97316;
+            --mc-topbar-bg: #ffffff;
+        }
+
+        /* â”€â”€ Theme: Full Dark â”€â”€ */
+        [data-theme="dark"] {
+            --mc-primary: #3b82f6;
+            --mc-primary-dark: #2563eb;
+            --mc-primary-light: #60a5fa;
+            --mc-sidebar-bg: #0a0a0a;
+            --mc-sidebar-bg2: #141414;
+            --mc-sidebar-hover: rgba(255,255,255,0.08);
+            --mc-sidebar-text: #a1a1aa;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(59,130,246,0.85), rgba(99,102,241,0.8));
+            --mc-sidebar-active-shadow: rgba(59,130,246,0.25);
+            --mc-sidebar-active-bar: #60a5fa;
+            --mc-sidebar-divider: rgba(255,255,255,0.06);
+            --mc-sidebar-brand-text: #f4f4f5;
+            --mc-sidebar-section-text: #52525b;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --mc-body-bg: #18181b;
+            --mc-card-bg: #27272a;
+            --mc-border: #3f3f46;
+            --mc-text: #f4f4f5;
+            --mc-text-secondary: #a1a1aa;
+            --mc-topbar-bg: #1f1f23;
+        }
+
+        /* â”€â”€ Theme: Light Minimal â”€â”€ */
+        [data-theme="light"] {
+            --mc-primary: #0f766e;
+            --mc-primary-dark: #115e59;
+            --mc-primary-light: #14b8a6;
+            --mc-sidebar-bg: #ffffff;
+            --mc-sidebar-bg2: #f8fafc;
+            --mc-sidebar-hover: rgba(0,0,0,0.04);
+            --mc-sidebar-text: #64748b;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(15,118,110,0.9), rgba(20,184,166,0.85));
+            --mc-sidebar-active-shadow: rgba(15,118,110,0.15);
+            --mc-sidebar-active-bar: #14b8a6;
+            --mc-sidebar-divider: #e2e8f0;
+            --mc-sidebar-brand-text: #0f172a;
+            --mc-sidebar-section-text: #94a3b8;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0f766e, #06b6d4);
+            --mc-body-bg: #f8fafc;
+            --mc-card-bg: #ffffff;
+            --mc-border: #e2e8f0;
+            --mc-text: #0f172a;
+            --mc-text-secondary: #64748b;
+            --mc-topbar-bg: #ffffff;
+        }
+
+        /* â”€â”€ Theme: Rose â”€â”€ */
+        [data-theme="rose"] {
+            --mc-primary: #e11d48; --mc-primary-dark: #be123c; --mc-primary-light: #fb7185;
+            --mc-sidebar-bg: #1c0a12; --mc-sidebar-bg2: #2d1320;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fda4af;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(225,29,72,0.9), rgba(251,113,133,0.8));
+            --mc-sidebar-active-shadow: rgba(225,29,72,0.3); --mc-sidebar-active-bar: #fb7185;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fff1f2;
+            --mc-sidebar-section-text: #fb7185;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #e11d48, #f43f5e);
+            --mc-body-bg: #fff1f2; --mc-card-bg: #fff; --mc-border: #fecdd3;
+            --mc-text: #1c0a12; --mc-text-secondary: #f43f5e; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Cyan â”€â”€ */
+        [data-theme="cyan"] {
+            --mc-primary: #0891b2; --mc-primary-dark: #0e7490; --mc-primary-light: #22d3ee;
+            --mc-sidebar-bg: #0a1e26; --mc-sidebar-bg2: #0e2a36;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #67e8f9;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(8,145,178,0.9), rgba(34,211,238,0.8));
+            --mc-sidebar-active-shadow: rgba(8,145,178,0.3); --mc-sidebar-active-bar: #22d3ee;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #ecfeff;
+            --mc-sidebar-section-text: #22d3ee;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0891b2, #06b6d4);
+            --mc-body-bg: #ecfeff; --mc-card-bg: #fff; --mc-border: #cffafe;
+            --mc-text: #0a1e26; --mc-text-secondary: #06b6d4; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Amber â”€â”€ */
+        [data-theme="amber"] {
+            --mc-primary: #d97706; --mc-primary-dark: #b45309; --mc-primary-light: #fbbf24;
+            --mc-sidebar-bg: #1a1207; --mc-sidebar-bg2: #2a1e0c;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fcd34d;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(217,119,6,0.9), rgba(251,191,36,0.8));
+            --mc-sidebar-active-shadow: rgba(217,119,6,0.3); --mc-sidebar-active-bar: #fbbf24;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fffbeb;
+            --mc-sidebar-section-text: #fbbf24;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #d97706, #f59e0b);
+            --mc-body-bg: #fffbeb; --mc-card-bg: #fff; --mc-border: #fde68a;
+            --mc-text: #1a1207; --mc-text-secondary: #f59e0b; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Lime â”€â”€ */
+        [data-theme="lime"] {
+            --mc-primary: #65a30d; --mc-primary-dark: #4d7c0f; --mc-primary-light: #84cc16;
+            --mc-sidebar-bg: #0f1a05; --mc-sidebar-bg2: #1a2e0a;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #bef264;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(101,163,13,0.9), rgba(132,204,22,0.8));
+            --mc-sidebar-active-shadow: rgba(101,163,13,0.3); --mc-sidebar-active-bar: #84cc16;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #f7fee7;
+            --mc-sidebar-section-text: #84cc16;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #65a30d, #84cc16);
+            --mc-body-bg: #f7fee7; --mc-card-bg: #fff; --mc-border: #d9f99d;
+            --mc-text: #0f1a05; --mc-text-secondary: #84cc16; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Sky â”€â”€ */
+        [data-theme="sky"] {
+            --mc-primary: #0284c7; --mc-primary-dark: #0369a1; --mc-primary-light: #38bdf8;
+            --mc-sidebar-bg: #0a1929; --mc-sidebar-bg2: #0c2340;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #7dd3fc;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(2,132,199,0.9), rgba(56,189,248,0.8));
+            --mc-sidebar-active-shadow: rgba(2,132,199,0.3); --mc-sidebar-active-bar: #38bdf8;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #f0f9ff;
+            --mc-sidebar-section-text: #38bdf8;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0284c7, #38bdf8);
+            --mc-body-bg: #f0f9ff; --mc-card-bg: #fff; --mc-border: #bae6fd;
+            --mc-text: #0a1929; --mc-text-secondary: #0ea5e9; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Fuchsia â”€â”€ */
+        [data-theme="fuchsia"] {
+            --mc-primary: #c026d3; --mc-primary-dark: #a21caf; --mc-primary-light: #e879f9;
+            --mc-sidebar-bg: #1a0a1e; --mc-sidebar-bg2: #2e1235;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #f0abfc;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(192,38,211,0.9), rgba(232,121,249,0.8));
+            --mc-sidebar-active-shadow: rgba(192,38,211,0.3); --mc-sidebar-active-bar: #e879f9;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fdf4ff;
+            --mc-sidebar-section-text: #e879f9;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #c026d3, #e879f9);
+            --mc-body-bg: #fdf4ff; --mc-card-bg: #fff; --mc-border: #f5d0fe;
+            --mc-text: #1a0a1e; --mc-text-secondary: #d946ef; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Indigo â”€â”€ */
+        [data-theme="indigo"] {
+            --mc-primary: #4f46e5; --mc-primary-dark: #4338ca; --mc-primary-light: #818cf8;
+            --mc-sidebar-bg: #0f0e24; --mc-sidebar-bg2: #1a1840;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #a5b4fc;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(79,70,229,0.9), rgba(129,140,248,0.8));
+            --mc-sidebar-active-shadow: rgba(79,70,229,0.3); --mc-sidebar-active-bar: #818cf8;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #eef2ff;
+            --mc-sidebar-section-text: #818cf8;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #4f46e5, #6366f1);
+            --mc-body-bg: #eef2ff; --mc-card-bg: #fff; --mc-border: #c7d2fe;
+            --mc-text: #0f0e24; --mc-text-secondary: #6366f1; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Teal â”€â”€ */
+        [data-theme="teal"] {
+            --mc-primary: #0d9488; --mc-primary-dark: #0f766e; --mc-primary-light: #2dd4bf;
+            --mc-sidebar-bg: #0a1f1e; --mc-sidebar-bg2: #0e2c2a;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #5eead4;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(13,148,136,0.9), rgba(45,212,191,0.8));
+            --mc-sidebar-active-shadow: rgba(13,148,136,0.3); --mc-sidebar-active-bar: #2dd4bf;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #f0fdfa;
+            --mc-sidebar-section-text: #2dd4bf;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0d9488, #14b8a6);
+            --mc-body-bg: #f0fdfa; --mc-card-bg: #fff; --mc-border: #99f6e4;
+            --mc-text: #0a1f1e; --mc-text-secondary: #14b8a6; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Red â”€â”€ */
+        [data-theme="red"] {
+            --mc-primary: #dc2626; --mc-primary-dark: #b91c1c; --mc-primary-light: #f87171;
+            --mc-sidebar-bg: #1a0808; --mc-sidebar-bg2: #2c0f0f;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fca5a5;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(220,38,38,0.9), rgba(248,113,113,0.8));
+            --mc-sidebar-active-shadow: rgba(220,38,38,0.3); --mc-sidebar-active-bar: #f87171;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fef2f2;
+            --mc-sidebar-section-text: #f87171;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #dc2626, #ef4444);
+            --mc-body-bg: #fef2f2; --mc-card-bg: #fff; --mc-border: #fecaca;
+            --mc-text: #1a0808; --mc-text-secondary: #ef4444; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Violet â”€â”€ */
+        [data-theme="violet"] {
+            --mc-primary: #8b5cf6; --mc-primary-dark: #7c3aed; --mc-primary-light: #a78bfa;
+            --mc-sidebar-bg: #120c22; --mc-sidebar-bg2: #1e1538;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #c4b5fd;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(139,92,246,0.9), rgba(167,139,250,0.8));
+            --mc-sidebar-active-shadow: rgba(139,92,246,0.3); --mc-sidebar-active-bar: #a78bfa;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #f5f3ff;
+            --mc-sidebar-section-text: #a78bfa;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            --mc-body-bg: #f5f3ff; --mc-card-bg: #fff; --mc-border: #ddd6fe;
+            --mc-text: #120c22; --mc-text-secondary: #8b5cf6; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Stone â”€â”€ */
+        [data-theme="stone"] {
+            --mc-primary: #78716c; --mc-primary-dark: #57534e; --mc-primary-light: #a8a29e;
+            --mc-sidebar-bg: #1c1917; --mc-sidebar-bg2: #292524;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #d6d3d1;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(120,113,108,0.9), rgba(168,162,158,0.8));
+            --mc-sidebar-active-shadow: rgba(120,113,108,0.25); --mc-sidebar-active-bar: #a8a29e;
+            --mc-sidebar-divider: rgba(255,255,255,0.06); --mc-sidebar-brand-text: #fafaf9;
+            --mc-sidebar-section-text: #a8a29e;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #78716c, #a8a29e);
+            --mc-body-bg: #fafaf9; --mc-card-bg: #fff; --mc-border: #e7e5e4;
+            --mc-text: #1c1917; --mc-text-secondary: #78716c; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Blue Gray â”€â”€ */
+        [data-theme="bluegray"] {
+            --mc-primary: #475569; --mc-primary-dark: #334155; --mc-primary-light: #64748b;
+            --mc-sidebar-bg: #0f172a; --mc-sidebar-bg2: #1e293b;
+            --mc-sidebar-hover: rgba(255,255,255,0.06); --mc-sidebar-text: #cbd5e1;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(71,85,105,0.95), rgba(100,116,139,0.85));
+            --mc-sidebar-active-shadow: rgba(71,85,105,0.25); --mc-sidebar-active-bar: #94a3b8;
+            --mc-sidebar-divider: rgba(255,255,255,0.06); --mc-sidebar-brand-text: #f8fafc;
+            --mc-sidebar-section-text: #94a3b8;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #475569, #64748b);
+            --mc-body-bg: #f8fafc; --mc-card-bg: #fff; --mc-border: #e2e8f0;
+            --mc-text: #0f172a; --mc-text-secondary: #64748b; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Ocean â”€â”€ */
+        [data-theme="ocean"] {
+            --mc-primary: #0077b6; --mc-primary-dark: #005f8c; --mc-primary-light: #00b4d8;
+            --mc-sidebar-bg: #001d3d; --mc-sidebar-bg2: #002b57;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #90e0ef;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(0,119,182,0.9), rgba(0,180,216,0.8));
+            --mc-sidebar-active-shadow: rgba(0,119,182,0.3); --mc-sidebar-active-bar: #00b4d8;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #caf0f8;
+            --mc-sidebar-section-text: #48cae4;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0077b6, #00b4d8);
+            --mc-body-bg: #edf6f9; --mc-card-bg: #fff; --mc-border: #ade8f4;
+            --mc-text: #001d3d; --mc-text-secondary: #0096c7; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Forest â”€â”€ */
+        [data-theme="forest"] {
+            --mc-primary: #2d6a4f; --mc-primary-dark: #1b4332; --mc-primary-light: #40916c;
+            --mc-sidebar-bg: #0b1f15; --mc-sidebar-bg2: #1b4332;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #95d5b2;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(45,106,79,0.9), rgba(64,145,108,0.8));
+            --mc-sidebar-active-shadow: rgba(45,106,79,0.3); --mc-sidebar-active-bar: #52b788;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #d8f3dc;
+            --mc-sidebar-section-text: #52b788;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #2d6a4f, #52b788);
+            --mc-body-bg: #edf6f0; --mc-card-bg: #fff; --mc-border: #b7e4c7;
+            --mc-text: #0b1f15; --mc-text-secondary: #40916c; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Wine â”€â”€ */
+        [data-theme="wine"] {
+            --mc-primary: #9f1239; --mc-primary-dark: #881337; --mc-primary-light: #e11d48;
+            --mc-sidebar-bg: #1a0510; --mc-sidebar-bg2: #300a1c;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fda4af;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(159,18,57,0.9), rgba(225,29,72,0.8));
+            --mc-sidebar-active-shadow: rgba(159,18,57,0.3); --mc-sidebar-active-bar: #fb7185;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #ffe4e6;
+            --mc-sidebar-section-text: #fb7185;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #9f1239, #e11d48);
+            --mc-body-bg: #fff1f2; --mc-card-bg: #fff; --mc-border: #fecdd3;
+            --mc-text: #1a0510; --mc-text-secondary: #e11d48; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Gold â”€â”€ */
+        [data-theme="gold"] {
+            --mc-primary: #b8860b; --mc-primary-dark: #966d08; --mc-primary-light: #daa520;
+            --mc-sidebar-bg: #1a1408; --mc-sidebar-bg2: #2a200d;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fcd34d;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(184,134,11,0.9), rgba(218,165,32,0.8));
+            --mc-sidebar-active-shadow: rgba(184,134,11,0.3); --mc-sidebar-active-bar: #daa520;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fef9c3;
+            --mc-sidebar-section-text: #daa520;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #b8860b, #daa520);
+            --mc-body-bg: #fefce8; --mc-card-bg: #fff; --mc-border: #fef08a;
+            --mc-text: #1a1408; --mc-text-secondary: #ca8a04; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Coral â”€â”€ */
+        [data-theme="coral"] {
+            --mc-primary: #f97316; --mc-primary-dark: #ea580c; --mc-primary-light: #fb923c;
+            --mc-sidebar-bg: #1a0e05; --mc-sidebar-bg2: #2d180a;
+            --mc-sidebar-hover: rgba(255,255,255,0.07); --mc-sidebar-text: #fdba74;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(249,115,22,0.9), rgba(251,146,60,0.8));
+            --mc-sidebar-active-shadow: rgba(249,115,22,0.3); --mc-sidebar-active-bar: #fb923c;
+            --mc-sidebar-divider: rgba(255,255,255,0.07); --mc-sidebar-brand-text: #fff7ed;
+            --mc-sidebar-section-text: #fb923c;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #f97316, #fb923c);
+            --mc-body-bg: #fff7ed; --mc-card-bg: #fff; --mc-border: #fed7aa;
+            --mc-text: #1a0e05; --mc-text-secondary: #f97316; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Midnight â”€â”€ */
+        [data-theme="midnight"] {
+            --mc-primary: #6366f1; --mc-primary-dark: #4f46e5; --mc-primary-light: #818cf8;
+            --mc-sidebar-bg: #020617; --mc-sidebar-bg2: #0f172a;
+            --mc-sidebar-hover: rgba(255,255,255,0.06); --mc-sidebar-text: #94a3b8;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(99,102,241,0.9), rgba(129,140,248,0.8));
+            --mc-sidebar-active-shadow: rgba(99,102,241,0.25); --mc-sidebar-active-bar: #818cf8;
+            --mc-sidebar-divider: rgba(255,255,255,0.05); --mc-sidebar-brand-text: #e2e8f0;
+            --mc-sidebar-section-text: #475569;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --mc-body-bg: #0f172a; --mc-card-bg: #1e293b; --mc-border: #334155;
+            --mc-text: #e2e8f0; --mc-text-secondary: #94a3b8; --mc-topbar-bg: #1e293b;
+        }
+
+        /* â”€â”€ Theme: Charcoal â”€â”€ */
+        [data-theme="charcoal"] {
+            --mc-primary: #14b8a6; --mc-primary-dark: #0d9488; --mc-primary-light: #2dd4bf;
+            --mc-sidebar-bg: #111111; --mc-sidebar-bg2: #1a1a1a;
+            --mc-sidebar-hover: rgba(255,255,255,0.06); --mc-sidebar-text: #a3a3a3;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(20,184,166,0.9), rgba(45,212,191,0.8));
+            --mc-sidebar-active-shadow: rgba(20,184,166,0.25); --mc-sidebar-active-bar: #2dd4bf;
+            --mc-sidebar-divider: rgba(255,255,255,0.05); --mc-sidebar-brand-text: #f5f5f5;
+            --mc-sidebar-section-text: #525252;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #14b8a6, #2dd4bf);
+            --mc-body-bg: #1a1a1a; --mc-card-bg: #262626; --mc-border: #404040;
+            --mc-text: #f5f5f5; --mc-text-secondary: #a3a3a3; --mc-topbar-bg: #262626;
+        }
+
+        /* â”€â”€ Theme: Arctic â”€â”€ */
+        [data-theme="arctic"] {
+            --mc-primary: #0ea5e9; --mc-primary-dark: #0284c7; --mc-primary-light: #38bdf8;
+            --mc-sidebar-bg: #f0f9ff; --mc-sidebar-bg2: #e0f2fe;
+            --mc-sidebar-hover: rgba(0,0,0,0.04); --mc-sidebar-text: #475569;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(14,165,233,0.9), rgba(56,189,248,0.85));
+            --mc-sidebar-active-shadow: rgba(14,165,233,0.15); --mc-sidebar-active-bar: #38bdf8;
+            --mc-sidebar-divider: #e0f2fe; --mc-sidebar-brand-text: #0c4a6e;
+            --mc-sidebar-section-text: #7dd3fc;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #0ea5e9, #38bdf8);
+            --mc-body-bg: #f8fafc; --mc-card-bg: #fff; --mc-border: #e0f2fe;
+            --mc-text: #0c4a6e; --mc-text-secondary: #0ea5e9; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Sand â”€â”€ */
+        [data-theme="sand"] {
+            --mc-primary: #a16207; --mc-primary-dark: #854d0e; --mc-primary-light: #ca8a04;
+            --mc-sidebar-bg: #fefce8; --mc-sidebar-bg2: #fef9c3;
+            --mc-sidebar-hover: rgba(0,0,0,0.04); --mc-sidebar-text: #713f12;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(161,98,7,0.9), rgba(202,138,4,0.85));
+            --mc-sidebar-active-shadow: rgba(161,98,7,0.15); --mc-sidebar-active-bar: #eab308;
+            --mc-sidebar-divider: #fef08a; --mc-sidebar-brand-text: #422006;
+            --mc-sidebar-section-text: #ca8a04;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #a16207, #eab308);
+            --mc-body-bg: #fffbeb; --mc-card-bg: #fff; --mc-border: #fde68a;
+            --mc-text: #422006; --mc-text-secondary: #a16207; --mc-topbar-bg: #fff;
+        }
+
+        /* â”€â”€ Theme: Mint â”€â”€ */
+        [data-theme="mint"] {
+            --mc-primary: #10b981; --mc-primary-dark: #059669; --mc-primary-light: #34d399;
+            --mc-sidebar-bg: #f0fdf4; --mc-sidebar-bg2: #dcfce7;
+            --mc-sidebar-hover: rgba(0,0,0,0.04); --mc-sidebar-text: #166534;
+            --mc-sidebar-active: linear-gradient(135deg, rgba(16,185,129,0.9), rgba(52,211,153,0.85));
+            --mc-sidebar-active-shadow: rgba(16,185,129,0.15); --mc-sidebar-active-bar: #34d399;
+            --mc-sidebar-divider: #bbf7d0; --mc-sidebar-brand-text: #052e16;
+            --mc-sidebar-section-text: #34d399;
+            --mc-sidebar-brand-gradient: linear-gradient(135deg, #10b981, #34d399);
+            --mc-body-bg: #f0fdf4; --mc-card-bg: #fff; --mc-border: #bbf7d0;
+            --mc-text: #052e16; --mc-text-secondary: #059669; --mc-topbar-bg: #fff;
+        }
+
+        * { font-family: 'Inter', sans-serif; }
+        body { background: var(--mc-body-bg); min-height: 100vh; color: var(--mc-text); transition: background 0.35s ease, color 0.35s ease; }
+
+        /* SIDEBAR */
+        .mc-sidebar {
+            position: fixed; top: 0; left: 0;
+            width: var(--mc-sidebar-width); height: 100vh;
+            background: linear-gradient(180deg, var(--mc-sidebar-bg) 0%, var(--mc-sidebar-bg2) 100%);
+            z-index: 1040; overflow-y: auto;
+            transition: transform 0.3s cubic-bezier(.4,0,.2,1), background 0.35s ease;
+            display: flex; flex-direction: column;
+            border-right: 1px solid var(--mc-sidebar-divider);
+        }
+        .mc-sidebar .sidebar-brand {
+            padding: 1rem 1.15rem;
+            display: flex; align-items: center; gap: 0.7rem;
+            border-bottom: 1px solid var(--mc-sidebar-divider);
+            flex-shrink: 0;
+        }
+        .mc-sidebar .sidebar-brand h4 { color: var(--mc-sidebar-brand-text); font-weight: 700; margin: 0; font-size: 1.1rem; letter-spacing: -0.01em; transition: color 0.35s; }
+        .mc-sidebar .sidebar-brand .brand-icon {
+            width: 34px; height: 34px;
+            background: var(--mc-sidebar-brand-gradient);
+            border-radius: 9px; display: flex; align-items: center;
+            justify-content: center; color: #fff; font-size: 1rem; font-weight: 700;
+            box-shadow: 0 2px 8px var(--mc-sidebar-active-shadow);
+            transition: background 0.35s, box-shadow 0.35s;
+        }
+        .sidebar-client-context {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid var(--mc-sidebar-divider);
+            flex-shrink: 0;
+        }
+        .client-context-card {
+            background: rgba(37,99,235,0.08);
+            border: 1px solid rgba(37,99,235,0.18);
+            border-radius: 10px; padding: 0.6rem 0.75rem;
+            transition: all 0.2s ease;
+        }
+        .client-context-card.no-client {
+            background: rgba(148,163,184,0.06);
+            border-color: rgba(148,163,184,0.12);
+        }
+        .client-context-label {
+            font-size: 0.6rem; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--mc-sidebar-section-text); font-weight: 600;
+            margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem;
+        }
+        .client-context-name {
+            font-size: 0.82rem; font-weight: 600; color: var(--mc-sidebar-brand-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .client-context-name.empty { color: #f59e0b; font-weight: 500; font-style: italic; font-size: 0.75rem; }
+        .client-context-hint { font-size: 0.58rem; color: var(--mc-sidebar-section-text); margin-top: 0.15rem; }
+        .sidebar-scroll { flex: 1; overflow-y: auto; padding-bottom: 1rem; }
+        .sidebar-scroll::-webkit-scrollbar { width: 3px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 3px; }
+        .mc-sidebar .nav-section {
+            padding: 0.9rem 1rem 0.25rem 1.15rem;
+            font-size: 0.58rem; text-transform: uppercase;
+            letter-spacing: 0.12em; color: var(--mc-sidebar-section-text); font-weight: 700;
+            display: flex; align-items: center; gap: 0.45rem;
+            transition: color 0.35s;
+        }
+        .mc-sidebar .nav-section .section-line { flex: 1; height: 1px; background: var(--mc-sidebar-divider); }
+        .mc-sidebar .nav-link {
+            color: var(--mc-sidebar-text);
+            padding: 0.42rem 1rem; display: flex;
+            align-items: center; gap: 0.6rem;
+            font-size: 0.82rem; border-radius: 8px;
+            margin: 1px 0.55rem; transition: all 0.18s cubic-bezier(.4,0,.2,1);
+            position: relative; font-weight: 400;
+        }
+        .mc-sidebar .nav-link:hover {
+            background: var(--mc-sidebar-hover); color: var(--mc-sidebar-brand-text);
+            transform: translateX(2px);
+        }
+        .mc-sidebar .nav-link.active {
+            background: var(--mc-sidebar-active);
+            color: #fff; font-weight: 500;
+            box-shadow: 0 2px 8px var(--mc-sidebar-active-shadow);
+        }
+        .mc-sidebar .nav-link.active::before {
+            content: ''; position: absolute; left: -0.55rem; top: 50%;
+            transform: translateY(-50%); width: 3px; height: 55%;
+            background: var(--mc-sidebar-active-bar); border-radius: 0 2px 2px 0;
+        }
+        .mc-sidebar .nav-link i { font-size: 0.95rem; width: 20px; text-align: center; flex-shrink: 0; opacity: 0.85; }
+        .mc-sidebar .nav-link:hover i, .mc-sidebar .nav-link.active i { opacity: 1; }
+        .mc-sidebar .nav-link .nav-badge {
+            margin-left: auto; font-size: 0.6rem; padding: 0.12rem 0.4rem;
+            border-radius: 5px; font-weight: 600;
+        }
+        .mc-sidebar .nav-link.client-disabled { opacity: 0.3; pointer-events: none; cursor: not-allowed; }
+        .sidebar-submenu { transition: all 0.25s ease; }
+        .sidebar-submenu .nav-link {
+            padding: 0.3rem 1rem 0.3rem 2.35rem; font-size: 0.78rem; margin: 0 0.55rem;
+        }
+        .sidebar-submenu .nav-link::before { display: none; }
+        .nav-link[data-bs-toggle="collapse"] .chevron-icon {
+            transition: transform 0.25s cubic-bezier(.4,0,.2,1); font-size: 0.6rem; margin-left: auto; opacity: 0.5;
+        }
+        .nav-link[data-bs-toggle="collapse"]:hover .chevron-icon { opacity: 0.8; }
+        .nav-link[data-bs-toggle="collapse"][aria-expanded="true"] .chevron-icon { transform: rotate(180deg); opacity: 0.8; }
+        .client-section-warning {
+            margin: 0.15rem 0.75rem 0.35rem; padding: 0.4rem 0.65rem; border-radius: 7px;
+            font-size: 0.62rem; color: #94a3b8;
+            background: rgba(245,158,11,0.05); border-left: 2px solid #f59e0b; line-height: 1.35;
+        }
+
+        /* MAIN + TOPBAR */
+        .mc-main { margin-left: var(--mc-sidebar-width); min-height: 100vh; transition: background 0.35s; }
+        .mc-topbar {
+            background: var(--mc-topbar-bg); border-bottom: 1px solid var(--mc-border);
+            padding: 0 1.5rem; height: 60px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 1030;
+            transition: background 0.35s, border-color 0.35s;
+        }
+        .client-selector-wrapper { position: relative; min-width: 320px; }
+        .client-selector-btn {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.45rem 0.85rem; border-radius: 10px;
+            border: 1px solid var(--mc-border); background: var(--mc-body-bg);
+            cursor: pointer; transition: all 0.2s ease; width: 100%;
+            font-size: 0.85rem; color: #334155;
+        }
+        .client-selector-btn:hover { border-color: var(--mc-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+        .client-selector-btn .selected-name { font-weight: 600; color: #1e293b; }
+        .client-selector-btn .no-selection { color: #94a3b8; font-style: italic; }
+        .client-selector-dropdown {
+            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+            background: #fff; border: 1px solid var(--mc-border);
+            border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.12);
+            z-index: 1050; display: none; max-height: 380px; overflow: hidden;
+        }
+        .client-selector-dropdown.show { display: block; }
+        .client-search-input {
+            width: 100%; border: none; border-bottom: 1px solid var(--mc-border);
+            padding: 0.65rem 0.85rem; font-size: 0.84rem; outline: none;
+            border-radius: 12px 12px 0 0;
+        }
+        .client-list { max-height: 280px; overflow-y: auto; padding: 0.35rem; }
+        .client-item {
+            display: flex; align-items: center; gap: 0.65rem;
+            padding: 0.55rem 0.75rem; border-radius: 8px; cursor: pointer;
+            transition: all 0.15s ease; font-size: 0.84rem;
+        }
+        .client-item:hover { background: #f1f5f9; }
+        .client-item.selected { background: rgba(37,99,235,0.06); border: 1px solid rgba(37,99,235,0.15); }
+        .client-item .client-avatar {
+            width: 32px; height: 32px; border-radius: 8px;
+            background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+            display: flex; align-items: center; justify-content: center;
+            color: #4338ca; font-weight: 700; font-size: 0.75rem; flex-shrink: 0;
+        }
+        .client-item .client-info { flex: 1; min-width: 0; }
+        .client-item .client-info .name {
+            font-weight: 600; color: #1e293b; font-size: 0.82rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .client-item .client-info .ice { font-size: 0.7rem; color: #94a3b8; }
+        .client-clear-btn {
+            display: block; text-align: center; padding: 0.5rem;
+            font-size: 0.78rem; color: #dc2626; cursor: pointer;
+            border-top: 1px solid var(--mc-border); transition: background 0.15s;
+        }
+        .client-clear-btn:hover { background: #fef2f2; }
+
+        .mc-topbar .search-box { position: relative; width: 260px; }
+        .mc-topbar .search-box input {
+            padding-left: 2.3rem; border-radius: 10px;
+            border: 1px solid var(--mc-border); background: var(--mc-body-bg);
+            font-size: 0.84rem; height: 38px;
+        }
+        .mc-topbar .search-box i {
+            position: absolute; left: 0.75rem; top: 50%;
+            transform: translateY(-50%); color: #94a3b8;
+        }
+        .mc-topbar .user-menu { display: flex; align-items: center; gap: 0.75rem; }
+        .mc-topbar .notification-bell {
+            position: relative; cursor: pointer; font-size: 1.2rem; color: #64748b;
+            width: 38px; height: 38px; display: flex; align-items: center;
+            justify-content: center; border-radius: 10px; transition: all 0.2s;
+        }
+        .mc-topbar .notification-bell:hover { background: var(--mc-body-bg); color: #1e293b; }
+        .mc-topbar .notification-bell .badge {
+            position: absolute; top: 2px; right: 2px;
+            font-size: 0.6rem; padding: 0.12rem 0.35rem;
+        }
+        .mc-topbar .user-avatar {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--mc-primary), #7c3aed);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 600; font-size: 0.8rem;
+        }
+
+        /* CONTENT */
+        .mc-content { padding: 1.5rem; }
+        .mc-card {
+            background: var(--mc-card-bg); border-radius: 14px;
+            border: 1px solid var(--mc-border); box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            transition: all 0.2s ease;
+        }
+        .mc-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .mc-card .card-header { background: transparent; border-bottom: 1px solid var(--mc-border); padding: 1rem 1.25rem; font-weight: 600; }
+        .stat-card { padding: 1.25rem; border-radius: 14px; background: var(--mc-card-bg); border: 1px solid var(--mc-border); }
+        .stat-card .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+        .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--mc-text); }
+        .stat-card .stat-label { font-size: 0.8rem; color: var(--mc-text-secondary); font-weight: 500; }
+        .badge-brouillon { background: #e2e8f0; color: #475569; }
+        .badge-acompleter { background: #fef3c7; color: #92400e; }
+        .badge-completee { background: #dbeafe; color: #1e40af; }
+        .badge-enrevision { background: #ede9fe; color: #6b21a8; }
+        .badge-validee { background: #d1fae5; color: #065f46; }
+        .badge-soumise { background: #dcfce7; color: #166534; }
+        .badge-refusee { background: #fee2e2; color: #991b1b; }
+        .badge-faible { background: #e2e8f0; color: #475569; }
+        .badge-moyenne { background: #fef3c7; color: #92400e; }
+        .badge-haute { background: #fed7aa; color: #9a3412; }
+        .badge-urgente { background: #fee2e2; color: #991b1b; }
+        .mc-table { font-size: 0.875rem; }
+        .mc-table th { font-weight: 600; color: var(--mc-text-secondary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-width: 2px; }
+        .mc-table td { vertical-align: middle; color: var(--mc-text); }
+        .btn-mc-primary {
+            background: linear-gradient(135deg, var(--mc-primary), #4f46e5);
+            border: none; color: #fff; border-radius: 10px;
+            padding: 0.5rem 1.25rem; font-weight: 500; font-size: 0.875rem; transition: all 0.2s ease;
+        }
+        .btn-mc-primary:hover {
+            background: linear-gradient(135deg, var(--mc-primary-dark), #4338ca);
+            color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+        }
+        .btn-mc-success { background: linear-gradient(135deg, #059669, #10b981); border: none; color: #fff; border-radius: 10px; }
+        .btn-mc-danger { background: linear-gradient(135deg, #dc2626, #ef4444); border: none; color: #fff; border-radius: 10px; }
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+        .page-header h2 { font-weight: 700; color: var(--mc-text); margin: 0; font-size: 1.5rem; }
+        .page-header .breadcrumb { margin: 0; font-size: 0.8rem; }
+        .form-control, .form-select { border-radius: 10px; border: 1px solid var(--mc-border); padding: 0.6rem 1rem; font-size: 0.875rem; }
+        .form-control:focus, .form-select:focus { border-color: var(--mc-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        .form-label { font-weight: 500; font-size: 0.85rem; color: var(--mc-text-secondary); margin-bottom: 0.35rem; }
+        @@media (max-width: 768px) {
+            .mc-sidebar { transform: translateX(-100%); }
+            .mc-sidebar.show { transform: translateX(0); }
+            .mc-main { margin-left: 0; }
+            .client-selector-wrapper { min-width: 200px; }
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @@keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* â•â•â•â•â•â•â• GLOBAL CLIENT CONTEXT BANNER â•â•â•â•â•â•â• */
+        .mc-client-banner {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-left: 3px solid var(--mc-primary);
+            border-radius: 10px;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: bannerSlideIn 0.3s ease-out;
+        }
+        @@keyframes bannerSlideIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .mc-client-banner .banner-avatar {
+            width: 34px; height: 34px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--mc-primary), #7c3aed);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+        .mc-client-banner .banner-info {
+            flex: 1; min-width: 0;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .mc-client-banner .banner-name {
+            font-size: 0.88rem; font-weight: 600; color: #1e293b;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .mc-client-banner .banner-id {
+            font-size: 0.7rem; color: #94a3b8; font-weight: 500;
+        }
+        .mc-client-banner .banner-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #22c55e; flex-shrink: 0;
+        }
+        .mc-client-banner .btn-banner-change {
+            padding: 0.25rem 0.6rem; border-radius: 8px;
+            font-size: 0.7rem; font-weight: 600;
+            color: #64748b; background: var(--mc-body-bg);
+            border: 1px solid #e2e8f0; cursor: pointer;
+            transition: all 0.2s ease; white-space: nowrap;
+        }
+        .mc-client-banner .btn-banner-change:hover {
+            color: var(--mc-primary); border-color: var(--mc-primary);
+        }
+        /* Disabled client fields in forms */
+        .mc-client-locked {
+            position: relative;
+        }
+        .mc-client-locked select:disabled,
+        .mc-client-locked .form-select:disabled,
+        .mc-client-locked input:disabled,
+        .mc-client-locked .form-control:disabled,
+        .mc-client-locked .form-control[readonly] {
+            background-color: #f8fafc !important;
+            border-color: #94a3b8 !important;
+            color: #1e293b !important;
+            font-weight: 600;
+            opacity: 1 !important;
+            cursor: not-allowed;
+        }
+        .mc-client-locked-badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            font-size: 0.68rem; color: #64748b; font-weight: 500;
+            margin-top: 0.25rem;
+        }
+        .mc-client-locked-badge i { font-size: 0.7rem; color: #94a3b8; }
+
+        /* â•â•â•â•â•â•â• THEME PICKER â•â•â•â•â•â•â• */
+        .theme-picker-btn {
+            width: 38px; height: 38px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; border: none; background: transparent;
+            color: var(--mc-text-secondary); font-size: 1.15rem; position: relative;
+        }
+        .theme-picker-btn:hover { background: var(--mc-body-bg); color: var(--mc-primary); }
+        .theme-picker-panel {
+            position: absolute; top: calc(100% + 8px); right: 0;
+            background: var(--mc-card-bg); border: 1px solid var(--mc-border);
+            border-radius: 16px; box-shadow: 0 16px 48px rgba(0,0,0,0.18);
+            z-index: 1060; display: none; width: 420px; padding: 0;
+            animation: themeSlideIn 0.25s cubic-bezier(.4,0,.2,1);
+            max-height: 85vh; overflow-y: auto;
+        }
+        .theme-picker-panel.show { display: block; }
+        @@keyframes themeSlideIn {
+            from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .tp-header {
+            padding: 1rem 1.15rem 0.6rem; border-bottom: 1px solid var(--mc-border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .tp-header-title {
+            font-size: 0.88rem; font-weight: 700; color: var(--mc-text);
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        .tp-header-title i { color: var(--mc-primary); }
+        .tp-close { background: none; border: none; color: var(--mc-text-secondary); cursor: pointer; font-size: 1.1rem; padding: 0.2rem; border-radius: 6px; transition: all 0.15s; }
+        .tp-close:hover { background: var(--mc-body-bg); color: var(--mc-text); }
+        .tp-section {
+            padding: 0.75rem 1.15rem 0.5rem;
+        }
+        .tp-section-title {
+            font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em;
+            font-weight: 700; color: var(--mc-text-secondary); margin-bottom: 0.55rem;
+            display: flex; align-items: center; gap: 0.35rem;
+        }
+        .tp-section + .tp-section { border-top: 1px solid var(--mc-border); }
+        /* Color theme grid */
+        .tp-colors {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem;
+        }
+        .tp-color-opt {
+            display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+            padding: 0.45rem 0.25rem; border-radius: 10px; cursor: pointer;
+            border: 2px solid transparent; transition: all 0.2s ease; background: transparent;
+        }
+        .tp-color-opt:hover { background: var(--mc-body-bg); }
+        .tp-color-opt.active { border-color: var(--mc-primary); background: rgba(37,99,235,0.04); }
+        .tp-color-swatch {
+            width: 38px; height: 28px; border-radius: 7px;
+            position: relative; overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+        }
+        .tp-color-swatch .cs-side { position: absolute; left: 0; top: 0; width: 35%; height: 100%; }
+        .tp-color-swatch .cs-top { position: absolute; right: 0; top: 0; width: 65%; height: 22%; }
+        .tp-color-swatch .cs-body { position: absolute; right: 0; bottom: 0; width: 65%; height: 78%; }
+        .tp-color-name { font-size: 0.6rem; font-weight: 600; color: var(--mc-text-secondary); text-align: center; line-height: 1; }
+        /* Menu style options */
+        .tp-menu-styles {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem;
+        }
+        .tp-style-opt {
+            display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+            padding: 0.5rem 0.25rem; border-radius: 10px; cursor: pointer;
+            border: 2px solid transparent; transition: all 0.2s ease; background: transparent;
+        }
+        .tp-style-opt:hover { background: var(--mc-body-bg); }
+        .tp-style-opt.active { border-color: var(--mc-primary); background: rgba(37,99,235,0.04); }
+        .tp-style-icon {
+            width: 40px; height: 30px; border-radius: 6px;
+            border: 1.5px solid var(--mc-border);
+            display: flex; flex-direction: column; align-items: flex-start;
+            justify-content: center; padding: 0 4px; gap: 2px; overflow: hidden;
+        }
+        .tp-style-icon .bar { height: 2.5px; border-radius: 2px; background: var(--mc-primary); }
+        .tp-style-name { font-size: 0.58rem; font-weight: 600; color: var(--mc-text-secondary); }
+        /* Sidebar width */
+        .tp-width-opts {
+            display: flex; gap: 0.4rem;
+        }
+        .tp-width-opt {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+            padding: 0.5rem 0.25rem; border-radius: 10px; cursor: pointer;
+            border: 2px solid transparent; transition: all 0.2s; background: transparent;
+        }
+        .tp-width-opt:hover { background: var(--mc-body-bg); }
+        .tp-width-opt.active { border-color: var(--mc-primary); background: rgba(37,99,235,0.04); }
+        .tp-width-icon {
+            width: 44px; height: 26px; border-radius: 5px; border: 1.5px solid var(--mc-border);
+            position: relative; overflow: hidden;
+        }
+        .tp-width-icon .wi-side { position: absolute; left: 0; top: 0; height: 100%; background: var(--mc-primary); opacity: 0.35; border-radius: 3px 0 0 3px; }
+        .tp-width-name { font-size: 0.58rem; font-weight: 600; color: var(--mc-text-secondary); }
+        .tp-footer { padding: 0.6rem 1.15rem; border-top: 1px solid var(--mc-border); text-align: center; }
+        .tp-reset-btn {
+            font-size: 0.7rem; color: var(--mc-danger); font-weight: 600;
+            background: none; border: none; cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .tp-reset-btn:hover { background: rgba(220,38,38,0.06); }
+
+        /* â•â•â• MENU STYLE VARIANTS â•â•â• */
+        /* Compact */
+        [data-menu="compact"] .mc-sidebar .nav-link { padding: 0.32rem 0.85rem; font-size: 0.78rem; gap: 0.5rem; }
+        [data-menu="compact"] .mc-sidebar .nav-link i { font-size: 0.85rem; width: 18px; }
+        [data-menu="compact"] .mc-sidebar .nav-section { padding-top: 0.65rem; padding-bottom: 0.15rem; font-size: 0.52rem; }
+        [data-menu="compact"] .sidebar-submenu .nav-link { padding: 0.22rem 0.85rem 0.22rem 2rem; font-size: 0.72rem; }
+        [data-menu="compact"] .mc-sidebar .sidebar-brand { padding: 0.7rem 1rem; }
+        [data-menu="compact"] .mc-sidebar .sidebar-brand h4 { font-size: 0.95rem; }
+        [data-menu="compact"] .sidebar-client-context { padding: 0.45rem 0.7rem; }
+
+        /* Pill */
+        [data-menu="pill"] .mc-sidebar .nav-link { border-radius: 20px; margin: 2px 0.55rem; }
+        [data-menu="pill"] .mc-sidebar .nav-link.active { border-radius: 20px; }
+        [data-menu="pill"] .sidebar-submenu .nav-link { border-radius: 16px; }
+        [data-menu="pill"] .client-context-card { border-radius: 16px; }
+        [data-menu="pill"] .client-section-warning { border-radius: 12px; }
+
+        /* Bordered */
+        [data-menu="bordered"] .mc-sidebar .nav-link { border-radius: 0; margin: 0; border-left: 3px solid transparent; }
+        [data-menu="bordered"] .mc-sidebar .nav-link:hover { border-left-color: var(--mc-sidebar-active-bar); transform: none; background: var(--mc-sidebar-hover); }
+        [data-menu="bordered"] .mc-sidebar .nav-link.active { border-radius: 0; border-left-color: var(--mc-sidebar-active-bar); box-shadow: none; }
+        [data-menu="bordered"] .mc-sidebar .nav-link.active::before { display: none; }
+        [data-menu="bordered"] .sidebar-submenu .nav-link { border-left: 2px solid transparent; margin: 0; border-radius: 0; }
+
+        /* Spaced */
+        [data-menu="spaced"] .mc-sidebar .nav-link { margin: 3px 0.7rem; padding: 0.48rem 1rem; border-radius: 10px; }
+        [data-menu="spaced"] .mc-sidebar .nav-link.active { box-shadow: 0 3px 12px var(--mc-sidebar-active-shadow); }
+        [data-menu="spaced"] .mc-sidebar .nav-section { padding-top: 1.1rem; }
+        [data-menu="spaced"] .sidebar-submenu .nav-link { margin: 2px 0.7rem; }
+
+        /* Minimal */
+        [data-menu="minimal"] .mc-sidebar .nav-link { background: transparent !important; box-shadow: none !important; }
+        [data-menu="minimal"] .mc-sidebar .nav-link:hover { color: var(--mc-sidebar-brand-text); transform: none; opacity: 0.9; }
+        [data-menu="minimal"] .mc-sidebar .nav-link.active { color: #fff; font-weight: 600; opacity: 1; background: transparent !important; }
+        [data-menu="minimal"] .mc-sidebar .nav-link.active::before { width: 3px; height: 100%; left: 0; border-radius: 0 3px 3px 0; }
+        [data-menu="minimal"] .mc-sidebar .nav-section .section-line { display: none; }
+        [data-menu="minimal"] .sidebar-submenu .nav-link { opacity: 0.7; }
+        [data-menu="minimal"] .sidebar-submenu .nav-link:hover { opacity: 1; }
+
+        /* Glassmorphism */
+        [data-menu="glass"] .mc-sidebar .nav-link.active { background: rgba(255,255,255,0.12) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+        [data-menu="glass"] .mc-sidebar .nav-link:hover { background: rgba(255,255,255,0.06); }
+        [data-menu="glass"] .client-context-card { background: rgba(255,255,255,0.06); backdrop-filter: blur(8px); border-color: rgba(255,255,255,0.1); }
+
+        /* â•â•â• SIDEBAR WIDTH VARIANTS â•â•â• */
+        [data-sidebar-width="narrow"] { --mc-sidebar-width: 230px; }
+        [data-sidebar-width="wide"] { --mc-sidebar-width: 300px; }
+
+        /* Dark theme overrides for topbar & content */
+        [data-theme="dark"] .mc-topbar { color: #f4f4f5; }
+        [data-theme="dark"] .client-selector-btn { background: #27272a; border-color: #3f3f46; color: #e4e4e7; }
+        [data-theme="dark"] .client-selector-btn .selected-name { color: #f4f4f5; }
+        [data-theme="dark"] .client-selector-dropdown { background: #27272a; border-color: #3f3f46; }
+        [data-theme="dark"] .client-search-input { background: #27272a; color: #f4f4f5; border-bottom-color: #3f3f46; }
+        [data-theme="dark"] .client-item:hover { background: #3f3f46; }
+        [data-theme="dark"] .client-item .client-info .name { color: #f4f4f5; }
+        [data-theme="dark"] .mc-topbar .search-box input { background: #27272a; border-color: #3f3f46; color: #f4f4f5; }
+        [data-theme="dark"] .user-avatar { background: linear-gradient(135deg, #3b82f6, #8b5cf6); }
+        [data-theme="dark"] .fw-semibold.text-dark { color: #f4f4f5 !important; }
+        [data-theme="dark"] .dropdown-menu { background: #27272a; border-color: #3f3f46; }
+        [data-theme="dark"] .dropdown-item { color: #e4e4e7; }
+        [data-theme="dark"] .dropdown-item:hover { background: #3f3f46; }
+        [data-theme="dark"] .dropdown-divider { border-color: #3f3f46; }
+        [data-theme="dark"] .mc-client-banner { background: #27272a; border-color: #3f3f46; border-left-color: #3b82f6; }
+        [data-theme="dark"] .mc-client-banner .banner-name { color: #f4f4f5; }
+        [data-theme="dark"] .btn-banner-change { background: #3f3f46; border-color: #52525b; color: #a1a1aa; }
+        [data-theme="dark"] .alert { background: #27272a; border-color: #3f3f46; color: #f4f4f5; }
+        [data-theme="dark"] .stat-card { background: #27272a; border-color: #3f3f46; }
+        [data-theme="dark"] .stat-card .stat-value { color: #f4f4f5; }
+        [data-theme="dark"] .mc-card { background: #27272a; border-color: #3f3f46; }
+        [data-theme="dark"] .mc-card .card-header { border-bottom-color: #3f3f46; color: #f4f4f5; }
+        [data-theme="dark"] .mc-table td { color: #e4e4e7; }
+        [data-theme="dark"] .mc-table th { color: #a1a1aa; }
+        [data-theme="dark"] .page-header h2 { color: #f4f4f5; }
+        [data-theme="dark"] .form-control, [data-theme="dark"] .form-select { background: #27272a; border-color: #3f3f46; color: #f4f4f5; }
+        [data-theme="dark"] .form-label { color: #a1a1aa; }
+        [data-theme="dark"] .table { color: #e4e4e7; }
+        [data-theme="dark"] .table>:not(caption)>*>* { border-bottom-color: #3f3f46; background-color: transparent; }
+        [data-theme="dark"] .card { background: #27272a; border-color: #3f3f46; color: #f4f4f5; }
+
+        /* Light sidebar theme adjustments */
+        [data-theme="light"] .mc-sidebar { border-right: 1px solid #e2e8f0; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
+        [data-theme="light"] .client-context-card { border-color: rgba(15,118,110,0.2); background: rgba(15,118,110,0.04); }
+        [data-theme="light"] .client-section-warning { background: rgba(15,118,110,0.04); border-left-color: #14b8a6; }
+
+        /* Light-sidebar themes adjustments (arctic, sand, mint) */
+        [data-theme="arctic"] .mc-sidebar { border-right: 1px solid #e0f2fe; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
+        [data-theme="sand"] .mc-sidebar { border-right: 1px solid #fef08a; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
+        [data-theme="mint"] .mc-sidebar { border-right: 1px solid #bbf7d0; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
+
+        /* Midnight dark overrides */
+        [data-theme="midnight"] .mc-topbar { color: #e2e8f0; }
+        [data-theme="midnight"] .client-selector-btn { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+        [data-theme="midnight"] .client-selector-btn .selected-name { color: #e2e8f0; }
+        [data-theme="midnight"] .client-selector-dropdown { background: #1e293b; border-color: #334155; }
+        [data-theme="midnight"] .client-search-input { background: #1e293b; color: #e2e8f0; border-bottom-color: #334155; }
+        [data-theme="midnight"] .client-item:hover { background: #334155; }
+        [data-theme="midnight"] .client-item .client-info .name { color: #e2e8f0; }
+        [data-theme="midnight"] .mc-topbar .search-box input { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+        [data-theme="midnight"] .fw-semibold.text-dark { color: #e2e8f0 !important; }
+        [data-theme="midnight"] .dropdown-menu { background: #1e293b; border-color: #334155; }
+        [data-theme="midnight"] .dropdown-item { color: #cbd5e1; }
+        [data-theme="midnight"] .dropdown-item:hover { background: #334155; }
+        [data-theme="midnight"] .dropdown-divider { border-color: #334155; }
+        [data-theme="midnight"] .mc-client-banner { background: #1e293b; border-color: #334155; border-left-color: #6366f1; }
+        [data-theme="midnight"] .mc-client-banner .banner-name { color: #e2e8f0; }
+        [data-theme="midnight"] .btn-banner-change { background: #334155; border-color: #475569; color: #94a3b8; }
+        [data-theme="midnight"] .alert { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+        [data-theme="midnight"] .stat-card { background: #1e293b; border-color: #334155; }
+        [data-theme="midnight"] .stat-card .stat-value { color: #e2e8f0; }
+        [data-theme="midnight"] .mc-card { background: #1e293b; border-color: #334155; }
+        [data-theme="midnight"] .mc-card .card-header { border-bottom-color: #334155; color: #e2e8f0; }
+        [data-theme="midnight"] .mc-table td { color: #cbd5e1; }
+        [data-theme="midnight"] .mc-table th { color: #94a3b8; }
+        [data-theme="midnight"] .page-header h2 { color: #e2e8f0; }
+        [data-theme="midnight"] .form-control, [data-theme="midnight"] .form-select { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+        [data-theme="midnight"] .form-label { color: #94a3b8; }
+        [data-theme="midnight"] .table { color: #cbd5e1; }
+        [data-theme="midnight"] .table>:not(caption)>*>* { border-bottom-color: #334155; background-color: transparent; }
+        [data-theme="midnight"] .card { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+
+        /* Charcoal dark overrides */
+        [data-theme="charcoal"] .mc-topbar { color: #f5f5f5; }
+        [data-theme="charcoal"] .client-selector-btn { background: #262626; border-color: #404040; color: #d4d4d4; }
+        [data-theme="charcoal"] .client-selector-btn .selected-name { color: #f5f5f5; }
+        [data-theme="charcoal"] .client-selector-dropdown { background: #262626; border-color: #404040; }
+        [data-theme="charcoal"] .client-search-input { background: #262626; color: #f5f5f5; border-bottom-color: #404040; }
+        [data-theme="charcoal"] .client-item:hover { background: #404040; }
+        [data-theme="charcoal"] .client-item .client-info .name { color: #f5f5f5; }
+        [data-theme="charcoal"] .mc-topbar .search-box input { background: #262626; border-color: #404040; color: #f5f5f5; }
+        [data-theme="charcoal"] .fw-semibold.text-dark { color: #f5f5f5 !important; }
+        [data-theme="charcoal"] .dropdown-menu { background: #262626; border-color: #404040; }
+        [data-theme="charcoal"] .dropdown-item { color: #d4d4d4; }
+        [data-theme="charcoal"] .dropdown-item:hover { background: #404040; }
+        [data-theme="charcoal"] .dropdown-divider { border-color: #404040; }
+        [data-theme="charcoal"] .mc-client-banner { background: #262626; border-color: #404040; border-left-color: #14b8a6; }
+        [data-theme="charcoal"] .mc-client-banner .banner-name { color: #f5f5f5; }
+        [data-theme="charcoal"] .btn-banner-change { background: #404040; border-color: #525252; color: #a3a3a3; }
+        [data-theme="charcoal"] .alert { background: #262626; border-color: #404040; color: #f5f5f5; }
+        [data-theme="charcoal"] .stat-card { background: #262626; border-color: #404040; }
+        [data-theme="charcoal"] .stat-card .stat-value { color: #f5f5f5; }
+        [data-theme="charcoal"] .mc-card { background: #262626; border-color: #404040; }
+        [data-theme="charcoal"] .mc-card .card-header { border-bottom-color: #404040; color: #f5f5f5; }
+        [data-theme="charcoal"] .mc-table td { color: #d4d4d4; }
+        [data-theme="charcoal"] .mc-table th { color: #a3a3a3; }
+        [data-theme="charcoal"] .page-header h2 { color: #f5f5f5; }
+        [data-theme="charcoal"] .form-control, [data-theme="charcoal"] .form-select { background: #262626; border-color: #404040; color: #f5f5f5; }
+        [data-theme="charcoal"] .form-label { color: #a3a3a3; }
+        [data-theme="charcoal"] .table { color: #d4d4d4; }
+        [data-theme="charcoal"] .table>:not(caption)>*>* { border-bottom-color: #404040; background-color: transparent; }
+        [data-theme="charcoal"] .card { background: #262626; border-color: #404040; color: #f5f5f5; }
+    </style>
+    @await RenderSectionAsync("Styles", required: false)
+    <script>
+        // Apply saved settings IMMEDIATELY to prevent flash
+        (function(){
+            var t=localStorage.getItem('mc-theme');
+            if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t);
+            var m=localStorage.getItem('mc-menu');
+            if(m&&m!=='default')document.documentElement.setAttribute('data-menu',m);
+            var w=localStorage.getItem('mc-width');
+            if(w&&w!=='default')document.documentElement.setAttribute('data-sidebar-width',w);
+        })();
+    </script>
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <nav class="mc-sidebar @(isWorkspacePage ? "d-none" : "")" id="sidebar" aria-label="Navigation principale">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><i class="bi bi-briefcase-fill"></i></div>
+            <div>
+                <h4>MetaCompta</h4>
+                <div style="font-size:0.6rem; color:#64748b; margin-top:-2px;">@(Context.Session.GetString("CabinetName") ?? "Cabinet")</div>
+            </div>
+        </div>
+
+
+
+        <!-- Scrollable Nav -->
+        <div class="sidebar-scroll">
+            @if (isClientSection && hasClient)
+            {
+            <!-- ======================================================== -->
+            <!-- ===  DOSSIER CLIENT                                   === -->
+            <!-- ======================================================== -->
+
+            <!-- Retour au hub -->
+            <div style="margin: 0.25rem 0.6rem 0.5rem;">
+                <a href="@Url.Action("Workspace", "Home")" class="nav-link d-flex align-items-center" style="background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:8px; padding:0.45rem 0.6rem; color:#60a5fa; font-size:0.78rem; font-weight:600; gap:0.4rem;">
+                    <i class="bi bi-arrow-left-circle-fill" style="font-size:0.9rem;"></i>
+                    <span>Retour au choix d&#39;espace</span>
+                </a>
+            </div>
+
+            <div class="nav-section" style="color:#f59e0b; margin-top:0.25rem;">
+                <i class="bi bi-folder-symlink-fill" style="font-size:0.65rem;"></i>
+                <span style="font-weight:800; letter-spacing:0.06em;">DOSSIER CLIENT</span>
+                <span class="section-line"></span>
+            </div>
+
+            <div style="margin: 0.15rem 0.75rem 0.5rem; padding: 0.5rem 0.7rem; border-radius: 8px; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);">
+                <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <i class="bi bi-building" style="color:#f59e0b; font-size:0.85rem;"></i>
+                    <span style="color:#e2e8f0; font-weight:600; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@selectedClientName</span>
+                </div>
+                <div style="font-size:0.6rem; color:#94a3b8; margin-top:0.15rem; display:flex; align-items:center; gap:0.3rem;">
+                    <span style="width:5px; height:5px; border-radius:50%; background:#22c55e; display:inline-block;"></span>
+                    Client actif
+                </div>
+            </div>
+            @if (readOnlyDeclarations)
+            {
+                <div class="client-section-warning" style="border-left-color: #ef4444; background: rgba(239,68,68,0.06); font-size:0.72rem; padding:0.4rem 0.6rem; margin-top:0.15rem;">
+                    <i class="bi bi-lock text-danger"></i> <span style="color:#fca5a5;">Aucun contrat actif &#8212; consultation seule</span>
+                </div>
+            }
+
+            <!-- Declarations fiscales -->
+            <div class="nav-section"><i class="bi bi-receipt" style="font-size:0.6rem;"></i> Fiscalit&#233; <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuFiscalite" role="button" aria-expanded="@(currentController == "Declarations" ? "true" : "false")">
+                        <i class="bi bi-receipt-cutoff"></i><span>D&#233;clarations</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Declarations" ? "show" : "")" id="menuFiscalite">
+                        <ul class="nav flex-column">
+                            @if (HasService("TVA"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "TVA" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "TVA" })"><i class="bi bi-receipt-cutoff"></i> TVA</a></li>
+                            }
+                            @if (HasService("IS"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "IS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-bank2"></i> IS</a></li>
+                            }
+                            @if (HasService("IR"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "IR" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IR" })"><i class="bi bi-person-lines-fill"></i> IR</a></li>
+                            }
+                            @if (HasService("CNSS"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "CNSS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "CNSS" })"><i class="bi bi-shield-check"></i> CNSS</a></li>
+                            }
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && currentAction == "Index" && ViewBag.Type == null ? "active" : "")" href="@Url.Action("Index", "Declarations", null)"><i class="bi bi-clock-history"></i> Historique</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Comptabilite Client -->
+            <div class="nav-section"><i class="bi bi-calculator" style="font-size:0.6rem;"></i> Comptabilit&#233; <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuCompta" role="button" aria-expanded="@(currentController == "Comptabilite" ? "true" : "false")">
+                        <i class="bi bi-calculator-fill"></i><span>Comptabilit&#233;</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Comptabilite" ? "show" : "")" id="menuCompta">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Ecritures", "Comptabilite", null)"><i class="bi bi-pencil-square"></i> &#201;critures</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Journaux", "Comptabilite", null)"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("GrandLivre", "Comptabilite", null)"><i class="bi bi-book"></i> Grand livre</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Balance", "Comptabilite", null)"><i class="bi bi-symmetry-horizontal"></i> Balance</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("BalanceAgee", "Comptabilite", null)"><i class="bi bi-hourglass-split"></i> Balance &#226;g&#233;e</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Rapprochements", "Comptabilite", null)"><i class="bi bi-arrow-left-right"></i> Rapprochement</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Social & Paie Client -->
+            <div class="nav-section"><i class="bi bi-cash-stack" style="font-size:0.6rem;"></i> Social & Paie <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuPaie" role="button" aria-expanded="@(currentController == "Payroll" || currentController == "Employees" ? "true" : "false")">
+                        <i class="bi bi-cash-coin"></i><span>Social & Paie</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Payroll" || currentController == "Employees" ? "show" : "")" id="menuPaie">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Payroll" ? "active" : "")" href="@Url.Action("Index", "Payroll", null)"><i class="bi bi-file-earmark-spreadsheet"></i> Bulletins de paie</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Employees" ? "active" : "")" href="@Url.Action("Index", "Employees", null)"><i class="bi bi-person-badge"></i> Employ&#233;s</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Juridique Client -->
+            <div class="nav-section"><i class="bi bi-bank" style="font-size:0.6rem;"></i> Juridique <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuJuridique" role="button" aria-expanded="@(currentController == "Juridique" ? "true" : "false")">
+                        <i class="bi bi-bank2"></i><span>Juridique</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Juridique" ? "show" : "")" id="menuJuridique">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "CreationSociete" })"><i class="bi bi-building-add"></i> Cr&#233;ation soci&#233;t&#233;</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "ModificationStatuts" })"><i class="bi bi-pencil"></i> Modification statuts</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "PVAG" })"><i class="bi bi-file-earmark-check"></i> PV AG</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "DepotLegal" })"><i class="bi bi-archive"></i> D&#233;p&#244;t l&#233;gal</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "RC" })"><i class="bi bi-card-text"></i> Registre commerce</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Etats financiers Client -->
+            <div class="nav-section"><i class="bi bi-file-earmark-bar-graph" style="font-size:0.6rem;"></i> &#201;tats financiers <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuEtats" role="button" aria-expanded="@(currentController == "EtatsFiscaux" ? "true" : "false")">
+                        <i class="bi bi-file-earmark-text-fill"></i><span>&#201;tats financiers</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "EtatsFiscaux" ? "show" : "")" id="menuEtats">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Bilan", "EtatsFiscaux", null)"><i class="bi bi-clipboard-data"></i> Bilan</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("CPC", "EtatsFiscaux", null)"><i class="bi bi-bar-chart-line"></i> CPC</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("LiasseFiscale", "EtatsFiscaux", null)"><i class="bi bi-files"></i> Liasse fiscale</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Etat9421", "EtatsFiscaux", null)"><i class="bi bi-file-text"></i> &#201;tat 9421</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Amortissements", "EtatsFiscaux", null)"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("EtatsSynthese", "EtatsFiscaux", null)"><i class="bi bi-journal-text"></i> Synth&#232;se</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Documents Client -->
+            <div class="nav-section"><i class="bi bi-folder2-open" style="font-size:0.6rem;"></i> Documents Client <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuDocuments" role="button" aria-expanded="@(currentController == "Documents" ? "true" : "false")">
+                        <i class="bi bi-folder2-open"></i><span>Documents</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Documents" ? "show" : "")" id="menuDocuments">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", null)"><i class="bi bi-files"></i> Tous les documents</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "PieceJustificative" })"><i class="bi bi-paperclip"></i> Pi&#232;ces justificatives</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "Formulaire" })"><i class="bi bi-ui-checks-grid"></i> Formulaires</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "Declaration" })"><i class="bi bi-file-earmark-check"></i> D&#233;clarations</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Rapports Client -->
+            <div class="nav-section"><i class="bi bi-graph-up-arrow" style="font-size:0.6rem;"></i> Rapports Client <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuRapportsClient" role="button" aria-expanded="@(currentController == "Rapports" ? "true" : "false")">
+                        <i class="bi bi-bar-chart-line-fill"></i><span>Rapports</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Rapports" ? "show" : "")" id="menuRapportsClient">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Fiscaux", "Rapports", null)"><i class="bi bi-file-earmark-bar-graph"></i> Rapports fiscaux</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Financiers", "Rapports", null)"><i class="bi bi-currency-exchange"></i> Rapports financiers</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Sociaux", "Rapports", null)"><i class="bi bi-file-earmark-medical"></i> Rapports sociaux</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Workflow Client -->
+            <div class="nav-section"><i class="bi bi-lightning-charge" style="font-size:0.6rem;"></i> Workflow Client <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuWorkflowClient" role="button" aria-expanded="@(currentController == "Workflow" || (currentController == "Declarations" && (currentAction == "StartWorkflow" || currentAction == "AdvanceWorkflowStep")) ? "true" : "false")">
+                        <i class="bi bi-lightning-charge-fill" style="color:#7c3aed;"></i><span>Workflow</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Workflow" || (currentController == "Declarations" && (currentAction == "StartWorkflow" || currentAction == "AdvanceWorkflowStep")) ? "show" : "")" id="menuWorkflowClient">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Workflow")"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && (currentAction == "Instances" || currentAction == "InstanceDetails") ? "active" : "")" href="@Url.Action("Instances", "Workflow")"><i class="bi bi-collection-fill"></i> Suivi ex&#233;cutions</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "ClientConfig" ? "active" : "")" href="@Url.Action("ClientConfig", "Workflow")"><i class="bi bi-sliders2"></i> Configuration</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Contrôle Activités Client -->
+            <div class="nav-section"><i class="bi bi-clipboard2-check" style="font-size:0.6rem;"></i> Contrôle Activités <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Workflow" && currentAction == "MyTasks" ? "active" : "")" href="@Url.Action("MyTasks", "Workflow")">
+                        <i class="bi bi-inbox-fill" style="color:#f59e0b;"></i> Mes Requêtes
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Echeances -->
+            <div class="nav-section"><i class="bi bi-calendar-event" style="font-size:0.6rem;"></i> Suivi <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" href="@Url.Action("Index", "EtatsFiscaux", null)">
+                        <i class="bi bi-calendar-event-fill"></i> &#201;ch&#233;ances fiscales
+                    </a>
+                </li>
+            </ul>
+
+            }
+            else
+            {
+            <!-- ======================================================== -->
+            <!-- ===  GESTION INTERNE CABINET                          === -->
+            <!-- ======================================================== -->
+
+            <!-- Retour au hub -->
+            <div style="margin: 0.25rem 0.6rem 0.5rem;">
+                <a href="@Url.Action("Workspace", "Home")" class="nav-link d-flex align-items-center" style="background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:8px; padding:0.45rem 0.6rem; color:#60a5fa; font-size:0.78rem; font-weight:600; gap:0.4rem;">
+                    <i class="bi bi-arrow-left-circle-fill" style="font-size:0.9rem;"></i>
+                    <span>Retour au choix d&#39;espace</span>
+                </a>
+            </div>
+
+            <div class="nav-section" style="margin-top:0.25rem;">
+                <i class="bi bi-building-gear" style="font-size:0.65rem; color:#60a5fa;"></i>
+                <span style="color:#60a5fa; font-weight:800; letter-spacing:0.06em;">GESTION CABINET</span>
+                <span class="section-line"></span>
+            </div>
+
+            <!-- Dashboard -->
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Home" ? "active" : "")" href="@Url.Action("Index", "Home")">
+                        <i class="bi bi-grid-1x2-fill"></i> Tableau de bord
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Gestion Clients -->
+            <div class="nav-section"><i class="bi bi-people" style="font-size:0.6rem;"></i> Gestion Clients <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuGestionClients" role="button" aria-expanded="@(currentController == "Clients" ? "true" : "false")">
+                        <i class="bi bi-buildings"></i><span>Clients</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Clients" ? "show" : "")" id="menuGestionClients">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Clients" && (currentAction == "Index" || currentAction == "Details" || currentAction == "Edit") ? "active" : "")" href="@Url.Action("Index", "Clients")"><i class="bi bi-list-ul"></i> Liste des clients</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Create" ? "active" : "")" href="@Url.Action("Create", "Clients")"><i class="bi bi-plus-circle-dotted"></i> Nouveau client</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Affectations" ? "active" : "")" href="@Url.Action("Affectations", "Clients")"><i class="bi bi-person-lines-fill"></i> Affectation collaborateurs</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Contrats" ? "active" : "")" href="@Url.Action("Contrats", "Clients")"><i class="bi bi-file-earmark-text"></i> Contrats clients</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Services" ? "active" : "")" href="@Url.Action("Services", "Clients")"><i class="bi bi-gear-wide-connected"></i> Services activ&#233;s</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Commercial -->
+            <div class="nav-section"><i class="bi bi-briefcase" style="font-size:0.6rem;"></i> Commercial <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuCommercial" role="button" aria-expanded="@(currentController == "Commercial" ? "true" : "false")">
+                        <i class="bi bi-briefcase-fill"></i><span>Commercial</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Commercial" ? "show" : "")" id="menuCommercial">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Commercial")"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Devis" || currentAction == "DevisDetails" || currentAction == "DevisCreate" || currentAction == "DevisEdit") ? "active" : "")" href="@Url.Action("Devis", "Commercial")"><i class="bi bi-file-earmark-plus"></i> Devis</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "BonsCommande" || currentAction == "BonCommandeDetails" || currentAction == "BonCommandeConfirmer" || currentAction == "BonCommandeApprouver") ? "active" : "")" href="@Url.Action("BonsCommande", "Commercial")"><i class="bi bi-cart-check"></i> Bons de commande</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Contrats" || currentAction == "ContratDetails" || currentAction == "ContratCreate" || currentAction == "ContratEdit") ? "active" : "")" href="@Url.Action("Contrats", "Commercial")"><i class="bi bi-file-earmark-text"></i> Contrats</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Factures" || currentAction == "FactureDetails" || currentAction == "FactureCreate" || currentAction == "FactureEnvoyer") ? "active" : "")" href="@Url.Action("Factures", "Commercial")"><i class="bi bi-receipt"></i> Factures</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Documents Cabinet -->
+            <div class="nav-section"><i class="bi bi-folder2" style="font-size:0.6rem;"></i> Documents Cabinet <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuDocsCabinet" role="button" aria-expanded="false">
+                        <i class="bi bi-folder-fill"></i><span>Documents</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu" id="menuDocsCabinet">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Cabinet", "Documents")"><i class="bi bi-files"></i> Tous les documents</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Cabinet", "Documents", new { categorie = "Modele" })"><i class="bi bi-file-earmark-ruled"></i> Mod&#232;les</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Cabinet", "Documents", new { categorie = "Interne" })"><i class="bi bi-file-lock"></i> Documents internes</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Cabinet", "Documents", new { categorie = "Procedure" })"><i class="bi bi-file-earmark-check"></i> Proc&#233;dures</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Planification -->
+            <div class="nav-section"><i class="bi bi-calendar-check" style="font-size:0.6rem;"></i> Planification <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Planning" ? "active" : "")" href="@Url.Action("Index", "Planning")">
+                        <i class="bi bi-calendar-week-fill"></i> Calendrier
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Tasks" && (currentAction == "Index" || currentAction == "Details" || currentAction == "Create" || currentAction == "Overdue") ? "active" : "")" href="@Url.Action("Index", "Tasks")">
+                        <i class="bi bi-list-task"></i> Toutes les t&#226;ches
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Tasks" && currentAction == "MyTasks" ? "active" : "")" href="@Url.Action("MyTasks", "Tasks")">
+                        <i class="bi bi-person-check"></i> Mes t&#226;ches
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Workflow -->
+            <div class="nav-section"><i class="bi bi-lightning-charge" style="font-size:0.6rem;"></i> Workflow <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuWorkflow" role="button" aria-expanded="@(currentController == "Workflow" || currentController == "Departments" ? "true" : "false")">
+                        <i class="bi bi-lightning-charge-fill"></i><span>Workflow</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Workflow" || currentController == "Departments" ? "show" : "")" id="menuWorkflow">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Workflow")"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && (currentAction == "Builder" || currentAction == "Templates" || currentAction == "CreateTemplate" || currentAction == "EditTemplate" || currentAction == "TemplateDetails") ? "active" : "")" href="@Url.Action("Builder", "Workflow")"><i class="bi bi-kanban-fill"></i> Mod&#232;les</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && (currentAction == "Instances" || currentAction == "InstanceDetails" || currentAction == "StartWorkflow") ? "active" : "")" href="@Url.Action("Instances", "Workflow")"><i class="bi bi-collection-fill"></i> Ex&#233;cutions</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Departments" ? "active" : "")" href="@Url.Action("Index", "Departments")"><i class="bi bi-diagram-2-fill"></i> D&#233;partements</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Contrôle Activités Cabinet -->
+            <div class="nav-section"><i class="bi bi-clipboard2-check" style="font-size:0.6rem;"></i> Contrôle Activités <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Workflow" && currentAction == "MyTasks" ? "active" : "")" href="@Url.Action("MyTasks", "Workflow")">
+                        <i class="bi bi-inbox-fill" style="color:#60a5fa;"></i> Mes Requêtes
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Equipe & RH -->
+            <div class="nav-section"><i class="bi bi-person-gear" style="font-size:0.6rem;"></i> &#201;quipe & RH <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && (currentAction == "Index" || currentAction == "CreateEmployee" || currentAction == "EditEmployee" || currentAction == "EmployeeDetails") ? "active" : "")" href="@Url.Action("Index", "Cabinet")">
+                        <i class="bi bi-people-fill"></i> Collaborateurs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && currentAction == "Equipes" ? "active" : "")" href="@Url.Action("Equipes", "Cabinet")">
+                        <i class="bi bi-microsoft-teams"></i> &#201;quipes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && (currentAction == "Roles" || currentAction == "CreateRole" || currentAction == "UpdateRolePermissions") ? "active" : "")" href="@Url.Action("Roles", "Cabinet")">
+                        <i class="bi bi-shield-lock-fill"></i> R&#244;les & Permissions
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && currentAction == "AuditLogs" ? "active" : "")" href="@Url.Action("AuditLogs", "Cabinet")">
+                        <i class="bi bi-clock-history"></i> Journal d&#39;audit
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Info Cabinet & Profil -->
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && currentAction == "EditCabinet" ? "active" : "")" href="@Url.Action("EditCabinet", "Cabinet")">
+                        <i class="bi bi-building-gear"></i> Info Cabinet
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Cabinet" && currentAction == "Profile" ? "active" : "")" href="@Url.Action("Profile", "Cabinet")">
+                        <i class="bi bi-person-circle"></i> Mon Profil
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Rapports Cabinet -->
+            <div class="nav-section"><i class="bi bi-graph-up-arrow" style="font-size:0.6rem;"></i> Rapports Cabinet <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuRapportsCabinet" role="button" aria-expanded="false">
+                        <i class="bi bi-bar-chart-line-fill"></i><span>Rapports</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu" id="menuRapportsCabinet">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Activites", "Rapports")"><i class="bi bi-activity"></i> Activit&#233;s cabinet</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Performance", "Rapports")"><i class="bi bi-graph-up"></i> Performance</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("ChiffreAffaires", "Rapports")"><i class="bi bi-currency-exchange"></i> Chiffre d&#39;affaires</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Productivite", "Rapports")"><i class="bi bi-speedometer"></i> Productivit&#233;</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Configuration -->
+            <div class="nav-section"><i class="bi bi-gear-wide-connected" style="font-size:0.6rem;"></i> Configuration <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuParams" role="button" aria-expanded="@(currentController == "Parametres" ? "true" : "false")">
+                        <i class="bi bi-sliders2-vertical"></i><span>Param&#232;tres</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Parametres" ? "show" : "")" id="menuParams">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Parametres")"><i class="bi bi-gear"></i> G&#233;n&#233;ral</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Templates", "Parametres")"><i class="bi bi-file-earmark-ruled"></i> Mod&#232;les docs</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Notifications", "Parametres")"><i class="bi bi-bell-fill"></i> Notifications</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Integrations", "Parametres")"><i class="bi bi-plug-fill"></i> Int&#233;grations</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            }
+
+            <div style="height:2rem;"></div>
+
+
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <div class="mc-main @(isWorkspacePage ? "ms-0" : "")" style="@(isWorkspacePage ? "margin-left:0 !important;" : "")">
+        <header class="mc-topbar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-link d-md-none text-dark p-0" onclick="document.getElementById('sidebar').classList.toggle('show')"><i class="bi bi-list fs-4"></i></button>
+                @if (isClientSection && hasClient)
+                {
+                    <div class="d-flex align-items-center gap-2" style="padding:0.3rem 0.75rem; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15); border-radius:10px;">
+                        <i class="bi bi-building" style="color:#f59e0b;"></i>
+                        <span style="font-weight:600; font-size:0.85rem; color:var(--mc-text);">@selectedClientName</span>
+                        <a href="@Url.Action("Workspace", "Home")" style="margin-left:0.5rem; font-size:0.75rem; color:#60a5fa; text-decoration:none; display:flex; align-items:center; gap:0.2rem;">
+                            <i class="bi bi-arrow-left-circle"></i> Changer
+                        </a>
+                    </div>
+                }
+                else if (!isWorkspacePage)
+                {
+                    <div style="font-size:0.85rem; color:var(--mc-text-secondary); font-style:italic;">
+                        <i class="bi bi-building-gear" style="color:#60a5fa;"></i> Gestion Cabinet
+                    </div>
+                }
+            </div>
+            <div class="user-menu">
+                <div class="search-box d-none d-lg-block"><i class="bi bi-search"></i><input type="text" class="form-control" placeholder="Rechercher..." id="globalSearch" /></div>
+                <div class="dropdown">
+                    <button class="btn btn-link text-decoration-none p-0" data-bs-toggle="dropdown"><i class="bi bi-translate fs-5 text-muted"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="?culture=fr-FR">&#127467;&#127479; Fran&#231;ais</a></li>
+                        <li><a class="dropdown-item" href="?culture=ar-MA">&#127474;&#127462; &#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577;</a></li>
+                        <li><a class="dropdown-item" href="?culture=en-US">&#127468;&#127463; English</a></li>
+                    </ul>
+                </div>
+                <div class="notification-bell" id="notificationBell"><i class="bi bi-bell"></i><span class="badge bg-danger rounded-pill" id="notifCount" style="display:none;">0</span></div>
+                <!-- THEME PICKER -->
+                <div class="position-relative" id="themePickerWrap">
+                    <button class="theme-picker-btn" id="themePickerBtn" title="Personnaliser l'interface"><i class="bi bi-palette2"></i></button>
+                    <div class="theme-picker-panel" id="themePickerPanel">
+                        <!-- Header -->
+                        <div class="tp-header">
+                            <div class="tp-header-title"><i class="bi bi-palette2"></i> Personnalisation</div>
+                            <button class="tp-close" id="tpClose"><i class="bi bi-x-lg"></i></button>
+                        </div>
+                        <!-- 1. Color Themes (30) -->
+                        <div class="tp-section">
+                            <div class="tp-section-title"><i class="bi bi-droplet-fill"></i> Couleurs <span style="opacity:.5;font-weight:400;margin-left:auto;">30</span></div>
+                            <div class="tp-colors">
+                                <div class="tp-color-opt" data-theme="default">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0f172a;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f1f5f9;"></div></div>
+                                    <span class="tp-color-name">Bleu</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="slate">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1e1e2e;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f5f5f7;"></div></div>
+                                    <span class="tp-color-name">Slate</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="emerald">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#022c22;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f0fdf4;"></div></div>
+                                    <span class="tp-color-name">Emerald</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="purple">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a1025;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#faf5ff;"></div></div>
+                                    <span class="tp-color-name">Purple</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="sunset">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#27150a;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fffbeb;"></div></div>
+                                    <span class="tp-color-name">Sunset</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="dark">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0a0a0a;"></div><div class="cs-top" style="background:#1f1f23;"></div><div class="cs-body" style="background:#18181b;"></div></div>
+                                    <span class="tp-color-name">Dark</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="light">
+                                    <div class="tp-color-swatch" style="border:1px solid #e2e8f0;"><div class="cs-side" style="background:#fff;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f8fafc;"></div></div>
+                                    <span class="tp-color-name">Light</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="rose">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1c0a12;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fff1f2;"></div></div>
+                                    <span class="tp-color-name">Rose</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="cyan">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0a1e26;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#ecfeff;"></div></div>
+                                    <span class="tp-color-name">Cyan</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="amber">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a1207;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fffbeb;"></div></div>
+                                    <span class="tp-color-name">Amber</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="lime">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0f1a05;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f7fee7;"></div></div>
+                                    <span class="tp-color-name">Lime</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="sky">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0a1929;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f0f9ff;"></div></div>
+                                    <span class="tp-color-name">Sky</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="fuchsia">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a0a1e;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fdf4ff;"></div></div>
+                                    <span class="tp-color-name">Fuchsia</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="indigo">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0f0e24;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#eef2ff;"></div></div>
+                                    <span class="tp-color-name">Indigo</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="teal">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0a1f1e;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f0fdfa;"></div></div>
+                                    <span class="tp-color-name">Teal</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="red">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a0808;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fef2f2;"></div></div>
+                                    <span class="tp-color-name">Red</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="violet">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#120c22;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f5f3ff;"></div></div>
+                                    <span class="tp-color-name">Violet</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="stone">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1c1917;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fafaf9;"></div></div>
+                                    <span class="tp-color-name">Stone</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="bluegray">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0f172a;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f8fafc;"></div></div>
+                                    <span class="tp-color-name">Blue Gray</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="ocean">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#001d3d;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#edf6f9;"></div></div>
+                                    <span class="tp-color-name">Ocean</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="forest">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#0b1f15;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#edf6f0;"></div></div>
+                                    <span class="tp-color-name">Forest</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="wine">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a0510;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fff1f2;"></div></div>
+                                    <span class="tp-color-name">Wine</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="gold">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a1408;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fefce8;"></div></div>
+                                    <span class="tp-color-name">Gold</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="coral">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#1a0e05;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fff7ed;"></div></div>
+                                    <span class="tp-color-name">Coral</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="midnight">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#020617;"></div><div class="cs-top" style="background:#1e293b;"></div><div class="cs-body" style="background:#0f172a;"></div></div>
+                                    <span class="tp-color-name">Midnight</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="charcoal">
+                                    <div class="tp-color-swatch"><div class="cs-side" style="background:#111;"></div><div class="cs-top" style="background:#262626;"></div><div class="cs-body" style="background:#1a1a1a;"></div></div>
+                                    <span class="tp-color-name">Charcoal</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="arctic">
+                                    <div class="tp-color-swatch" style="border:1px solid #e0f2fe;"><div class="cs-side" style="background:#f0f9ff;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f8fafc;"></div></div>
+                                    <span class="tp-color-name">Arctic</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="sand">
+                                    <div class="tp-color-swatch" style="border:1px solid #fef08a;"><div class="cs-side" style="background:#fefce8;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#fffbeb;"></div></div>
+                                    <span class="tp-color-name">Sand</span>
+                                </div>
+                                <div class="tp-color-opt" data-theme="mint">
+                                    <div class="tp-color-swatch" style="border:1px solid #bbf7d0;"><div class="cs-side" style="background:#f0fdf4;"></div><div class="cs-top" style="background:#fff;"></div><div class="cs-body" style="background:#f0fdf4;"></div></div>
+                                    <span class="tp-color-name">Mint</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 2. Menu Style -->
+                        <div class="tp-section">
+                            <div class="tp-section-title"><i class="bi bi-layout-sidebar-inset"></i> Style du menu</div>
+                            <div class="tp-menu-styles">
+                                <div class="tp-style-opt" data-menu="default">
+                                    <div class="tp-style-icon"><div class="bar" style="width:80%;"></div><div class="bar" style="width:100%; opacity:0.4;"></div><div class="bar" style="width:65%; opacity:0.4;"></div></div>
+                                    <span class="tp-style-name">Default</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="compact">
+                                    <div class="tp-style-icon" style="gap:1px;"><div class="bar" style="width:75%; height:2px;"></div><div class="bar" style="width:90%; height:2px; opacity:0.4;"></div><div class="bar" style="width:60%; height:2px; opacity:0.4;"></div><div class="bar" style="width:80%; height:2px; opacity:0.4;"></div></div>
+                                    <span class="tp-style-name">Compact</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="pill">
+                                    <div class="tp-style-icon"><div class="bar" style="width:80%; border-radius:8px;"></div><div class="bar" style="width:100%; border-radius:8px; opacity:0.4;"></div><div class="bar" style="width:65%; border-radius:8px; opacity:0.4;"></div></div>
+                                    <span class="tp-style-name">Pill</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="bordered">
+                                    <div class="tp-style-icon" style="border-radius:2px;"><div class="bar" style="width:100%; border-radius:0; border-left:2px solid var(--mc-primary);"></div><div class="bar" style="width:100%; border-radius:0; opacity:0.4;"></div><div class="bar" style="width:100%; border-radius:0; opacity:0.4;"></div></div>
+                                    <span class="tp-style-name">Bordure</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="spaced">
+                                    <div class="tp-style-icon" style="gap:4px;"><div class="bar" style="width:85%;"></div><div class="bar" style="width:100%; opacity:0.4;"></div><div class="bar" style="width:70%; opacity:0.4;"></div></div>
+                                    <span class="tp-style-name">Spacieux</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="minimal">
+                                    <div class="tp-style-icon" style="border-color:transparent;"><div class="bar" style="width:2px; height:10px; position:absolute; left:0; border-radius:0 2px 2px 0;"></div><div class="bar" style="width:75%; opacity:0.6;"></div><div class="bar" style="width:90%; opacity:0.3;"></div><div class="bar" style="width:60%; opacity:0.3;"></div></div>
+                                    <span class="tp-style-name">Minimal</span>
+                                </div>
+                                <div class="tp-style-opt" data-menu="glass">
+                                    <div class="tp-style-icon" style="background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.05));"><div class="bar" style="width:80%; background:rgba(99,102,241,0.3);"></div><div class="bar" style="width:100%; opacity:0.2;"></div><div class="bar" style="width:65%; opacity:0.2;"></div></div>
+                                    <span class="tp-style-name">Glass</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 3. Sidebar Width -->
+                        <div class="tp-section">
+                            <div class="tp-section-title"><i class="bi bi-arrows-expand"></i> Largeur du menu</div>
+                            <div class="tp-width-opts">
+                                <div class="tp-width-opt" data-width="narrow">
+                                    <div class="tp-width-icon"><div class="wi-side" style="width:25%;"></div></div>
+                                    <span class="tp-width-name">Ã‰troit</span>
+                                </div>
+                                <div class="tp-width-opt" data-width="default">
+                                    <div class="tp-width-icon"><div class="wi-side" style="width:35%;"></div></div>
+                                    <span class="tp-width-name">Normal</span>
+                                </div>
+                                <div class="tp-width-opt" data-width="wide">
+                                    <div class="tp-width-icon"><div class="wi-side" style="width:45%;"></div></div>
+                                    <span class="tp-width-name">Large</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Footer -->
+                        <div class="tp-footer">
+                            <button class="tp-reset-btn" id="tpResetBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>RÃ©initialiser tout</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-link text-decoration-none d-flex align-items-center gap-2 p-0" data-bs-toggle="dropdown">
+                        <div class="user-avatar">@(Context.Session.GetString("UserName")?.Substring(0, 1).ToUpper() ?? "U")</div>
+                        <div class="d-none d-md-block text-start">
+                            <div class="fw-semibold text-dark" style="font-size:0.82rem;">@(Context.Session.GetString("UserName") ?? "Utilisateur")</div>
+                            <div class="text-muted" style="font-size:0.68rem;">@(Context.Session.GetString("UserRole") ?? "")</div>
+                        </div>
+                        <i class="bi bi-chevron-down text-muted" style="font-size:0.7rem;"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i> Mon Profil</a></li>
+                        <li><a class="dropdown-item" href="@Url.Action("Index", "Parametres")"><i class="bi bi-gear me-2"></i> Paramètres</a></li>
+                        <li><hr class="dropdown-divider" /></li>
+                        <li><a class="dropdown-item text-danger" href="@Url.Action("Logout", "Account")"><i class="bi bi-box-arrow-right me-2"></i> Déconnexion</a></li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <div class="mc-content fade-in">
+
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+            @if (TempData["Error"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i><strong>@TempData["Error"]</strong>
+                    @if (TempData["ErrorDetails"] != null)
+                    {
+                        <ul class="mb-0 mt-2" style="font-size:0.85rem; list-style:disc; padding-left:1.2rem;">
+                            @foreach (var detail in ((string)TempData["ErrorDetails"]!).Split("|||"))
+                            {
+                                <li>@detail</li>
+                            }
+                        </ul>
+                    }
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+            @RenderBody()
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script>
+        toastr.options = { positionClass: 'toast-top-right', closeButton: true, progressBar: true, timeOut: 4000 };
+        $.extend($.fn.dataTable.defaults, { language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/fr-FR.json' }, pageLength: 20, responsive: true });
+        $(function() { $('.mc-datatable').DataTable(); });
+        setTimeout(function() { $('.alert-dismissible').alert('close'); }, 5000);
+
+        // CLIENT SELECTION — global function used by Workspace page
+        window.mcSelectClient = function(id, name) {
+            $.post('@Url.Action("SetClientContext", "Clients")', { clientId: id }, function(res) {
+                if (res.success) {
+                    toastr.success('Client actif : ' + name);
+                    document.dispatchEvent(new CustomEvent('clientSelected', { detail: { clientId: id, clientName: name } }));
+                    var isWs = @(isWorkspacePage ? "true" : "false");
+                    if (isWs) {
+                        window.location.href = '@Url.Action("Index", "Declarations", null)';
+                    } else {
+                        window.location.reload();
+                    }
+                }
+            });
+        };
+        window.mcClearClient = function() {
+            $.post('@Url.Action("SetClientContext", "Clients")', { clientId: '' }, function(res) {
+                if (res.success) { toastr.info('Client désélectionné'); window.location.reload(); }
+            });
+        };
+
+        // â•â•â•â•â•â•â• THEME / CUSTOMIZATION SYSTEM â•â•â•â•â•â•â•
+        (function() {
+            var btn = document.getElementById('themePickerBtn');
+            var panel = document.getElementById('themePickerPanel');
+            var wrap = document.getElementById('themePickerWrap');
+            var closeBtn = document.getElementById('tpClose');
+            var resetBtn = document.getElementById('tpResetBtn');
+            var root = document.documentElement;
+
+            // â”€â”€ Apply functions â”€â”€
+            function applyTheme(val) {
+                if (val === 'default') root.removeAttribute('data-theme');
+                else root.setAttribute('data-theme', val);
+                if (panel) panel.querySelectorAll('.tp-color-opt').forEach(function(o) { o.classList.toggle('active', o.dataset.theme === val); });
+            }
+            function applyMenu(val) {
+                if (val === 'default') root.removeAttribute('data-menu');
+                else root.setAttribute('data-menu', val);
+                if (panel) panel.querySelectorAll('.tp-style-opt').forEach(function(o) { o.classList.toggle('active', o.dataset.menu === val); });
+            }
+            function applyWidth(val) {
+                if (val === 'default') root.removeAttribute('data-sidebar-width');
+                else root.setAttribute('data-sidebar-width', val);
+                if (panel) panel.querySelectorAll('.tp-width-opt').forEach(function(o) { o.classList.toggle('active', o.dataset.width === val); });
+            }
+            function save(key, val) {
+                localStorage.setItem(key, val);
+                document.cookie = key + '=' + val + ';path=/;max-age=31536000';
+            }
+
+            // â”€â”€ Initialize from localStorage â”€â”€
+            applyTheme(localStorage.getItem('mc-theme') || 'default');
+            applyMenu(localStorage.getItem('mc-menu') || 'default');
+            applyWidth(localStorage.getItem('mc-width') || 'default');
+
+            // â”€â”€ Toggle panel â”€â”€
+            btn.addEventListener('click', function(e) { e.stopPropagation(); panel.classList.toggle('show'); });
+            closeBtn.addEventListener('click', function() { panel.classList.remove('show'); });
+            document.addEventListener('click', function(e) { if (!wrap.contains(e.target)) panel.classList.remove('show'); });
+
+            // â”€â”€ Color theme clicks â”€â”€
+            panel.querySelectorAll('.tp-color-opt').forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    var v = this.dataset.theme;
+                    applyTheme(v); save('mc-theme', v);
+                });
+            });
+
+            // â”€â”€ Menu style clicks â”€â”€
+            panel.querySelectorAll('.tp-style-opt').forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    var v = this.dataset.menu;
+                    applyMenu(v); save('mc-menu', v);
+                });
+            });
+
+            // â”€â”€ Sidebar width clicks â”€â”€
+            panel.querySelectorAll('.tp-width-opt').forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    var v = this.dataset.width;
+                    applyWidth(v); save('mc-width', v);
+                });
+            });
+
+            // â”€â”€ Reset All â”€â”€
+            resetBtn.addEventListener('click', function() {
+                applyTheme('default'); save('mc-theme', 'default');
+                applyMenu('default'); save('mc-menu', 'default');
+                applyWidth('default'); save('mc-width', 'default');
+            });
+        })();
+
+        // â•â•â•â•â•â•â• GLOBAL CLIENT AUTO-FILL & LOCK FOR ALL FORMS â•â•â•â•â•â•â•
+        window.mcSelectedClient = {
+            id: '@(selectedClientId ?? "")',
+            name: '@(selectedClientName?.Replace("'", "\\'") ?? "")'
+        };
+
+        $(function() {
+            if (!window.mcSelectedClient.id) return;
+            var cId = window.mcSelectedClient.id;
+            var cName = window.mcSelectedClient.name;
+
+            // â”€â”€ 1. All <select> with name="ClientId" or id="cfgClient" â”€â”€
+            var selectors = [
+                'select[name="ClientId"]',
+                'select[id="ClientId"]',
+                'select[name$=".ClientId"]',
+                'select#cfgClient'
+            ];
+
+            $(selectors.join(',')).each(function() {
+                var $sel = $(this);
+
+                // Set value (add option if missing)
+                if ($sel.find('option[value="' + cId + '"]').length > 0) {
+                    $sel.val(cId);
+                } else {
+                    $sel.append('<option value="' + cId + '">' + cName + '</option>');
+                    $sel.val(cId);
+                }
+
+                // Disable + hidden input for form submission
+                $sel.prop('disabled', true);
+                var inputName = $sel.attr('name');
+                if (inputName) {
+                    $sel.closest('form').find('input[type="hidden"][name="' + inputName + '"]').remove();
+                    $sel.after('<input type="hidden" name="' + inputName + '" value="' + cId + '" />');
+                }
+
+                // Builder sync
+                if ($sel.attr('id') === 'cfgClient') {
+                    var fld = document.getElementById('fldClientId');
+                    if (fld) fld.value = cId;
+                }
+
+                // Styling
+                var $wrap = $sel.closest('.col-md-6, .col-md-3, .col-6, .mb-3').first();
+                if (!$wrap.length) $wrap = $sel.parent();
+                $wrap.addClass('mc-client-locked');
+                if (!$wrap.find('.mc-client-locked-badge').length) {
+                    $sel.after('<div class="mc-client-locked-badge"><i class="bi bi-lock"></i> SÃ©lection globale active</div>');
+                }
+            });
+
+            // â”€â”€ 2. All <input name="clientId"> (Declarations, etc.) â”€â”€
+            $('input[name="clientId"]').each(function() {
+                var $inp = $(this);
+
+                // Replace the raw number input with a nice disabled text showing name + id
+                var $display = $('<input type="text" class="form-control" />');
+                $display.val(cName + '  (#' + cId + ')');
+                $display.prop('disabled', true);
+                $display.attr('tabindex', '-1');
+
+                // Hidden input to submit the actual value
+                var $hidden = $('<input type="hidden" name="clientId" value="' + cId + '" />');
+
+                $inp.after($hidden).after($display).remove();
+
+                // Styling
+                var $wrap = $display.closest('.col-md-3, .mb-3').first();
+                if (!$wrap.length) $wrap = $display.parent();
+                $wrap.addClass('mc-client-locked');
+                if (!$wrap.find('.mc-client-locked-badge').length) {
+                    $display.after('<div class="mc-client-locked-badge"><i class="bi bi-lock"></i> SÃ©lection globale active</div>');
+                }
+            });
+        });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
+
+

@@ -1,0 +1,94 @@
+﻿# ============================================
+# MetaCompta SAS - Docker Compose
+# Uses local DELL\SQLEXPRESS (port 58080)
+# Stack: API + BackOffice + Extranet + Admin
+# ============================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: metacompta-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=host.docker.internal,58080;Database=MetaComptaSASDb_Dev;User Id=sa;Password=RS2iRS2i;TrustServerCertificate=true;MultipleActiveResultSets=true
+      - Jwt__Key=MetaComptaSAS-SuperSecretKey-2026-MustBe256BitsLong!!
+      - Jwt__Issuer=MetaComptaAPI
+      - Jwt__Audience=MetaComptaClients
+    ports:
+      - "7100:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - metacompta-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  backoffice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backoffice
+    container_name: metacompta-backoffice
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ApiSettings__BaseUrl=http://api:8080
+    ports:
+      - "7101:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+  extranet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: extranet
+    container_name: metacompta-extranet
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ApiSettings__BaseUrl=http://api:8080
+    ports:
+      - "7102:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: admin
+    container_name: metacompta-admin
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ApiSettings__BaseUrl=http://api:8080
+    ports:
+      - "7103:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+networks:
+  metacompta-network:
+    driver: bridge

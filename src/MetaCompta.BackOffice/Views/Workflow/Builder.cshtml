@@ -1,0 +1,978 @@
+@using MetaCompta.Application.DTOs
+@model WorkflowTemplateCreateDto
+@{
+    ViewData["Title"] = "Workflow Builder";
+    var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
+    var departments = ViewBag.Departments as List<DepartmentDto> ?? new List<DepartmentDto>();
+    var allTemplates = ViewBag.AllTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+    var editTemplate = ViewBag.EditTemplate as WorkflowTemplateDto;
+    var editId = ViewBag.EditTemplateId as int?;
+    var isEditMode = editId.HasValue;
+
+    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "ClotureArchivage" };
+    var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
+    var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
+    var roles = new[] { "Gerant", "Manager", "Collaborateur", "Assistant", "Stagiaire" };
+    var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" };
+    var declStatuses = new[] { "Brouillon", "ACompleter", "EnCours", "EnPreparation", "Completee", "EnRevision", "Validee", "Soumise", "Payee", "Refusee", "Rejetee" };
+    var actionTypes = new[] { "None", "CreateDeclaration", "CompleteDeclaration", "ValidateDeclaration", "SubmitDeclaration", "SuspendDeclaration", "ArchiveDeclaration", "RelanceClient", "NotifyEmployee", "NotifyClient", "GeneratePDF", "ExportXML", "SendEmail", "CreateTask", "RequestDocuments", "ApproveByClient", "PaymentReminder" };
+    var routingModes = new[] { "Sequential", "ConditionalBranch", "SkipToStep", "EndWorkflow" };
+    var triggerSources = new[] { "Manual", "System", "Employee", "Client", "Extranet", "API", "Schedule" };
+    var onMaxRetries = new[] { "NextStep", "Suspend", "Cancel", "SkipStep", "EscalateToManager" };
+
+    var typeColors = new Dictionary<string, (string bg, string fg, string icon)> {
+        ["TVA"] = ("#dbeafe", "#2563eb", "bi-receipt-cutoff"),
+        ["IS"] = ("#fce7f3", "#be185d", "bi-building"),
+        ["IR"] = ("#ede9fe", "#7c3aed", "bi-person-vcard"),
+        ["CNSS"] = ("#d1fae5", "#059669", "bi-shield-plus"),
+        ["Paie"] = ("#fef3c7", "#d97706", "bi-cash-stack"),
+        ["Juridique"] = ("#fee2e2", "#dc2626", "bi-file-earmark-text"),
+        ["Comptabilite"] = ("#e0f2fe", "#0284c7", "bi-journal-bookmark-fill"),
+        ["IR_SALAIRES"] = ("#f5f3ff", "#6d28d9", "bi-people-fill"),
+        ["All"] = ("#f1f5f9", "#475569", "bi-grid-3x3-gap-fill")
+    };
+
+    var stepTypeLabels = new Dictionary<string, string> {
+        ["Initialisation"] = "Initialisation",
+        ["DemandePieces"] = "Demande pièces",
+        ["Collecte"] = "Collecte",
+        ["Saisie"] = "Saisie",
+        ["Controle"] = "Contrôle",
+        ["ValidationInterne"] = "Valid. interne",
+        ["ValidationClient"] = "Valid. client",
+        ["DepotSoumission"] = "Dépôt",
+        ["ClotureArchivage"] = "Clôture"
+    };
+
+    var assignLabels = new Dictionary<string, string> {
+        ["Employee"] = "Employé",
+        ["Role"] = "Rôle",
+        ["Department"] = "Département",
+        ["Client"] = "Client",
+        ["AutoSystem"] = "Automatique"
+    };
+}
+
+<style>
+    .builder-card { border:0; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,0.05); }
+    .step-card { background:#fff; border:1px solid #e2e8f0; border-radius:16px; margin-bottom:1rem; transition:all .25s ease; position:relative; overflow:hidden; }
+    .step-card:hover { box-shadow:0 4px 20px rgba(99,102,241,0.12); border-color:#a5b4fc; transform:translateY(-1px); }
+    .step-card.collapsed-step .step-body { display:none; }
+    .step-card.collapsed-step .step-header { border-bottom:0; }
+    .step-card.collapsed-step .chevron-icon { transform:rotate(-90deg); }
+    .step-num { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.82rem; color:#fff; background:linear-gradient(135deg,#6366f1,#8b5cf6); flex-shrink:0; box-shadow:0 2px 8px rgba(99,102,241,0.3); }
+    .step-header { display:flex; align-items:center; gap:0.7rem; cursor:pointer; padding:0.9rem 1.1rem; background:linear-gradient(135deg,#fafbff,#f5f3ff); border-bottom:1px solid #ede9fe; transition:background .2s; }
+    .step-header:hover { background:linear-gradient(135deg,#f5f3ff,#ede9fe); }
+    .step-header h6 { margin:0; font-size:0.9rem; font-weight:700; color:#1e1b4b; }
+    .step-type-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; font-weight:700; background:#ede9fe; color:#4f46e5; border:1px solid #c7d2fe; }
+    .assign-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; background:#f0fdf4; color:#16a34a; font-weight:600; border:1px solid #bbf7d0; }
+    .sla-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; background:#fff7ed; color:#ea580c; font-weight:600; border:1px solid #fed7aa; }
+    .chevron-icon { transition:transform .25s ease; font-size:0.9rem; color:#94a3b8; }
+    .step-body { padding:1.1rem; background:#fff; }
+    .field-section { background:linear-gradient(135deg,#fafbff,#f8fafc); border:1px solid #eef2ff; border-radius:12px; padding:0.75rem 1rem; margin-bottom:0.65rem; transition:border-color .2s; }
+    .field-section:hover { border-color:#c7d2fe; }
+    .field-section-title { font-size:0.72rem; font-weight:800; color:#6366f1; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.55rem; display:flex; align-items:center; gap:0.4rem; padding-bottom:0.4rem; border-bottom:1px solid #eef2ff; }
+    .field-section-title i { font-size:0.82rem; }
+    .form-label-sm { font-size:0.74rem; font-weight:600; color:#475569; margin-bottom:0.2rem; display:block; }
+    .form-control-sm, .form-select-sm { font-size:0.8rem; border-radius:10px; border:1px solid #e2e8f0; transition:border-color .2s, box-shadow .2s; }
+    .form-control-sm:focus, .form-select-sm:focus { border-color:#818cf8; box-shadow:0 0 0 3px rgba(99,102,241,0.1); }
+    .tpl-mini { display:flex; align-items:center; gap:0.5rem; padding:0.55rem 0.8rem; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:0.45rem; cursor:pointer; transition:all .2s; font-size:0.8rem; text-decoration:none; }
+    .tpl-mini:hover { background:#f8fafc; border-color:#c7d2fe; transform:translateX(2px); }
+    .tpl-mini.active { background:rgba(99,102,241,0.06); border-color:#818cf8; box-shadow:0 0 0 2px rgba(99,102,241,0.08); }
+    .tpl-mini .tpl-type { font-size:0.65rem; padding:2px 7px; border-radius:10px; font-weight:700; }
+    .chk-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:0.45rem; }
+    .chk-item { display:flex; align-items:center; gap:0.4rem; padding:0.45rem 0.65rem; background:#fff; border:1px solid #e2e8f0; border-radius:10px; font-size:0.74rem; font-weight:600; color:#475569; transition:all .2s; cursor:pointer; }
+    .chk-item:hover { border-color:#a5b4fc; background:#f5f3ff; }
+    .chk-item input:checked ~ span { color:#4f46e5; font-weight:700; }
+    .chk-item .form-check-input { width:1rem; height:1rem; margin:0; }
+    .chk-item .form-check-input:checked { background-color:#6366f1; border-color:#6366f1; }
+    .btn-add-step { border:2px dashed #c7d2fe; border-radius:14px; padding:1rem; text-align:center; color:#6366f1; font-weight:700; font-size:0.85rem; background:transparent; cursor:pointer; transition:all .25s; width:100%; display:flex; align-items:center; justify-content:center; gap:0.5rem; }
+    .btn-add-step:hover { background:linear-gradient(135deg,#f5f3ff,#eef2ff); border-color:#818cf8; transform:translateY(-2px); box-shadow:0 4px 12px rgba(99,102,241,0.1); }
+    .section-title { font-size:0.8rem; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:0.45rem; margin-bottom:0.6rem; }
+    .section-title i { font-size:0.9rem; color:#6366f1; }
+    .field-section details summary { list-style:none; cursor:pointer; }
+    .field-section details summary::-webkit-details-marker { display:none; }
+    .field-section details[open] summary .toggle-hint { display:none; }
+    .toggle-hint { font-size:0.65rem; font-weight:400; color:#94a3b8; text-transform:none; letter-spacing:0; }
+    .btn-delete-step { width:26px; height:26px; border-radius:8px; border:1px solid #fecaca; background:#fff; color:#ef4444; display:flex; align-items:center; justify-content:center; font-size:0.72rem; transition:all .2s; cursor:pointer; }
+    .btn-delete-step:hover { background:#fef2f2; border-color:#f87171; box-shadow:0 2px 6px rgba(239,68,68,0.15); }
+    .cron-builder { background:#fff; border:1px solid #e0e7ff; border-radius:12px; padding:0.85rem 1rem; }
+    .cron-freq-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.85rem; border:1px solid #e2e8f0; border-radius:10px; cursor:pointer; font-size:0.76rem; font-weight:600; color:#475569; background:#fff; transition:all .2s; }
+    .cron-freq-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
+    .cron-freq-btn.active { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:#6366f1; box-shadow:0 2px 8px rgba(99,102,241,0.25); }
+    .cron-day-btn { width:36px; height:36px; border-radius:10px; border:1px solid #e2e8f0; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.74rem; font-weight:700; color:#475569; background:#fff; transition:all .2s; }
+    .cron-day-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
+    .cron-day-btn.active { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:#6366f1; box-shadow:0 2px 6px rgba(99,102,241,0.2); }
+    .cron-month-btn { display:inline-flex; align-items:center; padding:0.3rem 0.65rem; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:#475569; background:#fff; transition:all .2s; }
+    .cron-month-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
+    .cron-month-btn.active { background:#6366f1; color:#fff; border-color:#6366f1; }
+    .cron-preview { background:linear-gradient(135deg,#f0fdf4,#ecfdf5); border:1px solid #bbf7d0; border-radius:10px; padding:0.5rem 0.85rem; margin-top:0.6rem; display:flex; align-items:center; gap:0.5rem; }
+    .cron-preview-icon { width:28px; height:28px; border-radius:8px; background:#16a34a; color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.8rem; flex-shrink:0; }
+    .cron-preview-text { font-size:0.78rem; font-weight:600; color:#166534; }
+    .cron-preview-cron { font-size:0.68rem; color:#64748b; font-family:monospace; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-0"><i class="bi bi-kanban-fill text-primary me-2"></i>@(isEditMode ? "Modifier" : "Créer") un Workflow</h4>
+        <p class="text-muted mb-0" style="font-size:0.82rem;">Configurez les étapes, assignations et automatisations.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("Templates", "Workflow")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-list me-1"></i>Modèles</a>
+        @if (!isEditMode)
+        {
+            <form asp-action="SeedAllDefaultTemplates" asp-controller="Workflow" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-primary rounded-pill px-3" onclick="return confirm('Créer tous les modèles par défaut ?')"><i class="bi bi-magic me-1"></i>Générer par défaut</button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-3">
+        <div class="card builder-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3" style="font-size:0.82rem;"><i class="bi bi-collection text-primary me-1"></i>Modèles existants</h6>
+                @if (allTemplates.Any())
+                {
+                    @foreach (var tpl in allTemplates.Take(15))
+                    {
+                        var tc = typeColors.ContainsKey(tpl.DeclarationType) ? typeColors[tpl.DeclarationType] : typeColors["All"];
+                        <a href="@Url.Action("Builder", "Workflow", new { id = tpl.Id })" class="tpl-mini @(editId == tpl.Id ? "active" : "")">
+                            <span class="tpl-type" style="background:@tc.bg; color:@tc.fg;">@tpl.DeclarationType</span>
+                            <span class="fw-semibold text-dark" style="font-size:0.78rem;">@tpl.Name</span>
+                            <span class="ms-auto text-muted" style="font-size:0.65rem;">@tpl.StepCount ét.</span>
+                        </a>
+                    }
+                }
+                else
+                {
+                    <div class="text-center text-muted py-3" style="font-size:0.8rem;"><i class="bi bi-inbox d-block mb-1" style="font-size:1.3rem;"></i>Aucun modèle</div>
+                }
+                <hr class="my-2"/>
+                <a href="@Url.Action("Builder", "Workflow")" class="btn btn-sm btn-primary w-100 rounded-pill"><i class="bi bi-plus me-1"></i>Nouveau</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-9">
+        <form asp-action="BuilderSave" asp-controller="Workflow" method="post" id="builderForm">
+            @Html.AntiForgeryToken()
+            @if (isEditMode) { <input type="hidden" name="id" value="@editId" /> }
+
+            <div class="card builder-card mb-3">
+                <div class="card-body">
+                    <div class="section-title"><i class="bi bi-gear-fill"></i>Configuration générale</div>
+                    <div class="row g-2">
+                        <div class="col-md-5">
+                            <label class="form-label-sm">Nom du workflow</label>
+                            <input type="text" name="Name" value="@Model.Name" class="form-control form-control-sm" placeholder="Ex: TVA Mensuelle" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label-sm">Type de déclaration</label>
+                            <select name="DeclarationType" class="form-select form-select-sm">
+                                @foreach (var dt in declTypes) { <option value="@dt" selected="@(Model.DeclarationType == dt)">@dt</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label-sm">Client (optionnel)</label>
+                            <select name="ClientId" class="form-select form-select-sm">
+                                <option value="">Tous les clients</option>
+                                @foreach (var c in clients) { <option value="@c.Id" selected="@(Model.ClientId == c.Id)">@c.RaisonSociale</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <div class="form-check">
+                                <input type="checkbox" name="IsDefault" value="true" class="form-check-input" id="chkDefault" @(Model.IsDefault ? "checked" : "") />
+                                <label class="form-check-label" style="font-size:0.72rem; font-weight:600;" for="chkDefault">Défaut</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label-sm">Description</label>
+                            <textarea name="Description" class="form-control form-control-sm" rows="2" placeholder="Description du workflow...">@Model.Description</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card builder-card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="section-title mb-0"><i class="bi bi-list-ol"></i>Étapes du workflow</div>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2" id="stepCountBadge" style="font-size:0.78rem;">@Model.Steps.Count étapes</span>
+                    </div>
+                    <div id="stepsContainer">
+                        @for (var i = 0; i < Model.Steps.Count; i++)
+                        {
+                            var step = Model.Steps[i];
+                            var stLabel = stepTypeLabels.ContainsKey(step.StepType) ? stepTypeLabels[step.StepType] : step.StepType;
+                            var asLabel = assignLabels.ContainsKey(step.AssignmentType) ? assignLabels[step.AssignmentType] : step.AssignmentType;
+                            var showSched = step.IsScheduled || step.AssignmentType == "AutoSystem";
+                            <div class="step-card" data-index="@i">
+                                <div class="step-header" onclick="toggleStep(this)">
+                                    <span class="step-num">@(i + 1)</span>
+                                    <h6>@(string.IsNullOrEmpty(step.Name) ? $"Étape {i+1}" : step.Name)</h6>
+                                    <span class="step-type-badge">@stLabel</span>
+                                    <span class="assign-badge"><i class="bi bi-person-fill me-1"></i>@asLabel</span>
+                                    @if (step.SLAHours.HasValue) { <span class="sla-badge"><i class="bi bi-clock me-1"></i>@step.SLAHours h</span> }
+                                    <span class="ms-auto d-flex align-items-center gap-2">
+                                        <button type="button" class="btn-delete-step" onclick="event.stopPropagation();removeStep(this)" title="Supprimer"><i class="bi bi-trash3"></i></button>
+                                        <i class="bi bi-chevron-down chevron-icon"></i>
+                                    </span>
+                                </div>
+                                <div class="step-body">
+                                    <!-- S1: Identification -->
+                                    <div class="field-section">
+                                        <div class="field-section-title"><i class="bi bi-tag-fill"></i>Identification</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-5">
+                                                <label class="form-label-sm">Nom de l'étape</label>
+                                                <input type="text" name="Steps[@i].Name" value="@step.Name" class="form-control form-control-sm step-name-input" />
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label-sm">Type d'étape</label>
+                                                <select name="Steps[@i].StepType" class="form-select form-select-sm">
+                                                    @foreach (var st in stepTypes) { <option value="@st" selected="@(step.StepType == st)">@(stepTypeLabels.ContainsKey(st) ? stepTypeLabels[st] : st)</option> }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label-sm">SLA (heures)</label>
+                                                <input type="number" name="Steps[@i].SLAHours" value="@step.SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label-sm">Description</label>
+                                                <input type="text" name="Steps[@i].Description" value="@step.Description" class="form-control form-control-sm" placeholder="Description de l'étape..." />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- S2: Assignation -->
+                                    <div class="field-section">
+                                        <div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label class="form-label-sm">Type d'assignation</label>
+                                                <select name="Steps[@i].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this)">
+                                                    @foreach (var at in assignmentTypes) { <option value="@at" selected="@(step.AssignmentType == at)">@(assignLabels.ContainsKey(at) ? assignLabels[at] : at)</option> }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 assign-employee-field @(step.AssignmentType != "Employee" ? "d-none" : "")">
+                                                <label class="form-label-sm">Employé</label>
+                                                <select name="Steps[@i].AssignedToUserId" class="form-select form-select-sm"><option value="">Automatique</option></select>
+                                            </div>
+                                            <div class="col-md-4 assign-role-field @(step.AssignmentType != "Role" ? "d-none" : "")">
+                                                <label class="form-label-sm">Rôle</label>
+                                                <select name="Steps[@i].AssignedToRoleName" class="form-select form-select-sm">
+                                                    <option value="">--</option>
+                                                    @foreach (var r in roles) { <option value="@r" selected="@(step.AssignedToRoleName == r)">@r</option> }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 assign-dept-field @(step.AssignmentType != "Department" ? "d-none" : "")">
+                                                <label class="form-label-sm">Département</label>
+                                                <select name="Steps[@i].AssignedToDepartmentId" class="form-select form-select-sm">
+                                                    <option value="">--</option>
+                                                    @foreach (var d in departments) { <option value="@d.Id" selected="@(step.AssignedToDepartmentId == d.Id)">@d.Name</option> }
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- S3: Statut Declaration -->
+                                    <div class="field-section">
+                                        <div class="field-section-title"><i class="bi bi-arrow-left-right"></i>Statut Déclaration</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">É l'entrée de l'étape</label>
+                                                <select name="Steps[@i].DeclarationStatusOnEntry" class="form-select form-select-sm">
+                                                    <option value="">Aucun changement</option>
+                                                    @foreach (var ds in declStatuses) { <option value="@ds" selected="@(step.DeclarationStatusOnEntry == ds)">@ds</option> }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">É la complétion de l'étape</label>
+                                                <select name="Steps[@i].DeclarationStatusOnComplete" class="form-select form-select-sm">
+                                                    <option value="">Aucun changement</option>
+                                                    @foreach (var ds in declStatuses) { <option value="@ds" selected="@(step.DeclarationStatusOnComplete == ds)">@ds</option> }
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- S4: Actions -->
+                                    <div class="field-section">
+                                        <div class="field-section-title"><i class="bi bi-lightning-fill"></i>Actions Automatiques</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Action à l'entrée</label>
+                                                <select name="Steps[@i].ActionOnEntry" class="form-select form-select-sm">
+                                                    @foreach (var a in actionTypes) { <option value="@a" selected="@(step.ActionOnEntry == a)">@a</option> }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Action à la complétion</label>
+                                                <select name="Steps[@i].ActionOnComplete" class="form-select form-select-sm">
+                                                    @foreach (var a in actionTypes) { <option value="@a" selected="@(step.ActionOnComplete == a)">@a</option> }
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- S5: Comportement -->
+                                    <div class="field-section">
+                                        <div class="field-section-title"><i class="bi bi-toggles"></i>Comportement</div>
+                                        <div class="chk-grid">
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].IsRequired" value="true" class="form-check-input" @(step.IsRequired ? "checked" : "") /><span>Obligatoire</span></label>
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].IsBlocking" value="true" class="form-check-input" @(step.IsBlocking ? "checked" : "") /><span>Bloquante</span></label>
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].AutoNotify" value="true" class="form-check-input" @(step.AutoNotify ? "checked" : "") /><span>Auto-notif</span></label>
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].AutoCreateTask" value="true" class="form-check-input" @(step.AutoCreateTask ? "checked" : "") /><span>Créer tâche</span></label>
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].IsClientStep" value="true" class="form-check-input" @(step.IsClientStep ? "checked" : "") /><span>Étape client</span></label>
+                                            <label class="chk-item"><input type="checkbox" name="Steps[@i].IsScheduled" value="true" class="form-check-input sched-checkbox" @(step.IsScheduled ? "checked" : "") onchange="toggleSchedule(this)" /><span>Planifiée</span></label>
+                                        </div>
+                                    </div>
+                                    <!-- S6: Planification / Visual Cron Builder -->
+                                    <div class="field-section schedule-section @(showSched ? "" : "d-none")">
+                                        <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification de l'exécution</div>
+                                        <div class="cron-builder" data-cron="@step.CronExpression">
+                                            <div class="mb-2">
+                                                <label class="form-label-sm mb-1">Fréquence</label>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdomadaire</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
+                                                </div>
+                                            </div>
+                                            <div class="cron-options-weekly d-none mb-2">
+                                                <label class="form-label-sm mb-1">Jour de la semaine</label>
+                                                <div class="d-flex gap-1">
+                                                    <button type="button" class="cron-day-btn" data-dow="1" onclick="toggleCronDay(this)">Lu</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="2" onclick="toggleCronDay(this)">Ma</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="3" onclick="toggleCronDay(this)">Me</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="4" onclick="toggleCronDay(this)">Je</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="5" onclick="toggleCronDay(this)">Ve</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="6" onclick="toggleCronDay(this)">Sa</button>
+                                                    <button type="button" class="cron-day-btn" data-dow="0" onclick="toggleCronDay(this)">Di</button>
+                                                </div>
+                                            </div>
+                                            <div class="cron-options-monthly d-none mb-2">
+                                                <label class="form-label-sm mb-1">Jour du mois</label>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <button type="button" class="cron-day-btn" data-dom="1" onclick="toggleCronDom(this)">1</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="5" onclick="toggleCronDom(this)">5</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="10" onclick="toggleCronDom(this)">10</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="15" onclick="toggleCronDom(this)">15</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="20" onclick="toggleCronDom(this)">20</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="25" onclick="toggleCronDom(this)">25</button>
+                                                    <button type="button" class="cron-day-btn" data-dom="28" onclick="toggleCronDom(this)">28</button>
+                                                </div>
+                                            </div>
+                                            <div class="cron-options-quarterly d-none mb-2">
+                                                <label class="form-label-sm mb-1">Mois d'exécution</label>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
+                                                    <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
+                                                    <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
+                                                    <button type="button" class="cron-month-btn active" data-m="4" onclick="toggleCronMonth(this)">Avr</button>
+                                                    <button type="button" class="cron-month-btn" data-m="5" onclick="toggleCronMonth(this)">Mai</button>
+                                                    <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Jun</button>
+                                                    <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Jul</button>
+                                                    <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Août</button>
+                                                    <button type="button" class="cron-month-btn" data-m="9" onclick="toggleCronMonth(this)">Sep</button>
+                                                    <button type="button" class="cron-month-btn active" data-m="10" onclick="toggleCronMonth(this)">Oct</button>
+                                                    <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
+                                                    <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
+                                                </div>
+                                            </div>
+                                            <div class="cron-options-annually d-none mb-2">
+                                                <label class="form-label-sm mb-1">Mois et jour</label>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6">
+                                                        <select class="form-select form-select-sm cron-annual-month" onchange="buildCron(this.closest('.cron-builder'))">
+                                                            <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+                                                            <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
+                                                            <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
+                                                            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <select class="form-select form-select-sm cron-annual-day" onchange="buildCron(this.closest('.cron-builder'))">
+                                                            <option value="1">1er</option><option value="5">5</option><option value="10">10</option>
+                                                            <option value="15">15</option><option value="20">20</option><option value="25">25</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-4">
+                                                    <label class="form-label-sm">Heure d'exécution</label>
+                                                    <input type="time" class="form-control form-control-sm cron-time" value="08:00" onchange="buildCron(this.closest('.cron-builder'))" />
+                                                </div>
+                                            </div>
+                                            <div class="cron-preview d-none">
+                                                <span class="cron-preview-icon"><i class="bi bi-check-lg"></i></span>
+                                                <div>
+                                                    <div class="cron-preview-text"></div>
+                                                    <div class="cron-preview-cron"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="Steps[@i].CronExpression" class="cron-input" value="@step.CronExpression" />
+                                        <input type="hidden" name="Steps[@i].CronDescription" class="cron-desc-input" value="@step.CronDescription" />
+                                    </div>
+                                    <!-- S7: Relance -->
+                                    <div class="field-section">
+                                        <details @(step.MaxRetries > 0 ? "open" : "")>
+                                            <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i>Relance / Retry<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-3"><label class="form-label-sm">Max relances</label><input type="number" name="Steps[@i].MaxRetries" value="@step.MaxRetries" class="form-control form-control-sm" min="0" /></div>
+                                                <div class="col-md-3"><label class="form-label-sm">Intervalle (h)</label><input type="number" name="Steps[@i].RetryIntervalHours" value="@step.RetryIntervalHours" class="form-control form-control-sm" placeholder="24" min="0" /></div>
+                                                <div class="col-md-3"><label class="form-label-sm">Après max relances</label><select name="Steps[@i].OnMaxRetriesAction" class="form-select form-select-sm">@foreach (var om in onMaxRetries) { <option value="@om" selected="@(step.OnMaxRetriesAction == om)">@om</option> }</select></div>
+                                                <div class="col-md-3"><label class="form-label-sm">Priorité tâche</label><select name="Steps[@i].TaskPriority" class="form-select form-select-sm">@foreach (var p in priorities) { <option value="@p" selected="@(step.TaskPriority == p)">@p</option> }</select></div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                    <!-- S8: Routage -->
+                                    <div class="field-section">
+                                        <details @(step.RoutingMode != "Sequential" ? "open" : "")>
+                                            <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-signpost-split-fill"></i>Routage Avancé<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-4"><label class="form-label-sm">Mode de routage</label><select name="Steps[@i].RoutingMode" class="form-select form-select-sm">@foreach (var rm in routingModes) { <option value="@rm" selected="@(step.RoutingMode == rm)">@rm</option> }</select></div>
+                                                <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[@i].TriggerSource" class="form-select form-select-sm">@foreach (var ts in triggerSources) { <option value="@ts" selected="@(step.TriggerSource == ts)">@ts</option> }</select></div>
+                                                <div class="col-md-4"><label class="form-label-sm">Aller à l'étape N°</label><input type="number" name="Steps[@i].GotoStepOrder" value="@step.GotoStepOrder" class="form-control form-control-sm" placeholder="N° étape" min="0" /></div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                    <input type="hidden" name="Steps[@i].StepOrder" value="@i" class="step-order-input" />
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <button type="button" class="btn-add-step mt-2" onclick="addStep()"><i class="bi bi-plus-circle"></i>Ajouter une étape</button>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                @if (isEditMode)
+                {
+                    <form asp-action="DeleteTemplate" asp-controller="Workflow" method="post" class="d-inline" onsubmit="return confirm('Supprimer ce modèle ?')">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@editId" />
+                        <button type="submit" class="btn btn-outline-danger rounded-pill px-4"><i class="bi bi-trash me-1"></i>Supprimer</button>
+                    </form>
+                }
+                <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>@(isEditMode ? "Mettre à jour" : "Créer le workflow")</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="stepTemplate">
+    <div class="step-card collapsed-step" data-index="__IDX__">
+        <div class="step-header" onclick="toggleStep(this)">
+            <span class="step-num">__NUM__</span>
+            <h6>Étape __NUM__</h6>
+            <span class="step-type-badge">Initialisation</span>
+            <span class="assign-badge"><i class="bi bi-person-fill me-1"></i>Employé</span>
+            <span class="ms-auto d-flex align-items-center gap-2">
+                <button type="button" class="btn-delete-step" onclick="event.stopPropagation();removeStep(this)" title="Supprimer"><i class="bi bi-trash3"></i></button>
+                <i class="bi bi-chevron-down chevron-icon"></i>
+            </span>
+        </div>
+        <div class="step-body">
+            <!-- T-S1: Identification -->
+            <div class="field-section">
+                <div class="field-section-title"><i class="bi bi-tag-fill"></i>Identification</div>
+                <div class="row g-2">
+                    <div class="col-md-5">
+                        <label class="form-label-sm">Nom de l'étape</label>
+                        <input type="text" name="Steps[__IDX__].Name" class="form-control form-control-sm step-name-input" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Type d'étape</label>
+                        <select name="Steps[__IDX__].StepType" class="form-select form-select-sm">
+                            <option value="Initialisation">Initialisation</option>
+                            <option value="DemandePieces">Demande pièces</option>
+                            <option value="Collecte">Collecte</option>
+                            <option value="Saisie">Saisie</option>
+                            <option value="Controle">Contrôle</option>
+                            <option value="ValidationInterne">Valid. interne</option>
+                            <option value="ValidationClient">Valid. client</option>
+                            <option value="DepotSoumission">Dépôt</option>
+                            <option value="ClotureArchivage">Clôture</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label-sm">SLA (heures)</label>
+                        <input type="number" name="Steps[__IDX__].SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label-sm">Description</label>
+                        <input type="text" name="Steps[__IDX__].Description" class="form-control form-control-sm" placeholder="Description de l'étape..." />
+                    </div>
+                </div>
+            </div>
+            <!-- T-S2: Assignation -->
+            <div class="field-section">
+                <div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div>
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Type d'assignation</label>
+                        <select name="Steps[__IDX__].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this)">
+                            <option value="Employee">Employé</option>
+                            <option value="Role">Rôle</option>
+                            <option value="Department">Département</option>
+                            <option value="Client">Client</option>
+                            <option value="AutoSystem">Automatique</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 assign-employee-field">
+                        <label class="form-label-sm">Employé</label>
+                        <select name="Steps[__IDX__].AssignedToUserId" class="form-select form-select-sm"><option value="">Automatique</option></select>
+                    </div>
+                    <div class="col-md-4 assign-role-field d-none">
+                        <label class="form-label-sm">Rôle</label>
+                        <select name="Steps[__IDX__].AssignedToRoleName" class="form-select form-select-sm">
+                            <option value="">--</option>
+                            <option value="Gerant">Gerant</option><option value="Manager">Manager</option><option value="Collaborateur">Collaborateur</option><option value="Assistant">Assistant</option><option value="Stagiaire">Stagiaire</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 assign-dept-field d-none">
+                        <label class="form-label-sm">Département</label>
+                        <select name="Steps[__IDX__].AssignedToDepartmentId" class="form-select form-select-sm"><option value="">--</option></select>
+                    </div>
+                </div>
+            </div>
+            <!-- T-S3: Statut Declaration -->
+            <div class="field-section">
+                <div class="field-section-title"><i class="bi bi-arrow-left-right"></i>Statut Déclaration</div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">É l'entrée</label>
+                        <select name="Steps[__IDX__].DeclarationStatusOnEntry" class="form-select form-select-sm">
+                            <option value="">Aucun changement</option>
+                            <option value="Brouillon">Brouillon</option><option value="ACompleter">ACompleter</option><option value="EnCours">EnCours</option>
+                            <option value="EnPreparation">EnPreparation</option><option value="Completee">Completee</option><option value="EnRevision">EnRevision</option>
+                            <option value="Validee">Validee</option><option value="Soumise">Soumise</option><option value="Payee">Payee</option>
+                            <option value="Refusee">Refusee</option><option value="Rejetee">Rejetee</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">É la complétion</label>
+                        <select name="Steps[__IDX__].DeclarationStatusOnComplete" class="form-select form-select-sm">
+                            <option value="">Aucun changement</option>
+                            <option value="Brouillon">Brouillon</option><option value="ACompleter">ACompleter</option><option value="EnCours">EnCours</option>
+                            <option value="EnPreparation">EnPreparation</option><option value="Completee">Completee</option><option value="EnRevision">EnRevision</option>
+                            <option value="Validee">Validee</option><option value="Soumise">Soumise</option><option value="Payee">Payee</option>
+                            <option value="Refusee">Refusee</option><option value="Rejetee">Rejetee</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- T-S4: Actions -->
+            <div class="field-section">
+                <div class="field-section-title"><i class="bi bi-lightning-fill"></i>Actions Automatiques</div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Action à l'entrée</label>
+                        <select name="Steps[__IDX__].ActionOnEntry" class="form-select form-select-sm">
+                            <option value="None">None</option><option value="CreateDeclaration">CreateDeclaration</option><option value="CompleteDeclaration">CompleteDeclaration</option>
+                            <option value="ValidateDeclaration">ValidateDeclaration</option><option value="SubmitDeclaration">SubmitDeclaration</option>
+                            <option value="SuspendDeclaration">SuspendDeclaration</option><option value="ArchiveDeclaration">ArchiveDeclaration</option>
+                            <option value="RelanceClient">RelanceClient</option><option value="NotifyEmployee">NotifyEmployee</option><option value="NotifyClient">NotifyClient</option>
+                            <option value="GeneratePDF">GeneratePDF</option><option value="ExportXML">ExportXML</option><option value="SendEmail">SendEmail</option>
+                            <option value="CreateTask">CreateTask</option><option value="RequestDocuments">RequestDocuments</option><option value="ApproveByClient">ApproveByClient</option>
+                            <option value="PaymentReminder">PaymentReminder</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Action à la complétion</label>
+                        <select name="Steps[__IDX__].ActionOnComplete" class="form-select form-select-sm">
+                            <option value="None">None</option><option value="CreateDeclaration">CreateDeclaration</option><option value="CompleteDeclaration">CompleteDeclaration</option>
+                            <option value="ValidateDeclaration">ValidateDeclaration</option><option value="SubmitDeclaration">SubmitDeclaration</option>
+                            <option value="SuspendDeclaration">SuspendDeclaration</option><option value="ArchiveDeclaration">ArchiveDeclaration</option>
+                            <option value="RelanceClient">RelanceClient</option><option value="NotifyEmployee">NotifyEmployee</option><option value="NotifyClient">NotifyClient</option>
+                            <option value="GeneratePDF">GeneratePDF</option><option value="ExportXML">ExportXML</option><option value="SendEmail">SendEmail</option>
+                            <option value="CreateTask">CreateTask</option><option value="RequestDocuments">RequestDocuments</option><option value="ApproveByClient">ApproveByClient</option>
+                            <option value="PaymentReminder">PaymentReminder</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- T-S5: Comportement -->
+            <div class="field-section">
+                <div class="field-section-title"><i class="bi bi-toggles"></i>Comportement</div>
+                <div class="chk-grid">
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].IsRequired" value="true" class="form-check-input" /><span>Obligatoire</span></label>
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].IsBlocking" value="true" class="form-check-input" /><span>Bloquante</span></label>
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].AutoNotify" value="true" class="form-check-input" /><span>Auto-notif</span></label>
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].AutoCreateTask" value="true" class="form-check-input" /><span>Créer tâche</span></label>
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].IsClientStep" value="true" class="form-check-input" /><span>Étape client</span></label>
+                    <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].IsScheduled" value="true" class="form-check-input sched-checkbox" onchange="toggleSchedule(this)" /><span>Planifiée</span></label>
+                </div>
+            </div>
+            <!-- T-S6: Planification / Visual Cron Builder -->
+            <div class="field-section schedule-section d-none">
+                <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification de l'exécution</div>
+                <div class="cron-builder" data-cron="">
+                    <div class="mb-2">
+                        <label class="form-label-sm mb-1">Fréquence</label>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
+                            <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdomadaire</button>
+                            <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
+                            <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
+                            <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
+                        </div>
+                    </div>
+                    <div class="cron-options-weekly d-none mb-2">
+                        <label class="form-label-sm mb-1">Jour de la semaine</label>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="cron-day-btn" data-dow="1" onclick="toggleCronDay(this)">Lu</button>
+                            <button type="button" class="cron-day-btn" data-dow="2" onclick="toggleCronDay(this)">Ma</button>
+                            <button type="button" class="cron-day-btn" data-dow="3" onclick="toggleCronDay(this)">Me</button>
+                            <button type="button" class="cron-day-btn" data-dow="4" onclick="toggleCronDay(this)">Je</button>
+                            <button type="button" class="cron-day-btn" data-dow="5" onclick="toggleCronDay(this)">Ve</button>
+                            <button type="button" class="cron-day-btn" data-dow="6" onclick="toggleCronDay(this)">Sa</button>
+                            <button type="button" class="cron-day-btn" data-dow="0" onclick="toggleCronDay(this)">Di</button>
+                        </div>
+                    </div>
+                    <div class="cron-options-monthly d-none mb-2">
+                        <label class="form-label-sm mb-1">Jour du mois</label>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="cron-day-btn" data-dom="1" onclick="toggleCronDom(this)">1</button>
+                            <button type="button" class="cron-day-btn" data-dom="5" onclick="toggleCronDom(this)">5</button>
+                            <button type="button" class="cron-day-btn" data-dom="10" onclick="toggleCronDom(this)">10</button>
+                            <button type="button" class="cron-day-btn" data-dom="15" onclick="toggleCronDom(this)">15</button>
+                            <button type="button" class="cron-day-btn" data-dom="20" onclick="toggleCronDom(this)">20</button>
+                            <button type="button" class="cron-day-btn" data-dom="25" onclick="toggleCronDom(this)">25</button>
+                            <button type="button" class="cron-day-btn" data-dom="28" onclick="toggleCronDom(this)">28</button>
+                        </div>
+                    </div>
+                    <div class="cron-options-quarterly d-none mb-2">
+                        <label class="form-label-sm mb-1">Mois d'exécution</label>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
+                            <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
+                            <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
+                            <button type="button" class="cron-month-btn active" data-m="4" onclick="toggleCronMonth(this)">Avr</button>
+                            <button type="button" class="cron-month-btn" data-m="5" onclick="toggleCronMonth(this)">Mai</button>
+                            <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Jun</button>
+                            <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Jul</button>
+                            <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Août</button>
+                            <button type="button" class="cron-month-btn" data-m="9" onclick="toggleCronMonth(this)">Sep</button>
+                            <button type="button" class="cron-month-btn active" data-m="10" onclick="toggleCronMonth(this)">Oct</button>
+                            <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
+                            <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
+                        </div>
+                    </div>
+                    <div class="cron-options-annually d-none mb-2">
+                        <label class="form-label-sm mb-1">Mois et jour</label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <select class="form-select form-select-sm cron-annual-month" onchange="buildCron(this.closest('.cron-builder'))">
+                                    <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+                                    <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
+                                    <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
+                                    <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select form-select-sm cron-annual-day" onchange="buildCron(this.closest('.cron-builder'))">
+                                    <option value="1">1er</option><option value="5">5</option><option value="10">10</option>
+                                    <option value="15">15</option><option value="20">20</option><option value="25">25</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-4">
+                            <label class="form-label-sm">Heure d'exécution</label>
+                            <input type="time" class="form-control form-control-sm cron-time" value="08:00" onchange="buildCron(this.closest('.cron-builder'))" />
+                        </div>
+                    </div>
+                    <div class="cron-preview d-none">
+                        <span class="cron-preview-icon"><i class="bi bi-check-lg"></i></span>
+                        <div>
+                            <div class="cron-preview-text"></div>
+                            <div class="cron-preview-cron"></div>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" name="Steps[__IDX__].CronExpression" class="cron-input" value="" />
+                <input type="hidden" name="Steps[__IDX__].CronDescription" class="cron-desc-input" value="" />
+            </div>
+            <!-- T-S7: Relance -->
+            <div class="field-section">
+                <details>
+                    <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i>Relance / Retry<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-3"><label class="form-label-sm">Max relances</label><input type="number" name="Steps[__IDX__].MaxRetries" class="form-control form-control-sm" min="0" value="0" /></div>
+                        <div class="col-md-3"><label class="form-label-sm">Intervalle (h)</label><input type="number" name="Steps[__IDX__].RetryIntervalHours" class="form-control form-control-sm" placeholder="24" min="0" /></div>
+                        <div class="col-md-3"><label class="form-label-sm">Après max relances</label><select name="Steps[__IDX__].OnMaxRetriesAction" class="form-select form-select-sm"><option value="NextStep">NextStep</option><option value="Suspend">Suspend</option><option value="Cancel">Cancel</option><option value="SkipStep">SkipStep</option><option value="EscalateToManager">EscalateToManager</option></select></div>
+                        <div class="col-md-3"><label class="form-label-sm">Priorité tâche</label><select name="Steps[__IDX__].TaskPriority" class="form-select form-select-sm"><option value="Faible">Faible</option><option value="Moyenne" selected>Moyenne</option><option value="Haute">Haute</option><option value="Urgente">Urgente</option></select></div>
+                    </div>
+                </details>
+            </div>
+            <!-- T-S8: Routage -->
+            <div class="field-section">
+                <details>
+                    <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-signpost-split-fill"></i>Routage Avancé<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-4"><label class="form-label-sm">Mode de routage</label><select name="Steps[__IDX__].RoutingMode" class="form-select form-select-sm"><option value="Sequential">Sequential</option><option value="ConditionalBranch">ConditionalBranch</option><option value="SkipToStep">SkipToStep</option><option value="EndWorkflow">EndWorkflow</option></select></div>
+                        <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[__IDX__].TriggerSource" class="form-select form-select-sm"><option value="Manual">Manual</option><option value="System">System</option><option value="Employee">Employee</option><option value="Client">Client</option><option value="Extranet">Extranet</option><option value="API">API</option><option value="Schedule">Schedule</option></select></div>
+                        <div class="col-md-4"><label class="form-label-sm">Aller à l'étape N°</label><input type="number" name="Steps[__IDX__].GotoStepOrder" class="form-control form-control-sm" placeholder="N° étape" min="0" /></div>
+                    </div>
+                </details>
+            </div>
+            <input type="hidden" name="Steps[__IDX__].StepOrder" value="__IDX__" class="step-order-input" />
+        </div>
+    </div>
+</template>
+
+@section Scripts {
+<script>
+    // === Toggle step expand/collapse ===
+    function toggleStep(header) {
+        header.closest('.step-card').classList.toggle('collapsed-step');
+    }
+
+    // === Add new step from template ===
+    function addStep() {
+        const container = document.getElementById('stepsContainer');
+        const idx = container.querySelectorAll('.step-card').length;
+        const tpl = document.getElementById('stepTemplate').content.cloneNode(true);
+        const card = tpl.querySelector('.step-card');
+        const html = card.outerHTML.replace(/__IDX__/g, idx).replace(/__NUM__/g, idx + 1);
+        container.insertAdjacentHTML('beforeend', html);
+        const newCard = container.lastElementChild;
+        newCard.classList.remove('collapsed-step');
+        updateStepCount();
+    }
+
+    // === Remove step ===
+    function removeStep(btn) {
+        if (!confirm('Supprimer cette étape ?')) return;
+        btn.closest('.step-card').remove();
+        reindexSteps();
+        updateStepCount();
+    }
+
+    // === Reindex all steps ===
+    function reindexSteps() {
+        document.querySelectorAll('#stepsContainer .step-card').forEach((card, i) => {
+            card.dataset.index = i;
+            card.querySelector('.step-num').textContent = i + 1;
+            card.querySelectorAll('[name]').forEach(el => {
+                el.name = el.name.replace(/Steps\[\d+\]/, 'Steps[' + i + ']');
+            });
+            const orderInput = card.querySelector('.step-order-input');
+            if (orderInput) orderInput.value = i;
+        });
+    }
+
+    // === Update step count badge ===
+    function updateStepCount() {
+        const count = document.querySelectorAll('#stepsContainer .step-card').length;
+        document.getElementById('stepCountBadge').textContent = count + ' étapes';
+    }
+
+    // === Toggle assignment fields + auto-show schedule for AutoSystem ===
+    function toggleAssignFields(sel) {
+        const card = sel.closest('.step-card');
+        const val = sel.value;
+        card.querySelector('.assign-employee-field').classList.toggle('d-none', val !== 'Employee');
+        card.querySelector('.assign-role-field').classList.toggle('d-none', val !== 'Role');
+        card.querySelector('.assign-dept-field').classList.toggle('d-none', val !== 'Department');
+
+        // Auto-show schedule section for AutoSystem
+        const schedSection = card.querySelector('.schedule-section');
+        const schedCheckbox = card.querySelector('.sched-checkbox');
+        if (val === 'AutoSystem') {
+            if (schedSection) schedSection.classList.remove('d-none');
+            if (schedCheckbox) schedCheckbox.checked = true;
+        }
+    }
+
+    // === Toggle schedule section visibility ===
+    function toggleSchedule(chk) {
+        const section = chk.closest('.step-card').querySelector('.schedule-section');
+        if (section) section.classList.toggle('d-none', !chk.checked);
+    }
+
+    // === CRON BUILDER FUNCTIONS ===
+
+    const dayNames = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
+    const monthNames = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+    function setCronFreq(btn, freq) {
+        const builder = btn.closest('.cron-builder');
+        // Toggle active state on frequency buttons
+        builder.querySelectorAll('.cron-freq-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        builder.dataset.freq = freq;
+
+        // Show/hide option panels
+        builder.querySelector('.cron-options-weekly').classList.toggle('d-none', freq !== 'weekly');
+        builder.querySelector('.cron-options-monthly').classList.toggle('d-none', freq !== 'monthly');
+        builder.querySelector('.cron-options-quarterly').classList.toggle('d-none', freq !== 'quarterly');
+        builder.querySelector('.cron-options-annually').classList.toggle('d-none', freq !== 'annually');
+
+        buildCron(builder);
+    }
+
+    function toggleCronDay(btn) {
+        btn.classList.toggle('active');
+        buildCron(btn.closest('.cron-builder'));
+    }
+
+    function toggleCronDom(btn) {
+        btn.classList.toggle('active');
+        buildCron(btn.closest('.cron-builder'));
+    }
+
+    function toggleCronMonth(btn) {
+        btn.classList.toggle('active');
+        buildCron(btn.closest('.cron-builder'));
+    }
+
+    function buildCron(builder) {
+        const freq = builder.dataset.freq;
+        if (!freq) { hideCronPreview(builder); return; }
+
+        const timeInput = builder.querySelector('.cron-time');
+        const [h, m] = (timeInput.value || '08:00').split(':').map(Number);
+        let cron = '', desc = '';
+
+        if (freq === 'daily') {
+            cron = m + ' ' + h + ' * * *';
+            desc = 'Tous les jours à ' + pad(h) + ':' + pad(m);
+        }
+        else if (freq === 'weekly') {
+            const days = [...builder.querySelectorAll('.cron-options-weekly .cron-day-btn.active')].map(b => b.dataset.dow);
+            if (days.length === 0) { hideCronPreview(builder); return; }
+            cron = m + ' ' + h + ' * * ' + days.join(',');
+            const dayLabels = days.map(d => dayNames[parseInt(d)]).join(', ');
+            desc = 'Chaque ' + dayLabels + ' à ' + pad(h) + ':' + pad(m);
+        }
+        else if (freq === 'monthly') {
+            const doms = [...builder.querySelectorAll('.cron-options-monthly .cron-day-btn.active')].map(b => b.dataset.dom);
+            if (doms.length === 0) { hideCronPreview(builder); return; }
+            cron = m + ' ' + h + ' ' + doms.join(',') + ' * *';
+            desc = 'Le ' + doms.join(', ') + ' de chaque mois à ' + pad(h) + ':' + pad(m);
+        }
+        else if (freq === 'quarterly') {
+            const months = [...builder.querySelectorAll('.cron-options-quarterly .cron-month-btn.active')].map(b => b.dataset.m);
+            if (months.length === 0) { hideCronPreview(builder); return; }
+            cron = m + ' ' + h + ' 1 ' + months.join(',') + ' *';
+            const mLabels = months.map(mm => monthNames[parseInt(mm)]).join(', ');
+            desc = 'Le 1er de ' + mLabels + ' à ' + pad(h) + ':' + pad(m);
+        }
+        else if (freq === 'annually') {
+            const monthSel = builder.querySelector('.cron-annual-month');
+            const daySel = builder.querySelector('.cron-annual-day');
+            const mm = monthSel ? monthSel.value : '1';
+            const dd = daySel ? daySel.value : '1';
+            cron = m + ' ' + h + ' ' + dd + ' ' + mm + ' *';
+            desc = 'Le ' + dd + ' ' + monthNames[parseInt(mm)] + ' à ' + pad(h) + ':' + pad(m);
+        }
+
+        // Update hidden inputs
+        const section = builder.closest('.schedule-section');
+        if (section) {
+            const cronInput = section.querySelector('.cron-input');
+            const descInput = section.querySelector('.cron-desc-input');
+            if (cronInput) cronInput.value = cron;
+            if (descInput) descInput.value = desc;
+        }
+
+        // Show preview
+        const preview = builder.querySelector('.cron-preview');
+        if (preview) {
+            preview.classList.remove('d-none');
+            preview.querySelector('.cron-preview-text').textContent = desc;
+            preview.querySelector('.cron-preview-cron').textContent = cron;
+        }
+    }
+
+    function hideCronPreview(builder) {
+        const preview = builder.querySelector('.cron-preview');
+        if (preview) preview.classList.add('d-none');
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    // === Parse existing cron expression back to UI ===
+    function parseCronToUI(builder) {
+        const cronStr = builder.dataset.cron;
+        if (!cronStr || !cronStr.trim()) return;
+
+        const parts = cronStr.trim().split(/\s+/);
+        if (parts.length < 5) return;
+
+        const [mm, hh, dom, mon, dow] = parts;
+        const timeInput = builder.querySelector('.cron-time');
+        if (timeInput) timeInput.value = pad(parseInt(hh)) + ':' + pad(parseInt(mm));
+
+        // Determine frequency from pattern
+        if (dow !== '*') {
+            // Weekly
+            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="weekly"]');
+            if (freqBtn) setCronFreq(freqBtn, 'weekly');
+            dow.split(',').forEach(d => {
+                const btn = builder.querySelector('.cron-day-btn[data-dow="' + d + '"]');
+                if (btn) btn.classList.add('active');
+            });
+        } else if (mon !== '*') {
+            const months = mon.split(',');
+            if (months.length <= 4) {
+                // Quarterly
+                const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="quarterly"]');
+                if (freqBtn) setCronFreq(freqBtn, 'quarterly');
+                builder.querySelectorAll('.cron-options-quarterly .cron-month-btn').forEach(b => b.classList.remove('active'));
+                months.forEach(m => {
+                    const btn = builder.querySelector('.cron-month-btn[data-m="' + m + '"]');
+                    if (btn) btn.classList.add('active');
+                });
+            } else {
+                // Annually
+                const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="annually"]');
+                if (freqBtn) setCronFreq(freqBtn, 'annually');
+                const mSel = builder.querySelector('.cron-annual-month');
+                const dSel = builder.querySelector('.cron-annual-day');
+                if (mSel) mSel.value = months[0];
+                if (dSel) dSel.value = dom;
+            }
+        } else if (dom !== '*') {
+            // Monthly
+            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="monthly"]');
+            if (freqBtn) setCronFreq(freqBtn, 'monthly');
+            dom.split(',').forEach(d => {
+                const btn = builder.querySelector('.cron-day-btn[data-dom="' + d + '"]');
+                if (btn) btn.classList.add('active');
+            });
+        } else {
+            // Daily
+            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="daily"]');
+            if (freqBtn) setCronFreq(freqBtn, 'daily');
+        }
+
+        buildCron(builder);
+    }
+
+    // === INIT on page load ===
+    document.addEventListener('DOMContentLoaded', function() {
+        // Collapse all existing steps except first
+        document.querySelectorAll('#stepsContainer .step-card').forEach((card, i) => {
+            if (i > 0) card.classList.add('collapsed-step');
+        });
+
+        // Init existing assign fields
+        document.querySelectorAll('.assign-select').forEach(sel => {
+            toggleAssignFields(sel);
+        });
+
+        // Parse existing cron expressions
+        document.querySelectorAll('.cron-builder').forEach(builder => {
+            parseCronToUI(builder);
+        });
+    });
+</script>
+}

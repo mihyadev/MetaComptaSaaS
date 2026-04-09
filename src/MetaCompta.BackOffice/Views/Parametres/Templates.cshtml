@@ -1,0 +1,82 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.DocumentTemplateDto>
+@{
+    ViewData["Title"] = "Modèles de documents";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-file-earmark-ruled me-2"></i>Modèles de documents</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Parametres")">Paramètres</a></li>
+                <li class="breadcrumb-item active">Templates</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row g-4">
+    @if (Model != null && Model.Any())
+    {
+        foreach (var tpl in Model)
+        {
+            <div class="col-md-4">
+                <div class="mc-card p-4">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-file-earmark-text"></i></div>
+                        <div>
+                            <h6 class="mb-0">@tpl.Nom</h6>
+                            <span class="text-muted small">@tpl.Categorie</span>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(tpl.Description))
+                    {
+                        <p class="text-muted small mb-3">@tpl.Description</p>
+                    }
+                    <div class="d-flex justify-content-between text-muted small mb-2">
+                        <span>Dernière modification</span>
+                        <span>@(tpl.DateModification.ToString("dd/MM/yyyy"))</span>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-sm btn-outline-primary flex-fill" data-bs-toggle="modal" data-bs-target="#editModal_@tpl.Id">
+                            <i class="bi bi-pencil me-1"></i> Modifier
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Modal -->
+            <div class="modal fade" id="editModal_@tpl.Id" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <form method="post" action="@Url.Action("UpdateTemplate", "Parametres")">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@tpl.Id" />
+                            <div class="modal-header">
+                                <h5 class="modal-title">Modifier : @tpl.Nom</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <textarea name="contenu" class="form-control" rows="15" style="font-family:monospace;font-size:0.85rem;">@tpl.Contenu</textarea>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                                <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Sauvegarder</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="col-12">
+            <div class="mc-card p-4 text-center text-muted">
+                <i class="bi bi-file-earmark-ruled fs-1 d-block mb-2"></i>
+                Aucun modèle de document configuré.
+            </div>
+        </div>
+    }
+</div>

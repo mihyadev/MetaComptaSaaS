@@ -1,0 +1,131 @@
+@using MetaCompta.Application.DTOs
+@model DeclarationIRDto
+@{
+    ViewData["Title"] = "Modifier IR";
+    var declaration = ViewBag.Declaration as DeclarationDto;
+}
+
+
+<!-- Workflow Action Bar (generic, step-aware) -->
+@await Html.PartialAsync("_WorkflowActionBar")
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Declarations?type=IR">IR</a></li>
+                @if (declaration != null)
+                {
+                    <li class="breadcrumb-item"><a href="/Declarations/Details/@declaration.Id">Détails</a></li>
+                }
+                <li class="breadcrumb-item active">Modifier IR</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-person-lines-fill text-info me-2"></i>Impôt sur le Revenu (IR) — @(declaration?.Periode ?? "")</h4>
+        @if (declaration != null)
+        {
+            <p class="text-muted mb-0 mt-1">Client : <strong>@declaration.ClientName</strong></p>
+        }
+    </div>
+    <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+</div>
+
+<form asp-action="EditIR" asp-route-id="@Model.DeclarationId" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="DeclarationId" />
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-cash-coin text-success me-2"></i>Revenus & Déductions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label asp-for="RevenuBrutGlobal" class="form-label">Revenu Brut Global (annuel)</label>
+                            <input asp-for="RevenuBrutGlobal" class="form-control ir-input" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Deductions" class="form-label">Déductions (cotisations sociales, etc.)</label>
+                            <input asp-for="Deductions" class="form-control ir-input" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="NombrePersonnesACharge" class="form-label">Personnes à charge</label>
+                            <input asp-for="NombrePersonnesACharge" class="form-control ir-input" type="number" min="0" max="6" />
+                            <small class="text-muted">Max 6 personnes (360 MAD/personne)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-calculator text-primary me-2"></i>Résumé IR (calcul automatique)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label text-muted small">Frais Professionnels (20%)</label><div id="fraisPro" class="fw-bold">@Model.FraisProfessionnels.ToString("N2") MAD</div></div>
+                        <div class="col-md-6"><label class="form-label text-muted small">Revenu Net Imposable</label><div id="revenuNet" class="fw-bold">@Model.RevenuNetImposable.ToString("N2") MAD</div></div>
+                        <div class="col-md-4"><label class="form-label text-muted small">Taux IR</label><div id="tauxIR" class="fw-bold">@Model.TauxIR.ToString("N0")%</div></div>
+                        <div class="col-md-4"><label class="form-label text-muted small">Somme à déduire</label><div id="sommeDeduire" class="fw-bold">@Model.SommeADeduire.ToString("N2")</div></div>
+                        <div class="col-md-4"><label class="form-label text-muted small">IR Brut</label><div id="irBrut" class="fw-bold text-warning fs-5">@Model.IRBrut.ToString("N2")</div></div>
+                        <div class="col-md-6"><label class="form-label text-muted small">Déduction Charges Famille</label><div id="chargesFamille" class="fw-bold text-success">-@Model.ChargesFamille.ToString("N2")</div></div>
+                        <div class="col-md-6"><label class="form-label text-muted small">IR Net à Payer</label><div id="irNet" class="fw-bold text-danger fs-4">@Model.IRNet.ToString("N2") MAD</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info rounded-3" style="font-size:0.85rem;">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Barème IR Marocain 2026 :</strong>
+                0-30 000 : 0% | 30 001-50 000 : 10% | 50 001-60 000 : 20% | 60 001-80 000 : 30% | 80 001-180 000 : 34% | >180 000 : 38%
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function calcIR() {
+        var revenuBrut = parseFloat(document.getElementById("RevenuBrutGlobal").value) || 0;
+        var deductions = parseFloat(document.getElementById("Deductions").value) || 0;
+        var personnes = parseInt(document.getElementById("NombrePersonnesACharge").value) || 0;
+
+        // Frais professionnels : 20% plafonne a 30 000 MAD
+        var fraisPro = Math.min(revenuBrut * 0.20, 30000);
+        var revenuNet = Math.max(0, revenuBrut - fraisPro - deductions);
+
+        // Bareme IR Maroc 2026 (progressif par tranches)
+        var irBrut = 0, taux = 0, sommeDeduire = 0;
+        if (revenuNet <= 30000) { taux = 0; sommeDeduire = 0; irBrut = 0; }
+        else if (revenuNet <= 50000) { taux = 10; sommeDeduire = 3000; irBrut = revenuNet * 0.10 - 3000; }
+        else if (revenuNet <= 60000) { taux = 20; sommeDeduire = 8000; irBrut = revenuNet * 0.20 - 8000; }
+        else if (revenuNet <= 80000) { taux = 30; sommeDeduire = 14000; irBrut = revenuNet * 0.30 - 14000; }
+        else if (revenuNet <= 180000) { taux = 34; sommeDeduire = 17200; irBrut = revenuNet * 0.34 - 17200; }
+        else { taux = 38; sommeDeduire = 24400; irBrut = revenuNet * 0.38 - 24400; }
+        irBrut = Math.max(0, irBrut);
+
+        var nbPersonnes = Math.min(6, Math.max(0, personnes));
+        var chargesFamille = nbPersonnes * 360;
+        var irNet = Math.max(0, irBrut - chargesFamille);
+
+        document.getElementById("fraisPro").textContent = fraisPro.toFixed(2) + " MAD";
+        document.getElementById("revenuNet").textContent = revenuNet.toFixed(2) + " MAD";
+        document.getElementById("tauxIR").textContent = taux + "%";
+        document.getElementById("sommeDeduire").textContent = sommeDeduire.toFixed(2);
+        document.getElementById("irBrut").textContent = irBrut.toFixed(2);
+        document.getElementById("chargesFamille").textContent = "-" + chargesFamille.toFixed(2);
+        document.getElementById("irNet").textContent = irNet.toFixed(2) + " MAD";
+    }
+    document.querySelectorAll(".ir-input").forEach(function(el) { el.addEventListener("input", calcIR); });
+    calcIR();
+</script>
+}

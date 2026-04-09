@@ -1,0 +1,89 @@
+@{
+    ViewData["Title"] = "Périodes comptables";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-calendar-range me-2"></i>Périodes comptables</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Parametres")">Paramètres</a></li>
+                <li class="breadcrumb-item active">Périodes</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-calendar-range me-2"></i>Exercices comptables</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table mc-table">
+                <thead>
+                    <tr>
+                        <th>Exercice</th>
+                        <th>Date début</th>
+                        <th>Date fin</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="fw-medium">2025</td>
+                        <td>01/01/2025</td>
+                        <td>31/12/2025</td>
+                        <td><span class="badge bg-success">Ouvert</span></td>
+                        <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button></td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">2024</td>
+                        <td>01/01/2024</td>
+                        <td>31/12/2024</td>
+                        <td><span class="badge bg-secondary">Clôturé</span></td>
+                        <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button></td>
+                    </tr>
+                    <tr>
+                        <td class="fw-medium">2023</td>
+                        <td>01/01/2023</td>
+                        <td>31/12/2023</td>
+                        <td><span class="badge bg-secondary">Clôturé</span></td>
+                        <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <hr />
+
+        <h6 class="fw-bold mt-4 mb-3"><i class="bi bi-gear me-1"></i>Paramètres de clôture</h6>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Début exercice</label>
+                <select class="form-select">
+                    <option selected>1er Janvier</option>
+                    <option>1er Avril</option>
+                    <option>1er Juillet</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Durée exercice</label>
+                <select class="form-select">
+                    <option selected>12 mois</option>
+                    <option>6 mois</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Clôture automatique</label>
+                <select class="form-select">
+                    <option>Non</option>
+                    <option>Oui</option>
+                </select>
+            </div>
+        </div>
+        <div class="mt-4">
+            <button class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Sauvegarder</button>
+        </div>
+    </div>
+</div>

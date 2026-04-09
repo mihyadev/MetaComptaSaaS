@@ -1,0 +1,183 @@
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EtatFiscalDto>
+@{
+    var type = ViewBag.TypeEtat as string;
+    var typeName = type switch
+    {
+        "Etat9421" => "État 9421 (salaires)",
+        "LiasseFiscale" => "Liasse fiscale",
+        "Bilan" => "Bilan fiscal",
+        "CPC" => "Compte de Produits et Charges",
+        "Amortissements" => "Tableau des amortissements",
+        "EtatsSynthese" => "États de synthèse",
+        _ => "Déclarations & États fiscaux"
+    };
+    ViewData["Title"] = typeName;
+    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-file-earmark-text me-2"></i>@typeName</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item active">États Fiscaux</li>
+            </ol>
+        </nav>
+    </div>
+    <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalGenerate">
+        <i class="bi bi-file-earmark-plus me-1"></i> Générer un état
+    </button>
+</div>
+
+<!-- Type Cards -->
+<div class="row g-3 mb-4">
+    @{
+        var types = new[] {
+            ("Etat9421", "9421", "bi-file-text", "danger"),
+            ("LiasseFiscale", "Liasse", "bi-files", "primary"),
+            ("Bilan", "Bilan", "bi-clipboard-data", "success"),
+            ("CPC", "CPC", "bi-bar-chart-line", "warning"),
+            ("Amortissements", "Amortis.", "bi-graph-down-arrow", "info"),
+            ("EtatsSynthese", "Synthèse", "bi-file-earmark-check", "secondary")
+        };
+    }
+    @foreach (var (t, label, icon, color) in types)
+    {
+        <div class="col-md-2">
+            <a href="@Url.Action("Index", "EtatsFiscaux", new { type = t })"
+               class="mc-card d-block text-decoration-none p-3 @(type == t ? "border-primary border-2" : "")">
+                <div class="text-center">
+                    <i class="bi @icon text-@color fs-4 d-block"></i>
+                    <span class="small fw-semibold text-dark">@label</span>
+                </div>
+            </a>
+        </div>
+    }
+</div>
+
+<!-- Filters -->
+<div class="mc-card mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="type" class="form-select">
+                    <option value="">Tous</option>
+                    @foreach (var (t, label, _, _) in types)
+                    {
+                        <option value="@t" selected="@(type == t)">@label</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Exercice</label>
+                <select name="exercice" class="form-select">
+                    <option value="">Tous</option>
+                    @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 5; y--)
+                    {
+                        <option value="@y" selected="@(ViewBag.Exercice?.ToString() == y.ToString())">@y</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Recherche</label>
+                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Référence..." />
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>États fiscaux (@(Model?.TotalCount ?? 0))</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Client</th>
+                        <th>Type</th>
+                        <th>Exercice</th>
+                        <th>Statut</th>
+                        <th>Date génération</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        foreach (var e in Model.Items)
+                        {
+                            <tr>
+                                <td class="fw-medium">@e.Reference</td>
+                                <td>@e.ClientNom</td>
+                                <td><span class="badge bg-light text-dark">@e.TypeEtat</span></td>
+                                <td>@e.Exercice</td>
+                                <td><span class="badge badge-@e.Statut?.ToLower()">@e.Statut</span></td>
+                                <td>@(e.DateGeneration?.ToString("dd/MM/yyyy"))</td>
+                                <td>
+                                    <a href="@Url.Action("Details", "EtatsFiscaux", new { id = e.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-file-earmark fs-1 d-block mb-2"></i>
+                                Aucun état fiscal trouvé.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Générer -->
+<div class="modal fade" id="modalGenerate" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="@Url.Action("Generate", "EtatsFiscaux")">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-1"></i>Générer un état fiscal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Type d'état <span class="text-danger">*</span></label>
+                        <select name="type" class="form-select" required>
+                            <option value="Etat9421">État 9421 (salaires)</option>
+                            <option value="LiasseFiscale">Liasse fiscale</option>
+                            <option value="Bilan">Bilan fiscal</option>
+                            <option value="CPC">CPC</option>
+                            <option value="Amortissements">Amortissements</option>
+                            <option value="EtatsSynthese">États de synthèse</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Exercice <span class="text-danger">*</span></label>
+                        <select name="exercice" class="form-select" required>
+                            @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 5; y--)
+                            {
+                                <option value="@y">@y</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Générer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

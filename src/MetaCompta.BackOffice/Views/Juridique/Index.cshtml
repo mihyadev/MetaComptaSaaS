@@ -1,0 +1,116 @@
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DossierJuridiqueDto>
+@{
+    ViewData["Title"] = "Juridique";
+    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-bank me-2"></i>Dossiers juridiques</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item active">Juridique</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Create", "Juridique")" class="btn btn-mc-primary">
+        <i class="bi bi-plus-circle me-1"></i> Nouveau dossier
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="mc-card mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="type" class="form-select">
+                    <option value="">Tous</option>
+                    <option value="CreationSociete" selected="@(ViewBag.TypeDossier?.ToString() == "CreationSociete")">
+                        Création société</option>
+                    <option value="ModificationStatuts"
+                        selected="@(ViewBag.TypeDossier?.ToString() == "ModificationStatuts")">Modification statuts
+                    </option>
+                    <option value="PVAG" selected="@(ViewBag.TypeDossier?.ToString() == "PVAG")">PV AG</option>
+                    <option value="DepotLegal" selected="@(ViewBag.TypeDossier?.ToString() == "DepotLegal")">Dépôt légal
+                    </option>
+                    <option value="RC" selected="@(ViewBag.TypeDossier?.ToString() == "RC")">Registre de commerce
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Statut</label>
+                <select name="statut" class="form-select">
+                    <option value="">Tous</option>
+                    <option value="Ouvert" selected="@(ViewBag.Statut?.ToString() == "Ouvert")">Ouvert</option>
+                    <option value="@RefCodes.StatutContrat.EnCours" selected="@(ViewBag.Statut?.ToString() == RefCodes.StatutContrat.EnCours)">En cours</option>
+                    <option value="Termine" selected="@(ViewBag.Statut?.ToString() == "Termine")">Terminé</option>
+                    <option value="@RefCodes.StatutBonCommande.Annule" selected="@(ViewBag.Statut?.ToString() == RefCodes.StatutBonCommande.Annule)">Annulé</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Recherche</label>
+                <input type="text" name="search" class="form-control" value="@ViewBag.Search"
+                    placeholder="Référence..." />
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i>
+                    Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-folder me-2"></i>Dossiers (@(Model?.TotalCount ?? 0))</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Client</th>
+                        <th>Type</th>
+                        <th>Objet</th>
+                        <th>Date ouverture</th>
+                        <th>Statut</th>
+                        <th>Responsable</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        foreach (var d in Model.Items)
+                        {
+                            <tr>
+                                <td class="fw-medium">@d.Reference</td>
+                                <td>@d.ClientNom</td>
+                                <td><span class="badge bg-light text-dark">@d.TypeDossier</span></td>
+                                <td>@d.Objet</td>
+                                <td>@(d.DateOuverture.ToString("dd/MM/yyyy"))</td>
+                                <td><span class="badge badge-@d.Statut?.ToLower()">@d.Statut</span></td>
+                                <td>@d.Responsable</td>
+                                <td>
+                                    <a href="@Url.Action("Details", "Juridique", new { id = d.Id })"
+                                        class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="bi bi-briefcase fs-1 d-block mb-2"></i>
+                                Aucun dossier juridique trouvé.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

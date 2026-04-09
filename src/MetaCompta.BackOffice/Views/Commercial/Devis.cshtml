@@ -1,0 +1,114 @@
+@model PagedResult<DevisDto>
+@{
+    ViewData["Title"] = "Devis";
+    var statut = ViewBag.Statut as string ?? "";
+
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-file-earmark-text text-primary me-2"></i>Devis</h4>
+        <p class="text-muted mb-0">@Model.TotalCount devis au total</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="DevisCreate" class="btn btn-primary rounded-pill px-3"><i class="bi bi-plus-circle me-1"></i> Nouveau Devis</a>
+        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Statut</label>
+                <select name="statut" class="form-select form-select-sm rounded-pill">
+                    <option value="">Tous</option>
+                    <option value="@RefCodes.StatutDevis.Brouillon" selected="@(statut == RefCodes.StatutDevis.Brouillon)">Brouillon</option>
+                    <option value="Soumis" selected="@(statut == "Soumis")">Soumis</option>
+                    <option value="@RefCodes.StatutDevis.Approuve" selected="@(statut == RefCodes.StatutDevis.Approuve)">Approuvé</option>
+                    <option value="Rejete" selected="@(statut == "Rejete")">Rejeté</option>
+                    <option value="Expire" selected="@(statut == RefCodes.StatutDevis.Expire)">Expiré</option>
+                    <option value="@RefCodes.StatutDevis.Annule" selected="@(statut == RefCodes.StatutDevis.Annule)">Annulé</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary rounded-pill"><i class="bi bi-search me-1"></i>Filtrer</button>
+            </div>
+            <div class="col-auto">
+                <a asp-action="Devis" class="btn btn-sm btn-outline-secondary rounded-pill"><i class="bi bi-x-circle me-1"></i>Réinitialiser</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Référence</th>
+                        <th>Client</th>
+                        <th>Objet</th>
+                        <th class="text-end">Montant TTC</th>
+                        <th>Date</th>
+                        <th>Statut</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items != null && Model.Items.Any())
+                    {
+                        @foreach (var d in Model.Items)
+                        {
+                            <tr>
+                                <td class="ps-4"><code class="fw-semibold">@d.Reference</code></td>
+                                <td>@d.ClientName</td>
+                                <td>@(d.Objet ?? "-")</td>
+                                <td class="text-end fw-semibold">@d.MontantTTC.ToString("N2") @d.Devise</td>
+                                <td><small>@d.DateEmission.ToString("dd/MM/yyyy")</small></td>
+                                <td>
+                                    @{
+                                        var badgeClass = d.Statut switch
+                                        {
+                                            RefCodes.StatutDevis.Brouillon => "secondary",
+                                            "Soumis" => "warning",
+                                            RefCodes.StatutDevis.Approuve => "success",
+                                            "Rejete" => "danger",
+                                            RefCodes.StatutDevis.Expire => "dark",
+                                            RefCodes.StatutDevis.Annule => "dark",
+                                            _ => "secondary"
+                                        };
+                                    }
+                                    <span class="badge bg-@badgeClass rounded-pill">@d.Statut</span>
+                                </td>
+                                <td class="text-center">
+                                    <a asp-action="DevisDetails" asp-route-id="@d.Id" class="btn btn-sm btn-outline-primary rounded-pill"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Aucun devis trouvé</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (Model.TotalPages > 1)
+{
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <li class="page-item @(i == Model.Page ? "active" : "")">
+                    <a class="page-link rounded-pill mx-1" asp-action="Devis" asp-route-page="@i" asp-route-statut="@statut">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}

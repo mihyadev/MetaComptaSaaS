@@ -1,0 +1,314 @@
+﻿@model EmployeeCreateDto
+@{
+    ViewData["Title"] = "Modifier Employé - " + ViewBag.EmployeeName;
+    var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
+    var empId = ViewBag.EmployeeId;
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-pencil-square text-warning me-2"></i>Modifier l'Employé</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Employees")">Employés</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Details", "Employees", new { id = empId })">@ViewBag.EmployeeName</a></li>
+                <li class="breadcrumb-item active">Modifier</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Details", "Employees", new { id = empId })" class="btn btn-outline-secondary rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i> Retour aux Détails
+    </a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Erreur de validation :</strong>
+        @Html.ValidationSummary(true)
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<form method="post" asp-action="Edit" asp-route-id="@empId" id="formEditEmployee">
+    @Html.AntiForgeryToken()
+
+    <!-- Tab Navigation -->
+    <div class="mc-card mb-4">
+        <div class="card-body p-0">
+            <ul class="nav nav-pills p-3 gap-2" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active rounded-pill px-4 d-flex align-items-center gap-2" data-bs-toggle="pill" data-bs-target="#eIdentity" type="button">
+                        <i class="bi bi-person-vcard"></i> Identité
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link rounded-pill px-4 d-flex align-items-center gap-2" data-bs-toggle="pill" data-bs-target="#eProfessional" type="button">
+                        <i class="bi bi-briefcase"></i> Professionnel
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link rounded-pill px-4 d-flex align-items-center gap-2" data-bs-toggle="pill" data-bs-target="#eRemuneration" type="button">
+                        <i class="bi bi-cash-stack"></i> Rémunération
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link rounded-pill px-4 d-flex align-items-center gap-2" data-bs-toggle="pill" data-bs-target="#eBank" type="button">
+                        <i class="bi bi-bank2"></i> Banque
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="tab-content">
+        <!-- Identity -->
+        <div class="tab-pane fade show active" id="eIdentity">
+            <div class="mc-card">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-vcard"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Identité Personnelle</h5>
+                        <small class="text-muted">Informations d'identité de l'employé</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Client / Entreprise <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-building text-muted"></i></span>
+                                <select name="ClientId" class="form-select border-start-0" required>
+                                    <option value="">— Sélectionner un client —</option>
+                                    @foreach (var c in clients)
+                                    {
+                                        if (Model?.ClientId == c.Id)
+                                        {
+                                            <option value="@c.Id" selected>@c.RaisonSociale</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@c.Id">@c.RaisonSociale</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">CIN <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-fingerprint text-muted"></i></span>
+                                <input type="text" name="CIN" class="form-control border-start-0" value="@Model?.CIN" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                <input type="text" name="Nom" class="form-control border-start-0" value="@Model?.Nom" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Prénom <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                <input type="text" name="Prenom" class="form-control border-start-0" value="@Model?.Prenom" required />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Date de Naissance</label>
+                            <input type="date" name="DateNaissance" class="form-control"
+                                value="@(Model?.DateNaissance?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Lieu de Naissance</label>
+                            <input type="text" name="LieuNaissance" class="form-control" value="@Model?.LieuNaissance" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Sexe</label>
+                            <div class="d-flex gap-2 mt-1">
+                                <input class="btn-check" type="radio" name="Sexe" id="sexe_M" value="M" @(Model?.Sexe == "M" ? "checked" : "") />
+                                <label class="btn btn-outline-primary rounded-pill px-3" for="sexe_M"><i class="bi bi-gender-male me-1"></i>M</label>
+                                <input class="btn-check" type="radio" name="Sexe" id="sexe_F" value="F" @(Model?.Sexe == "F" ? "checked" : "") />
+                                <label class="btn btn-outline-primary rounded-pill px-3" for="sexe_F"><i class="bi bi-gender-female me-1"></i>F</label>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Adresse</label>
+                            <textarea name="Adresse" class="form-control" rows="2">@Model?.Adresse</textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Téléphone</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-phone text-muted"></i></span>
+                                <input type="tel" name="TelephonePortable" class="form-control border-start-0" value="@Model?.TelephonePortable" />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Email</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
+                                <input type="email" name="Email" class="form-control border-start-0" value="@Model?.Email" />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Situation Familiale</label>
+                            <select name="SituationFamiliale" class="form-select">
+                                <option value="">— Sélectionner —</option>
+                                <option value="Célibataire" @(Model?.SituationFamiliale == "Célibataire" ? "selected" : "")>Célibataire</option>
+                                <option value="Marié" @(Model?.SituationFamiliale == "Marié" ? "selected" : "")>Marié(e)</option>
+                                <option value="Divorcé" @(Model?.SituationFamiliale == "Divorcé" ? "selected" : "")>Divorcé(e)</option>
+                                <option value="Veuf" @(Model?.SituationFamiliale == "Veuf" ? "selected" : "")>Veuf/Veuve</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Enfants à Charge</label>
+                            <input type="number" name="NombreEnfantsACharge" class="form-control" value="@Model?.NombreEnfantsACharge" min="0" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Professional -->
+        <div class="tab-pane fade" id="eProfessional">
+            <div class="mc-card">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-briefcase"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Informations Professionnelles</h5>
+                        <small class="text-muted">Contrat, poste et département</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">N° CNSS</label>
+                            <input type="text" name="NumeroCNSS" class="form-control" value="@Model?.NumeroCNSS" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Date d'Embauche <span class="text-danger">*</span></label>
+                            <input type="date" name="DateEmbauche" class="form-control"
+                                value="@(Model?.DateEmbauche.ToString("yyyy-MM-dd"))" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Type de Contrat</label>
+                            <select name="TypeContrat" class="form-select">
+                                <option value="">— Sélectionner —</option>
+                                <option value="CDI" @(Model?.TypeContrat == "CDI" ? "selected" : "")>CDI</option>
+                                <option value="CDD" @(Model?.TypeContrat == "CDD" ? "selected" : "")>CDD</option>
+                                <option value="Intérim" @(Model?.TypeContrat == "Intérim" ? "selected" : "")>Intérim</option>
+                                <option value="Stage" @(Model?.TypeContrat == "Stage" ? "selected" : "")>Stage</option>
+                                <option value="Freelance" @(Model?.TypeContrat == "Freelance" ? "selected" : "")>Freelance</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Durée (mois)</label>
+                            <input type="number" name="DureeContratMois" class="form-control" value="@Model?.DureeContratMois" min="1" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Poste</label>
+                            <input type="text" name="Poste" class="form-control" value="@Model?.Poste" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Département</label>
+                            <input type="text" name="Departement" class="form-control" value="@Model?.Departement" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Remuneration -->
+        <div class="tab-pane fade" id="eRemuneration">
+            <div class="mc-card">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-cash-stack"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Rémunération</h5>
+                        <small class="text-muted">Salaire, primes et mode de paiement</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Salaire de Base (MAD) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" name="SalaireBase" class="form-control" value="@Model?.SalaireBase" required />
+                                <span class="input-group-text bg-light">MAD</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mode de Paiement</label>
+                            <select name="ModePaiement" class="form-select">
+                                <option value="">— Sélectionner —</option>
+                                <option value="Virement" @(Model?.ModePaiement == "Virement" ? "selected" : "")>Virement Bancaire</option>
+                                <option value="Espèces" @(Model?.ModePaiement == "Espèces" ? "selected" : "")>Espèces</option>
+                                <option value="Chèque" @(Model?.ModePaiement == "Chèque" ? "selected" : "")>Chèque</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Prime d'Ancienneté (MAD)</label>
+                            <input type="number" step="0.01" name="PrimeAnciennete" class="form-control" value="@Model?.PrimeAnciennete" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Indemnité de Transport (MAD)</label>
+                            <input type="number" step="0.01" name="IndemniteTransport" class="form-control" value="@Model?.IndemniteTransport" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank -->
+        <div class="tab-pane fade" id="eBank">
+            <div class="mc-card">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-bank2"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Coordonnées Bancaires</h5>
+                        <small class="text-muted">RIB et informations de la banque</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">RIB (24 chiffres)</label>
+                            <input type="text" name="RIB" class="form-control font-monospace" value="@Model?.RIB" maxlength="24" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Banque</label>
+                            <select name="NomBanque" class="form-select">
+                                <option value="">— Sélectionner —</option>
+                                <option value="Attijariwafa Bank" @(Model?.NomBanque == "Attijariwafa Bank" ? "selected" : "")>Attijariwafa Bank</option>
+                                <option value="BMCE Bank of Africa" @(Model?.NomBanque == "BMCE Bank of Africa" ? "selected" : "")>BMCE Bank of Africa</option>
+                                <option value="Banque Populaire" @(Model?.NomBanque == "Banque Populaire" ? "selected" : "")>Banque Populaire</option>
+                                <option value="BMCI" @(Model?.NomBanque == "BMCI" ? "selected" : "")>BMCI</option>
+                                <option value="Société Générale Maroc" @(Model?.NomBanque == "Société Générale Maroc" ? "selected" : "")>Société Générale Maroc</option>
+                                <option value="Crédit du Maroc" @(Model?.NomBanque == "Crédit du Maroc" ? "selected" : "")>Crédit du Maroc</option>
+                                <option value="CIH Bank" @(Model?.NomBanque == "CIH Bank" ? "selected" : "")>CIH Bank</option>
+                                <option value="Al Barid Bank" @(Model?.NomBanque == "Al Barid Bank" ? "selected" : "")>Al Barid Bank</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Agence Bancaire</label>
+                            <input type="text" name="AgenceBancaire" class="form-control" value="@Model?.AgenceBancaire" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <a href="@Url.Action("Details", "Employees", new { id = empId })" class="btn btn-outline-secondary rounded-pill px-4">
+            <i class="bi bi-x-lg me-1"></i> Annuler
+        </a>
+        <button type="submit" class="btn btn-warning rounded-pill px-4">
+            <i class="bi bi-check-lg me-1"></i> Enregistrer les Modifications
+        </button>
+    </div>
+</form>

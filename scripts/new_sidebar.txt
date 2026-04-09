@@ -1,0 +1,33 @@
+﻿
+            <!-- ================================================================ -->
+            <!-- ===  ZONE 1 : BACKOFFICE / GESTION (Internal Management)      === -->
+            <!-- ================================================================ -->
+            <div class="nav-section" style="margin-top:0.25rem;">
+                <i class="bi bi-building-gear" style="font-size:0.65rem; color:#60a5fa;"></i>
+                <span style="color:#60a5fa; font-weight:800; letter-spacing:0.06em;">BACKOFFICE / GESTION</span>
+                <span class="section-line"></span>
+            </div>
+
+            <!-- Principal -->
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Home" ? "active" : "")" href="@Url.Action("Index", "Home")">
+                        <i class="bi bi-grid-1x2-fill"></i> Tableau de bord
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Gestion Clients -->
+            <div class="nav-section"><i class="bi bi-people" style="font-size:0.6rem;"></i> Gestion Clients <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Clients" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Clients")">
+                        <i class="bi bi-buildings"></i> Liste des clients
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Clients" && currentAction == "Create" ? "active" : "")" href="@Url.Action("Create", "Clients")">
+                        <i class="bi bi-plus-circle-dotted"></i> Nouveau client
+                    </a>
+                </li>
+            </ul>

@@ -1,0 +1,57 @@
+@model MetaCompta.Application.DTOs.RapportDto
+@{
+    ViewData["Title"] = "Détails du rapport";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-file-earmark-bar-graph me-2"></i>@Model.Titre</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Rapports")">Rapports</a></li>
+                <li class="breadcrumb-item active">Détails</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i> Imprimer</button>
+        <a href="@Url.Action("Index", "Rapports", new { type = Model.Type })" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Retour
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Informations</div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr><th class="text-muted" style="width:200px">Titre</th><td class="fw-medium">@Model.Titre</td></tr>
+                    <tr><th class="text-muted">Type</th><td><span class="badge bg-light text-dark">@Model.Type</span></td></tr>
+                    <tr><th class="text-muted">Période</th><td>@Model.Periode</td></tr>
+                    <tr><th class="text-muted">Date de génération</th><td>@(Model.DateGeneration.ToString("dd/MM/yyyy HH:mm"))</td></tr>
+                    <tr><th class="text-muted">Généré par</th><td>@Model.GenerePar</td></tr>
+                    <tr><th class="text-muted">Format</th><td><span class="badge bg-info text-dark">@Model.Format</span></td></tr>
+                    @if (!string.IsNullOrEmpty(Model.TailleFichier))
+                    {
+                        <tr><th class="text-muted">Taille</th><td>@Model.TailleFichier</td></tr>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-download me-2"></i>Téléchargement</div>
+            <div class="card-body text-center">
+                <i class="bi bi-file-earmark-pdf fs-1 text-danger d-block mb-3"></i>
+                <p class="text-muted">Le rapport est disponible en téléchargement.</p>
+                <button class="btn btn-mc-primary w-100">
+                    <i class="bi bi-download me-1"></i> Télécharger le rapport
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

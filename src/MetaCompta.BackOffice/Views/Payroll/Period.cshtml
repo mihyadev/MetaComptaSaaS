@@ -1,0 +1,81 @@
+﻿@using MetaCompta.Application.DTOs
+@model PayrollPeriodDto
+@{
+    var moisNoms = new[] { "", "Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre" };
+    var moisLabel = Model.Month >= 1 && Model.Month <= 12 ? moisNoms[Model.Month] : Model.Month.ToString();
+    ViewData["Title"] = $"Paie - {moisLabel} {Model.Year}";
+    var paySlips = ViewBag.PaySlips as List<PaySlipDto> ?? new List<PaySlipDto>();
+    var refStatuts = ViewData["Ref_STATUT_PAIE"] as List<ReferenceDataDto> ?? new();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Payroll">Paie</a></li>
+                <li class="breadcrumb-item active">@moisLabel @Model.Year</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0">@Model.ClientName - @moisLabel @Model.Year</h4>
+    </div>
+    <div class="btn-group">
+        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i> Retour
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left: 4px solid var(--mc-primary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Employes</div>
+                    <div class="stat-value">@Model.TotalEmployees</div>
+                </div>
+                <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);">
+                    <i class="bi bi-people"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left: 4px solid var(--mc-accent);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Brut Global</div>
+                    <div class="stat-value">@(Model.TotalBrutGlobal.HasValue ? Model.TotalBrutGlobal.Value.ToString("N0") : "-")</div>
+                </div>
+                <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--mc-accent);">
+                    <i class="bi bi-cash"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left: 4px solid var(--mc-secondary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Net Global</div>
+                    <div class="stat-value">@(Model.TotalNetPay.HasValue ? Model.TotalNetPay.Value.ToString("N0") : "-")</div>
+                </div>
+                <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: var(--mc-secondary);">
+                    <i class="bi bi-wallet2"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left: 4px solid #ef4444;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Charges Patronales</div>
+                    <div class="stat-value">@(Model.TotalChargesPatronales.HasValue ? Model.TotalChargesPatronales.Value.ToString("N0") : "-")</div>
+                </div>
+                <div class="stat-icon" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+                    <i class="bi bi-building"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

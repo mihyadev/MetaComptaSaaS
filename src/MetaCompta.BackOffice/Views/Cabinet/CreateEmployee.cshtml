@@ -1,0 +1,500 @@
+@model MetaCompta.Application.DTOs.CabinetEmployeeCreateDto
+@{
+    ViewData["Title"] = "Nouvel employ&eacute; du cabinet";
+    var claimsByDomain = ViewBag.ClaimsByDomain as Dictionary<string, List<string>> ?? new Dictionary<string, List<string>>();
+    var roles = ViewBag.Roles as List<MetaCompta.Application.DTOs.RoleDto> ?? new List<MetaCompta.Application.DTOs.RoleDto>();
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-person-plus-fill text-primary me-2"></i>Nouvel Employ&eacute; du Cabinet</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Cabinet")">Cabinet</a></li>
+                <li class="breadcrumb-item active">Nouvel employ&eacute;</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i> Retour &agrave; la liste
+    </a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Erreur de validation :</strong>
+        @Html.ValidationSummary(true)
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<form method="post" asp-action="CreateEmployee" id="formCreateEmployee">
+    @Html.AntiForgeryToken()
+
+    <!-- Wizard Progress Bar -->
+    <div class="mc-card mb-4">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex justify-content-between align-items-center" id="wizardProgress">
+                <div class="wizard-step active" data-step="0">
+                    <div class="wizard-step-circle"><i class="bi bi-person-vcard"></i></div>
+                    <span class="wizard-step-label">Identit&eacute; &amp; Compte</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="1">
+                    <div class="wizard-step-circle"><i class="bi bi-briefcase"></i></div>
+                    <span class="wizard-step-label">Professionnel</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="2">
+                    <div class="wizard-step-circle"><i class="bi bi-shield-lock"></i></div>
+                    <span class="wizard-step-label">R&ocirc;le &amp; Permissions</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== STEP 0: Identity & Account ==================== -->
+    <div class="wizard-panel" id="step0">
+        <div class="row g-4">
+
+            <!-- LEFT: Personal Info -->
+            <div class="col-lg-6">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-vcard"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">Informations Personnelles</h5>
+                            <small class="text-muted">Identit&eacute; civile de l'employ&eacute;</small>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="FirstName" class="form-label fw-semibold">Pr&eacute;nom <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                    <input asp-for="FirstName" class="form-control border-start-0" placeholder="Pr&eacute;nom" required />
+                                </div>
+                                <span asp-validation-for="FirstName" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="LastName" class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                    <input asp-for="LastName" class="form-control border-start-0" placeholder="Nom de famille" required />
+                                </div>
+                                <span asp-validation-for="LastName" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="CIN" class="form-label fw-semibold">CIN</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-fingerprint text-muted"></i></span>
+                                    <input asp-for="CIN" class="form-control border-start-0" placeholder="Ex: AB123456" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Sexe" class="form-label fw-semibold">Sexe</label>
+                                <select asp-for="Sexe" class="form-select">
+                                    <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                    <option value="Homme">Homme</option>
+                                    <option value="Femme">Femme</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                            <div class="col-md-6">
+                                <label asp-for="DateNaissance" class="form-label fw-semibold">Date de naissance</label>
+                                <input asp-for="DateNaissance" type="date" class="form-control" />
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="LieuNaissance" class="form-label fw-semibold">Lieu de naissance</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo text-muted"></i></span>
+                                    <input asp-for="LieuNaissance" class="form-control border-start-0" placeholder="Ville" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="SituationFamiliale" class="form-label fw-semibold">Situation familiale</label>
+                                <select asp-for="SituationFamiliale" class="form-select">
+                                    <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                    <option value="C&eacute;libataire">C&eacute;libataire</option>
+                                    <option value="Mari&eacute;(e)">Mari&eacute;(e)</option>
+                                    <option value="Divorc&eacute;(e)">Divorc&eacute;(e)</option>
+                                    <option value="Veuf/Veuve">Veuf/Veuve</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Telephone" class="form-label fw-semibold">T&eacute;l&eacute;phone</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-phone text-muted"></i></span>
+                                    <input asp-for="Telephone" class="form-control border-start-0" placeholder="+212 6XX XXX XXX" />
+                                </div>
+                            </div>
+
+                            <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                            <div class="col-12">
+                                <label asp-for="Adresse" class="form-label fw-semibold">Adresse</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo-alt text-muted"></i></span>
+                                    <input asp-for="Adresse" class="form-control border-start-0" placeholder="Adresse compl&egrave;te" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Account -->
+            <div class="col-lg-6">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-key-fill"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">Compte Utilisateur</h5>
+                            <small class="text-muted">Identifiants de connexion</small>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label asp-for="Email" class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
+                                    <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="email@cabinet.ma" required />
+                                </div>
+                                <span asp-validation-for="Email" class="text-danger small"></span>
+                            </div>
+                            <div class="col-12">
+                                <label asp-for="Password" class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                                    <input asp-for="Password" type="password" class="form-control border-start-0 border-end-0" placeholder="Min. 8 caract&egrave;res" required />
+                                    <button type="button" class="btn btn-outline-secondary border-start-0" onclick="togglePwd(this)"><i class="bi bi-eye"></i></button>
+                                </div>
+                                <span asp-validation-for="Password" class="text-danger small"></span>
+                                <div class="form-text mt-2">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Minimum 8 caract&egrave;res, 1 majuscule, 1 chiffre, 1 caract&egrave;re sp&eacute;cial
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-light border mt-4 mb-0 d-flex align-items-start gap-2 rounded-3">
+                            <i class="bi bi-info-circle-fill text-primary fs-5 mt-1"></i>
+                            <div class="small">
+                                L'employ&eacute; recevra ses identifiants de connexion apr&egrave;s la cr&eacute;ation du compte.
+                                Il pourra modifier son mot de passe lors de sa premi&egrave;re connexion.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================== STEP 1: Professional ==================== -->
+    <div class="wizard-panel d-none" id="step1">
+        <div class="row g-4">
+
+            <!-- LEFT: Professional Info -->
+            <div class="col-lg-6">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                        <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-briefcase-fill"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">Informations Professionnelles</h5>
+                            <small class="text-muted">Poste, contrat et affiliation</small>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="Poste" class="form-label fw-semibold">Poste / Fonction</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-briefcase text-muted"></i></span>
+                                    <input asp-for="Poste" class="form-control border-start-0" placeholder="Ex: Comptable senior" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Departement" class="form-label fw-semibold">D&eacute;partement</label>
+                                <select asp-for="Departement" class="form-select">
+                                    <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                    <option value="Direction">Direction</option>
+                                    <option value="Comptabilit&eacute;">Comptabilit&eacute;</option>
+                                    <option value="Fiscal">Fiscal</option>
+                                    <option value="Social">Social / Paie</option>
+                                    <option value="Juridique">Juridique</option>
+                                    <option value="Audit">Audit</option>
+                                    <option value="Support">Support / Admin</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                            <div class="col-md-6">
+                                <label asp-for="TypeContrat" class="form-label fw-semibold">Type de contrat</label>
+                                <select asp-for="TypeContrat" class="form-select">
+                                    <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                    <option value="CDI">CDI</option>
+                                    <option value="CDD">CDD</option>
+                                    <option value="Stage">Stage</option>
+                                    <option value="Freelance">Freelance</option>
+                                    <option value="Int&eacute;rim">Int&eacute;rim</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="DateEmbauche" class="form-label fw-semibold">Date d'embauche</label>
+                                <input asp-for="DateEmbauche" type="date" class="form-control" />
+                            </div>
+                            <div class="col-12">
+                                <label asp-for="NumeroCNSS" class="form-label fw-semibold">N&deg; CNSS</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-shield-check text-muted"></i></span>
+                                    <input asp-for="NumeroCNSS" class="form-control border-start-0" placeholder="Num&eacute;ro d'affiliation CNSS" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Identity Preview -->
+            <div class="col-lg-6">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                        <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-person-check-fill"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">R&eacute;capitulatif Identit&eacute;</h5>
+                            <small class="text-muted">Aper&ccedil;u des informations saisies</small>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3">
+                        <div class="text-center py-3">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
+                                 style="width:90px;height:90px;background:linear-gradient(135deg, var(--mc-primary), #4f46e5);box-shadow:0 8px 24px rgba(37,99,235,0.25);">
+                                <i class="bi bi-person-fill text-white" style="font-size:2.2rem;"></i>
+                            </div>
+                            <h5 class="mt-3 mb-1 fw-bold" id="previewName">&#8212;</h5>
+                            <p class="text-muted mb-0 small" id="previewEmail">&#8212;</p>
+                        </div>
+                        <hr class="my-3 opacity-25" />
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="d-flex align-items-center gap-2 p-2 rounded-3 bg-light">
+                                    <i class="bi bi-fingerprint text-primary"></i>
+                                    <div>
+                                        <div class="text-muted" style="font-size:.7rem;line-height:1;">CIN</div>
+                                        <div class="fw-semibold small" id="previewCIN">&#8212;</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center gap-2 p-2 rounded-3 bg-light">
+                                    <i class="bi bi-phone text-success"></i>
+                                    <div>
+                                        <div class="text-muted" style="font-size:.7rem;line-height:1;">T&eacute;l</div>
+                                        <div class="fw-semibold small" id="previewTel">&#8212;</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center gap-2 p-2 rounded-3 bg-light">
+                                    <i class="bi bi-gender-ambiguous text-warning"></i>
+                                    <div>
+                                        <div class="text-muted" style="font-size:.7rem;line-height:1;">Sexe</div>
+                                        <div class="fw-semibold small" id="previewSexe">&#8212;</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center gap-2 p-2 rounded-3 bg-light">
+                                    <i class="bi bi-calendar-event text-danger"></i>
+                                    <div>
+                                        <div class="text-muted" style="font-size:.7rem;line-height:1;">Naissance</div>
+                                        <div class="fw-semibold small" id="previewDOB">&#8212;</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================== STEP 2: Role & Permissions ==================== -->
+    <div class="wizard-panel d-none" id="step2">
+        <div class="row g-4">
+
+            <!-- LEFT: Role -->
+            <div class="col-lg-5">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                        <div class="stat-icon bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-person-gear"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">R&ocirc;le</h5>
+                            <small class="text-muted">Niveau d'acc&egrave;s dans le cabinet</small>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3">
+                        <label asp-for="Role" class="form-label fw-semibold">R&ocirc;le dans le cabinet <span class="text-danger">*</span></label>
+                        <select asp-for="Role" class="form-select form-select-lg mb-3" required id="roleSelect">
+                            <option value="Assistant">Assistant</option>
+                            <option value="Comptable">Comptable</option>
+                            <option value="Fiscaliste">Fiscaliste</option>
+                            <option value="Manager">Manager / Chef d'&eacute;quipe</option>
+                            <option value="SuperAdmin">Super Administrateur</option>
+                            @foreach (var role in roles.Where(r => r.Name != "SuperAdmin" && r.Name != "Manager" && r.Name != "Assistant" && r.Name != "Comptable" && r.Name != "Fiscaliste"))
+                            {
+                                <option value="@role.Name">@role.Name</option>
+                            }
+                        </select>
+                        <div class="alert alert-light border d-flex align-items-start gap-2 rounded-3 mb-0" id="roleHelp">
+                            <i class="bi bi-info-circle-fill text-primary fs-5 mt-1"></i>
+                            <div class="small">
+                                <strong>Assistant</strong> : Acc&egrave;s limit&eacute; aux t&acirc;ches assign&eacute;es uniquement.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Permissions -->
+            <div class="col-lg-7">
+                <div class="mc-card h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between px-4 pt-4 pb-0">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-shield-lock-fill"></i></div>
+                            <div>
+                                <h5 class="mb-0 fw-bold">Permissions</h5>
+                                <small class="text-muted">Droits d'acc&egrave;s par domaine</small>
+                            </div>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill me-1" onclick="toggleAllPerms(true)"><i class="bi bi-check-all me-1"></i>Tout</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="toggleAllPerms(false)"><i class="bi bi-x-lg me-1"></i>Aucun</button>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4 pt-3" style="max-height:480px;overflow-y:auto;">
+                        @foreach (var domain in claimsByDomain.OrderBy(d => d.Key))
+                        {
+                            <div class="mb-3 p-3 bg-light rounded-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <h6 class="fw-bold text-capitalize mb-0 small">
+                                        <i class="bi bi-folder2-open me-1 text-primary"></i>@domain.Key
+                                        <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:.65rem;">@domain.Value.Count</span>
+                                    </h6>
+                                    <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none small" onclick="toggleDomain('@domain.Key')">
+                                        <i class="bi bi-check2-square me-1"></i>tout
+                                    </button>
+                                </div>
+                                <div class="row g-1">
+                                    @foreach (var claim in domain.Value)
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input perm-cb" data-domain="@domain.Key"
+                                                       name="Permissions" value="@claim" id="perm_@claim.Replace(".", "_")" />
+                                                <label class="form-check-label small" for="perm_@claim.Replace(".", "_")">
+                                                    @claim.Split('.').Last()
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <div class="d-flex justify-content-between mt-4 mb-5">
+        <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2" id="btnPrev" onclick="wizardNav(-1)" disabled>
+            <i class="bi bi-arrow-left me-2"></i>Pr&eacute;c&eacute;dent
+        </button>
+        <div>
+            <button type="button" class="btn btn-mc-primary rounded-pill px-4 py-2" id="btnNext" onclick="wizardNav(1)">
+                Suivant<i class="bi bi-arrow-right ms-2"></i>
+            </button>
+            <button type="submit" class="btn btn-mc-success rounded-pill px-4 py-2 d-none" id="btnSubmit">
+                <i class="bi bi-check-lg me-2"></i>Cr&eacute;er l'employ&eacute;
+            </button>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<style>
+    .wizard-step-circle {
+        width: 48px; height: 48px; border-radius: 50%;
+        background: var(--mc-border); display: flex; align-items: center; justify-content: center;
+        font-size: 1.15rem; color: var(--mc-text-secondary); transition: all .3s ease;
+    }
+    .wizard-step.active .wizard-step-circle {
+        background: linear-gradient(135deg, var(--mc-primary), #4f46e5);
+        color: #fff; box-shadow: 0 4px 16px rgba(37,99,235,0.3);
+    }
+    .wizard-step.done .wizard-step-circle {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: #fff; box-shadow: 0 4px 12px rgba(5,150,105,0.25);
+    }
+    .wizard-step-label {
+        font-size: .75rem; font-weight: 600; color: var(--mc-text-secondary);
+        margin-top: .4rem; text-align: center; transition: color .3s;
+    }
+    .wizard-step.active .wizard-step-label { color: var(--mc-primary); }
+    .wizard-step.done .wizard-step-label { color: #059669; }
+    .wizard-step { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+    .wizard-connector { flex: 1; height: 3px; background: var(--mc-border); margin: 0 .75rem; border-radius: 2px; position: relative; top: -8px; }
+</style>
+<script>
+let step=0; const total=3;
+function wizardNav(d) {
+    document.querySelectorAll('.wizard-panel')[step].classList.add('d-none');
+    let ss = document.querySelectorAll('.wizard-step');
+    if (d > 0) { ss[step].classList.remove('active'); ss[step].classList.add('done'); }
+    step += d; step = Math.max(0, Math.min(total-1, step));
+    document.querySelectorAll('.wizard-panel')[step].classList.remove('d-none');
+    ss[step].classList.add('active'); ss[step].classList.remove('done');
+    document.getElementById('btnPrev').disabled = step === 0;
+    document.getElementById('btnNext').classList.toggle('d-none', step === total-1);
+    document.getElementById('btnSubmit').classList.toggle('d-none', step !== total-1);
+    updatePreview();
+}
+function updatePreview() {
+    let v = s => document.querySelector('[name='+s+']')?.value || '\u2014';
+    document.getElementById('previewName').textContent = (v('FirstName')+' '+v('LastName')).trim() || '\u2014';
+    document.getElementById('previewEmail').textContent = v('Email');
+    document.getElementById('previewCIN').textContent = v('CIN');
+    document.getElementById('previewTel').textContent = v('Telephone');
+    document.getElementById('previewSexe').textContent = v('Sexe');
+    let dob = document.querySelector('[name=DateNaissance]')?.value;
+    document.getElementById('previewDOB').textContent = dob ? new Date(dob).toLocaleDateString('fr-FR') : '\u2014';
+}
+function toggleAllPerms(c) { document.querySelectorAll('.perm-cb').forEach(x => x.checked = c); }
+function toggleDomain(d) { let cbs = document.querySelectorAll('.perm-cb[data-domain="'+d+'"]'); let a = Array.from(cbs).every(x => x.checked); cbs.forEach(x => x.checked = !a); }
+function togglePwd(b) { let i = b.previousElementSibling; if(i.type==='password'){i.type='text';b.innerHTML='<i class="bi bi-eye-slash"></i>';}else{i.type='password';b.innerHTML='<i class="bi bi-eye"></i>';} }
+const roleDesc = {
+    'Assistant':'Acc\u00e8s limit\u00e9 aux t\u00e2ches assign\u00e9es.',
+    'Comptable':'Gestion des d\u00e9clarations et saisie comptable.',
+    'Fiscaliste':'Sp\u00e9cialiste d\u00e9clarations fiscales (TVA, IS, IR).',
+    'Manager':'Supervision d\u0027\u00e9quipe, validation, contr\u00f4le qualit\u00e9.',
+    'SuperAdmin':'Acc\u00e8s complet \u00e0 toutes les fonctions.'
+};
+document.getElementById('roleSelect')?.addEventListener('change', function(){
+    document.getElementById('roleHelp').innerHTML = '<i class="bi bi-info-circle-fill text-primary fs-5 mt-1"></i><div class="small"><strong>'+this.value+'</strong> : '+(roleDesc[this.value]||this.value)+'</div>';
+});
+document.querySelectorAll('.wizard-step').forEach((s,i) => s.addEventListener('click', () => { while(step>i) wizardNav(-1); while(step<i) wizardNav(1); }));
+</script>
+}

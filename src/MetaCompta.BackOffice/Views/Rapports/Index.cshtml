@@ -1,0 +1,164 @@
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.RapportDto>
+@{
+    var type = ViewBag.TypeRapport as string;
+    var typeName = type switch
+    {
+        "Financier" => "Rapports financiers",
+        "Fiscal" => "Rapports fiscaux",
+        "Social" => "Rapports sociaux",
+        "Activite" => "Rapports d'activités",
+        "Personnalise" => "Rapports personnalisés",
+        _ => "Tous les rapports"
+    };
+    ViewData["Title"] = typeName;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-graph-up-arrow me-2"></i>@typeName</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item active">Rapports</li>
+            </ol>
+        </nav>
+    </div>
+    <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalGenerate">
+        <i class="bi bi-file-earmark-plus me-1"></i> Générer un rapport
+    </button>
+</div>
+
+<!-- Report Type Cards -->
+<div class="row g-3 mb-4">
+    @{
+        var types = new[] {
+            ("Financier", "bi-graph-up-arrow", "primary", "Financiers"),
+            ("Fiscal", "bi-file-earmark-bar-graph", "warning", "Fiscaux"),
+            ("Social", "bi-file-earmark-medical", "success", "Sociaux"),
+            ("Activite", "bi-activity", "info", "Activités"),
+            ("Personnalise", "bi-sliders", "secondary", "Personnalisés")
+        };
+    }
+    @foreach (var (t, icon, color, label) in types)
+    {
+        <div class="col">
+            <a href="@Url.Action("Index", "Rapports", new { type = t })"
+               class="mc-card d-block text-decoration-none p-3 @(type == t ? "border-primary border-2" : "")">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi @icon text-@color fs-5"></i>
+                    <span class="fw-semibold text-dark small">@label</span>
+                </div>
+            </a>
+        </div>
+    }
+</div>
+
+<!-- Filters -->
+<div class="mc-card mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="type" value="@type" />
+            <div class="col-md-8">
+                <label class="form-label">Recherche</label>
+                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Titre du rapport..." />
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+            </div>
+            <div class="col-md-2">
+                <a href="@Url.Action("Index", "Rapports")" class="btn btn-outline-secondary w-100">Voir tous</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>Rapports (@(Model?.TotalCount ?? 0))</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Titre</th>
+                        <th>Type</th>
+                        <th>Période</th>
+                        <th>Date génération</th>
+                        <th>Généré par</th>
+                        <th>Format</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        foreach (var r in Model.Items)
+                        {
+                            <tr>
+                                <td class="fw-medium">@r.Titre</td>
+                                <td><span class="badge bg-light text-dark">@r.Type</span></td>
+                                <td>@r.Periode</td>
+                                <td>@(r.DateGeneration.ToString("dd/MM/yyyy HH:mm"))</td>
+                                <td>@r.GenerePar</td>
+                                <td><span class="badge bg-info text-dark">@r.Format</span></td>
+                                <td>
+                                    <a href="@Url.Action("Details", "Rapports", new { id = r.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-bar-chart fs-1 d-block mb-2"></i>
+                                Aucun rapport trouvé.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Générer -->
+<div class="modal fade" id="modalGenerate" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="@Url.Action("Generate", "Rapports")">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-1"></i>Générer un rapport</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Type de rapport</label>
+                        <select name="type" class="form-select" required>
+                            <option value="Financier">Financier</option>
+                            <option value="Fiscal">Fiscal</option>
+                            <option value="Social">Social</option>
+                            <option value="Activite">Activité</option>
+                            <option value="Personnalise">Personnalisé</option>
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Date début</label>
+                            <input type="date" name="dateDebut" class="form-control" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Date fin</label>
+                            <input type="date" name="dateFin" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Générer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

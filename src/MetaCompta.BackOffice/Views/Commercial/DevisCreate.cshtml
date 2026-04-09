@@ -1,0 +1,179 @@
+﻿@model DevisCreateDto
+@using System.Text.Json
+@{
+    ViewData["Title"] = ViewBag.DevisId != null ? "Modifier le Devis" : "Nouveau Devis";
+    var clients = ViewBag.Clients as List<ClientDto> ?? new();
+    var devisId = ViewBag.DevisId as int?;
+    var clientServices = ViewBag.ClientServices as List<object> ?? new();
+    var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var servicesJson = JsonSerializer.Serialize(clientServices, jsonOptions);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-plus text-primary me-2"></i>@ViewData["Title"]</h4>
+    <a asp-action="Devis" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-left me-1"></i>Retour</a>
+</div>
+
+<form asp-action="@(devisId.HasValue ? "DevisEdit" : "DevisCreate")" asp-route-id="@devisId" method="post">
+    <div class="card border-0 shadow-sm rounded-4 mb-3">
+        <div class="card-header bg-white border-0 pt-3">
+            <h6 class="fw-semibold">Informations générales</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Client *</label>
+                    <select asp-for="ClientId" class="form-select">
+                        <option value="">Sélectionner un client</option>
+                        @foreach (var c in clients)
+                        {
+                            <option value="@c.Id" selected="@(c.Id == Model.ClientId ? "selected" : null)">@c.RaisonSociale
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Objet</label>
+                    <input asp-for="Objet" class="form-control" placeholder="Ex: Prestation comptabilité 2026" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Devise</label>
+                    <select asp-for="Devise" class="form-select">
+                        <option value="MAD" selected="@(Model.Devise == "MAD" ? "selected" : null)">MAD</option>
+                        <option value="EUR" selected="@(Model.Devise == "EUR" ? "selected" : null)">EUR</option>
+                        <option value="USD" selected="@(Model.Devise == "USD" ? "selected" : null)">USD</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Date de validité</label>
+                    <input asp-for="DateValidite" type="date" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Taux de change</label>
+                    <input asp-for="TauxChange" type="number" step="0.0001" class="form-control" placeholder="1.0000" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Description</label>
+                    <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Conditions particulières</label>
+                    <textarea asp-for="ConditionsParticulieres" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Notes</label>
+                    <textarea asp-for="Notes" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lignes -->
+    <div class="card border-0 shadow-sm rounded-4 mb-3">
+        <div class="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
+            <h6 class="fw-semibold mb-0">Lignes</h6>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="addLigne()"><i
+                    class="bi bi-plus me-1"></i>Ajouter une ligne</button>
+        </div>
+        <div class="card-body">
+            <div id="lignesContainer">
+                @if (Model.Lignes.Any())
+                {
+                    for (int i = 0; i < Model.Lignes.Count; i++)
+                    {
+                        <div class="ligne-row border rounded-3 p-3 mb-2" data-index="@i">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <input name="Lignes[@i].Description" value="@Model.Lignes[i].Description"
+                                        class="form-control form-control-sm" placeholder="Description *" required />
+                                </div>
+                                <div class="col-md-2">
+                                    <select name="Lignes[@i].TypeLigne" class="form-select form-select-sm">
+                                        <option value="Service"
+                                            selected="@(Model.Lignes[i].TypeLigne == "Service" ? "selected" : null)">Service
+                                        </option>
+                                        <option value="Régie"
+                                            selected="@(Model.Lignes[i].TypeLigne == "Régie" ? "selected" : null)">Régie
+                                        </option>
+                                        <option value="@RefCodes.ModeleFacturation.Forfait"
+                                            selected="@(Model.Lignes[i].TypeLigne == RefCodes.ModeleFacturation.Forfait ? "selected" : null)">
+                                            Forfait</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select name="Lignes[@i].ServiceContratId" class="form-select form-select-sm service-select"
+                                        data-selected="@Model.Lignes[i].ServiceContratId">
+                                        <option value="">— Service (optionnel)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-1">
+                                    <input name="Lignes[@i].Quantite" value="@Model.Lignes[i].Quantite" type="number"
+                                        step="0.01" class="form-control form-control-sm" placeholder="Qté" />
+                                </div>
+                                <div class="col-md-2">
+                                    <input name="Lignes[@i].PrixUnitaireHT" value="@Model.Lignes[i].PrixUnitaireHT"
+                                        type="number" step="0.01" class="form-control form-control-sm" placeholder="Prix HT" />
+                                </div>
+                                <div class="col-md-1">
+                                    <input name="Lignes[@i].TauxTVA" value="@Model.Lignes[i].TauxTVA" type="number" step="0.01"
+                                        class="form-control form-control-sm" placeholder="TVA%" />
+                                </div>
+                                <input name="Lignes[@i].Ordre" value="@Model.Lignes[i].Ordre" type="hidden" />
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                        onclick="this.closest('.ligne-row').remove()"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2">
+        <a asp-action="Devis" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+        <button type="submit" class="btn btn-primary rounded-pill px-4"><i
+                class="bi bi-check-circle me-1"></i>Enregistrer</button>
+    </div>
+</form>
+
+<script>
+    let ligneIndex = @(Model.Lignes.Count);
+    const services = @Html.Raw(servicesJson);
+
+    function refreshAllServiceDropdowns() {
+        const noServiceOption = services.length === 0
+            ? '<option value="">— Aucun service déclaratif configuré</option>'
+            : '<option value="">— Service (optionnel)</option>';
+        document.querySelectorAll('.service-select').forEach(sel => {
+            const prev = sel.dataset.selected || sel.value;
+            sel.innerHTML = noServiceOption +
+                services.map(s => `<option value="${s.id}" ${s.id == prev ? 'selected' : ''}>${s.label}</option>`).join('');
+        });
+    }
+
+    // Rafraîchir au chargement
+    refreshAllServiceDropdowns();
+
+    function addLigne() {
+        const container = document.getElementById('lignesContainer');
+        const i = ligneIndex++;
+        const serviceOpts = '<option value="">— Service (optionnel)</option>' +
+            services.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+        container.insertAdjacentHTML('beforeend', `
+            <div class="ligne-row border rounded-3 p-3 mb-2">
+                <div class="row g-2">
+                    <div class="col-md-3"><input name="Lignes[${i}].Description" class="form-control form-control-sm" placeholder="Description *" required /></div>
+                    <div class="col-md-2"><select name="Lignes[${i}].TypeLigne" class="form-select form-select-sm"><option value="Service">Service</option><option value="Régie">Régie</option><option value="@RefCodes.ModeleFacturation.Forfait">Forfait</option></select></div>
+                    <div class="col-md-2"><select name="Lignes[${i}].ServiceContratId" class="form-select form-select-sm service-select">${serviceOpts}</select></div>
+                    <div class="col-md-1"><input name="Lignes[${i}].Quantite" value="1" type="number" step="0.01" class="form-control form-control-sm" placeholder="Qté" /></div>
+                    <div class="col-md-2"><input name="Lignes[${i}].PrixUnitaireHT" value="0" type="number" step="0.01" class="form-control form-control-sm" placeholder="Prix HT" /></div>
+                    <div class="col-md-1"><input name="Lignes[${i}].TauxTVA" value="20" type="number" step="0.01" class="form-control form-control-sm" placeholder="TVA%" /></div>
+                    <input name="Lignes[${i}].Ordre" value="${i + 1}" type="hidden" />
+                    <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.ligne-row').remove()"><i class="bi bi-trash"></i></button></div>
+                </div>
+            </div>
+        `);
+    }
+</script>

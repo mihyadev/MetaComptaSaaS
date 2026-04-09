@@ -1,0 +1,16 @@
+﻿INSERT INTO LignesDocumentsCommerciaux(FactureId,TypeLigne,TypeService,CodeService,Ordre,[Description],Quantite,Unite,PrixUnitaireHT,TauxTVA,MontantTVA,MontantHT,MontantTTC,CreatedAt,IsDeleted,CabinetId) VALUES
+(100,'Service','TenuComptabilite','COMPTA',1,'Tenue comptable Janvier 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(100,'Service','DeclarationTVA','TVA',2,'TVA Janvier 2025',1,'Mois',3000,20,600,3000,3600,GETUTCDATE(),0,1),
+(100,'Service','GestionPaie','PAIE',3,'Paie Janvier 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(101,'Service','TenuComptabilite','COMPTA',1,'Tenue comptable Fevrier 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(101,'Service','DeclarationTVA','TVA',2,'TVA Fevrier 2025',1,'Mois',3000,20,600,3000,3600,GETUTCDATE(),0,1),
+(101,'Service','GestionPaie','PAIE',3,'Paie Fevrier 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(102,'Service','TenuComptabilite','COMPTA',1,'Tenue comptable Mars 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(102,'Service','DeclarationTVA','TVA',2,'TVA Mars 2025',1,'Mois',3000,20,600,3000,3600,GETUTCDATE(),0,1),
+(102,'Service','GestionPaie','PAIE',3,'Paie Mars 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(103,'Service','TenuComptabilite','COMPTA',1,'Tenue comptable Avril 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(103,'Service','DeclarationTVA','TVA',2,'TVA Avril 2025',1,'Mois',3000,20,600,3000,3600,GETUTCDATE(),0,1),
+(103,'Service','GestionPaie','PAIE',3,'Paie Avril 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(104,'Service','TenuComptabilite','COMPTA',1,'Tenue comptable Mai 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1),
+(104,'Service','DeclarationTVA','TVA',2,'TVA Mai 2025',1,'Mois',3000,20,600,3000,3600,GETUTCDATE(),0,1),
+(104,'Service','GestionPaie','PAIE',3,'Paie Mai 2025',1,'Mois',6000,20,1200,6000,7200,GETUTCDATE(),0,1);

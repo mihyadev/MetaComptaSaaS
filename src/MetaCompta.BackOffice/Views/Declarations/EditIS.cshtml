@@ -1,0 +1,235 @@
+﻿@using MetaCompta.Application.DTOs
+@model DeclarationISDto
+@{
+    ViewData["Title"] = "Déclaration IS";
+    var declaration = ViewBag.Declaration as DeclarationDto;
+    var clientId = declaration?.ClientId ?? 0;
+    var exercice = Model.AnneeFiscale > 0 ? Model.AnneeFiscale : DateTime.Now.Year;
+}
+
+@await Html.PartialAsync("_WorkflowActionBar")
+
+<!-- ═══════ HEADER ═══════ -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.82rem;">
+                <li class="breadcrumb-item"><a href="/Declarations?type=IS">IS</a></li>
+                @if (declaration != null)
+                {
+                    <li class="breadcrumb-item"><a href="/Declarations/Details/@declaration.Id">@declaration.Periode</a></li>
+                }
+                <li class="breadcrumb-item active">Exercice @exercice</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>IS — Liasse Fiscale @exercice</h4>
+        @if (declaration != null)
+        {
+            <p class="text-muted mb-0 mt-1" style="font-size:0.82rem;">
+                <i class="bi bi-building me-1"></i><strong>@declaration.ClientName</strong>
+                <span class="mx-2">|</span><i class="bi bi-calendar3 me-1"></i>Exercice du 01/01/@exercice au 31/12/@exercice
+                <span class="mx-2">|</span><span class="badge bg-primary-subtle text-primary rounded-pill">@declaration.Statut</span>
+            </p>
+        }
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success rounded-pill px-3 btn-sm" onclick="LiasseFiscale.UI.exportData()"><i class="bi bi-download me-1"></i>Exporter</button>
+        <button class="btn btn-outline-info rounded-pill px-3 btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button>
+        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3 btn-sm"><i class="bi bi-arrow-left me-1"></i>Retour</a>
+    </div>
+</div>
+
+<!-- ═══════ SIDEBAR NAV + CONTENT ═══════ -->
+<div class="row g-3">
+    <!-- LEFT: Navigation Panel -->
+    <div class="col-lg-2 col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 position-sticky" style="top:80px;">
+            <div class="card-body p-2">
+                <!-- États de Synthèse -->
+                <div class="lf-nav-section">
+                    <div class="lf-nav-group-title"><i class="bi bi-file-earmark-ruled me-1"></i>États de Synthèse</div>
+                    <button class="lf-nav-btn" data-target="bilan"><i class="bi bi-columns-gap"></i>Bilan</button>
+                    <button class="lf-nav-btn" data-target="cpc"><i class="bi bi-graph-up-arrow"></i>CPC</button>
+                    <button class="lf-nav-btn" data-target="esg"><i class="bi bi-bar-chart-line"></i>ESG</button>
+                    <button class="lf-nav-btn" data-target="tf"><i class="bi bi-cash-stack"></i>Tableau Financement</button>
+                    <button class="lf-nav-btn" data-target="etic"><i class="bi bi-file-earmark-text"></i>ETIC</button>
+                    <button class="lf-nav-btn" data-target="detail-cpc"><i class="bi bi-list-columns"></i>Détail CPC</button>
+                    <button class="lf-nav-btn" data-target="passage"><i class="bi bi-arrow-left-right"></i>Passage RF</button>
+                    <button class="lf-nav-btn" data-target="affectation"><i class="bi bi-pie-chart"></i>Affectation Résultat</button>
+                    <button class="lf-nav-btn" data-target="tva"><i class="bi bi-receipt"></i>Détail TVA</button>
+                    <button class="lf-nav-btn" data-target="immob"><i class="bi bi-building-gear"></i>Immobilisations</button>
+                    <button class="lf-nav-btn" data-target="amort"><i class="bi bi-graph-down-arrow"></i>Amortissements</button>
+                    <button class="lf-nav-btn" data-target="provisions"><i class="bi bi-shield-exclamation"></i>Provisions</button>
+                    <button class="lf-nav-btn" data-target="creances"><i class="bi bi-people"></i>Créances / Dettes</button>
+                    <button class="lf-nav-btn" data-target="9421"><i class="bi bi-file-text"></i>État 9421</button>
+                </div>
+                <!-- Fiscal -->
+                <div class="lf-nav-section">
+                    <div class="lf-nav-group-title"><i class="bi bi-bank me-1"></i>Fiscal</div>
+                    <button class="lf-nav-btn active" data-target="donnees-is"><i class="bi bi-calculator-fill"></i>Données IS</button>
+                    <button class="lf-nav-btn" data-target="controles"><i class="bi bi-shield-check"></i>Contrôles</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Content Area -->
+    <div class="col-lg-10 col-md-9">
+        <div id="lf-content-area">
+
+            <div class="lf-pane" id="pane-bilan" style="display:none;"></div>
+            <div class="lf-pane" id="pane-cpc" style="display:none;"></div>
+            <div class="lf-pane" id="pane-esg" style="display:none;"></div>
+            <div class="lf-pane" id="pane-tf" style="display:none;"></div>
+            <div class="lf-pane" id="pane-etic" style="display:none;"></div>
+            <div class="lf-pane" id="pane-detail-cpc" style="display:none;"></div>
+            <div class="lf-pane" id="pane-passage" style="display:none;"></div>
+            <div class="lf-pane" id="pane-affectation" style="display:none;"></div>
+            <div class="lf-pane" id="pane-tva" style="display:none;"></div>
+            <div class="lf-pane" id="pane-immob" style="display:none;"></div>
+            <div class="lf-pane" id="pane-amort" style="display:none;"></div>
+            <div class="lf-pane" id="pane-provisions" style="display:none;"></div>
+            <div class="lf-pane" id="pane-creances" style="display:none;"></div>
+            <div class="lf-pane" id="pane-9421" style="display:none;"></div>
+
+            <!-- ══════════ DONNÉES IS (default visible) ══════════ -->
+            <div class="lf-pane" id="pane-donnees-is">
+                <form asp-action="EditIS" asp-route-id="@Model.DeclarationId" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="DeclarationId" />
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                                    <h6 class="fw-bold mb-0"><i class="bi bi-calculator text-primary me-2"></i>Résultat Fiscal</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-12"><label asp-for="AnneeFiscale" class="form-label">Année Fiscale</label><input asp-for="AnneeFiscale" class="form-control is-input" type="number" /></div>
+                                        <div class="col-6"><label asp-for="ResultatComptable" class="form-label">Résultat Comptable</label><input asp-for="ResultatComptable" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="Reintegrations" class="form-label">Réintégrations</label><input asp-for="Reintegrations" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="Deductions" class="form-label">Déductions</label><input asp-for="Deductions" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="DeficitsAnterieurs" class="form-label">Déficits Antérieurs</label><input asp-for="DeficitsAnterieurs" class="form-control is-input" type="number" step="0.01" /></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                                    <h6 class="fw-bold mb-0"><i class="bi bi-calendar-event text-info me-2"></i>Acomptes Provisionnels</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-6"><label asp-for="Acompte1" class="form-label">Acompte 1 (Mars)</label><input asp-for="Acompte1" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="Acompte2" class="form-label">Acompte 2 (Juin)</label><input asp-for="Acompte2" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="Acompte3" class="form-label">Acompte 3 (Sept.)</label><input asp-for="Acompte3" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-6"><label asp-for="Acompte4" class="form-label">Acompte 4 (Déc.)</label><input asp-for="Acompte4" class="form-control is-input" type="number" step="0.01" /></div>
+                                        <div class="col-12"><label asp-for="AcomptesVerses" class="form-label">Total Acomptes</label><input asp-for="AcomptesVerses" class="form-control is-input" type="number" step="0.01" /></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card border-0 shadow-sm rounded-4 mb-3">
+                        <div class="card-header bg-transparent border-0 px-4 pt-3"><h6 class="fw-bold mb-0"><i class="bi bi-bar-chart text-warning me-2"></i>Résumé IS</h6></div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3"><label class="form-label text-muted small">Résultat Fiscal</label><div id="resFiscal" class="fw-bold">@Model.ResultatFiscal.ToString("N2")</div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">Base Imposable</label><div id="baseImp" class="fw-bold">@Model.BaseImposable.ToString("N2")</div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">Taux IS</label><div id="tauxIS" class="fw-bold">@Model.TauxIS.ToString("N0")%</div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">IS Dû</label><div id="isDu" class="fw-bold text-danger fs-5">@Model.ISDu.ToString("N2")</div></div>
+                                <div class="col-md-3"><label class="form-label text-muted small">IS Net</label><div id="isNet" class="fw-bold text-primary fs-4">@Model.ISNet.ToString("N2") <small class="fs-6">MAD</small></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mb-3">
+                        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer IS</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="lf-pane" id="pane-controles" style="display:none;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════ FORMULA CONFIG MODAL — Centered ═══════ -->
+<div id="lf-config-modal" class="lf-modal-backdrop" style="display:none;">
+    <div class="lf-modal">
+        <div class="lf-modal-header">
+            <div>
+                <h6 id="lf-cfg-title" class="mb-0">Configuration Formule</h6>
+                <small class="text-muted">Code: <strong id="lf-cfg-code"></strong> | Type: <span id="lf-cfg-type"></span></small>
+            </div>
+            <button type="button" class="btn-close" onclick="LiasseFiscale.UI.closeConfig()"></button>
+        </div>
+        <div class="lf-modal-body">
+            <div class="mb-2" id="lf-cfg-custom"></div>
+            <div class="mb-3">
+                <label class="form-label fw-bold small">Formule actuelle</label>
+                <div id="lf-cfg-ref" class="lf-cfg-formula-display"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold small">Comptes de la balance</label>
+                <div id="lf-cfg-accounts" class="lf-acct-list"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold small">Forcer une valeur manuelle (optionnel)</label>
+                <input type="text" id="lf-cfg-override" class="form-control form-control-sm" placeholder="Laisser vide pour calcul automatique">
+                <small class="text-muted">Si renseigné, cette valeur remplacera le calcul de la formule.</small>
+            </div>
+        </div>
+        <div class="lf-modal-footer">
+            <button class="btn btn-sm btn-outline-danger" onclick="LiasseFiscale.UI.resetConfig()"><i class="bi bi-arrow-counterclockwise me-1"></i>Réinitialiser</button>
+            <div class="ms-auto d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" onclick="LiasseFiscale.UI.closeConfig()">Annuler</button>
+                <button class="btn btn-sm btn-primary" onclick="LiasseFiscale.UI.saveConfig()"><i class="bi bi-check-lg me-1"></i>Appliquer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<link rel="stylesheet" href="~/css/liasse-fiscale.css" />
+<script src="~/js/liasse-fiscale.js"></script>
+<script>
+    // IS auto-calc
+    function calcIS() {
+        var r = parseFloat(document.getElementById('ResultatComptable').value)||0;
+        var ri = parseFloat(document.getElementById('Reintegrations').value)||0;
+        var d = parseFloat(document.getElementById('Deductions').value)||0;
+        var df = parseFloat(document.getElementById('DeficitsAnterieurs').value)||0;
+        var rf = r + ri - d, bi = Math.max(0, rf - df), is2 = 0, t = 0;
+        if(bi<=300000){t=10;is2=bi*0.10;}else if(bi<=1000000){t=20;is2=bi*0.20;}else if(bi<=100000000){t=31;is2=bi*0.31;}else{t=35;is2=bi*0.35;}
+        var ac = parseFloat(document.getElementById('AcomptesVerses').value)||(parseFloat(document.getElementById('Acompte1').value)||0)+(parseFloat(document.getElementById('Acompte2').value)||0)+(parseFloat(document.getElementById('Acompte3').value)||0)+(parseFloat(document.getElementById('Acompte4').value)||0);
+        var net = Math.max(0, is2 - ac);
+        document.getElementById('resFiscal').textContent=rf.toFixed(2);
+        document.getElementById('baseImp').textContent=bi.toFixed(2);
+        document.getElementById('tauxIS').textContent=t+'%';
+        document.getElementById('isDu').textContent=is2.toFixed(2);
+        document.getElementById('isNet').innerHTML=net.toFixed(2)+' <small class="fs-6">MAD</small>';
+    }
+    document.querySelectorAll('.is-input').forEach(function(el){el.addEventListener('input',calcIS);});
+    calcIS();
+
+    // Init Liasse Fiscale
+    document.addEventListener('DOMContentLoaded', function(){
+        LiasseFiscale.UI.init(@clientId, @exercice, @Model.DeclarationId);
+    });
+
+    // Sidebar navigation
+    document.querySelectorAll('.lf-nav-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            document.querySelectorAll('.lf-nav-btn').forEach(function(b){b.classList.remove('active');});
+            btn.classList.add('active');
+            var target = btn.getAttribute('data-target');
+            document.querySelectorAll('.lf-pane').forEach(function(p){p.style.display='none';});
+            var pane = document.getElementById('pane-' + target);
+            if(pane) pane.style.display='block';
+            LiasseFiscale.UI.onPaneShown(target);
+        });
+    });
+</script>
+}

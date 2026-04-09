@@ -1,0 +1,109 @@
+﻿@model MetaCompta.Application.DTOs.DossierJuridiqueDto
+@{
+    ViewData["Title"] = "Détails du dossier juridique";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-bank me-2"></i>@Model.Reference</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Juridique")">Juridique</a></li>
+                <li class="breadcrumb-item active">Détails</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Index", "Juridique")" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Retour
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Informations du dossier</div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th class="text-muted" style="width:200px">Référence</th>
+                        <td class="fw-medium">@Model.Reference</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Client</th>
+                        <td>@Model.ClientNom</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Type de dossier</th>
+                        <td><span class="badge bg-light text-dark">@Model.TypeDossier</span></td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Objet</th>
+                        <td>@Model.Objet</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Description</th>
+                        <td>@(Model.Description ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Date d'ouverture</th>
+                        <td>@(Model.DateOuverture.ToString("dd/MM/yyyy"))</td>
+                    </tr>
+                    @if (Model.DateCloture.HasValue)
+                    {
+                        <tr>
+                            <th class="text-muted">Date de clôture</th>
+                            <td>@(Model.DateCloture.Value.ToString("dd/MM/yyyy"))</td>
+                        </tr>
+                    }
+                    <tr>
+                        <th class="text-muted">Responsable</th>
+                        <td>@Model.Responsable</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Statut</th>
+                        <td><span class="badge badge-@Model.Statut?.ToLower()">@Model.Statut</span></td>
+                    </tr>
+                    @if (Model.Montant > 0)
+                    {
+                        <tr>
+                            <th class="text-muted">Montant</th>
+                            <td class="fw-bold">@(Model.Montant.ToString("N2")) MAD</td>
+                        </tr>
+                    }
+                </table>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.Notes))
+        {
+            <div class="mc-card mt-4">
+                <div class="card-header"><i class="bi bi-chat-text me-2"></i>Notes</div>
+                <div class="card-body">
+                    <p>@Model.Notes</p>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="col-md-4">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-gear me-2"></i>Changer le statut</div>
+            <div class="card-body">
+                <form method="post" action="@Url.Action("ChangeStatus", "Juridique")">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="mb-3">
+                        <select name="statut" class="form-select">
+                            <option value="Ouvert" selected="@(Model.Statut == "Ouvert")">Ouvert</option>
+                            <option value="@RefCodes.StatutContrat.EnCours" selected="@(Model.Statut == RefCodes.StatutContrat.EnCours)">En cours</option>
+                            <option value="Termine" selected="@(Model.Statut == "Termine")">Terminé</option>
+                            <option value="@RefCodes.StatutBonCommande.Annule" selected="@(Model.Statut == RefCodes.StatutBonCommande.Annule)">Annulé</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-check me-1"></i>
+                        Appliquer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

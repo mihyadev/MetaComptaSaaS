@@ -1,0 +1,72 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.JournalDto>
+@{
+    ViewData["Title"] = "Journaux comptables";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-book me-2"></i>Journaux comptables</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Comptabilité</li>
+                <li class="breadcrumb-item active">Journaux</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
+        <i class="bi bi-building fs-5"></i>
+        <div><strong>@client.RaisonSociale</strong> <span class="text-muted ms-2">@client.FormeJuridique</span></div>
+    </div>
+}
+
+<div class="row g-4">
+    @if (Model != null && Model.Any())
+    {
+        foreach (var journal in Model)
+        {
+            <div class="col-md-4">
+                <div class="mc-card p-4">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-book"></i></div>
+                        <div>
+                            <h5 class="mb-0">@journal.Nom</h5>
+                            <span class="badge bg-info text-dark">@journal.Code</span>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mb-2">
+                        <span>Nombre d''écritures</span>
+                        <span class="fw-bold text-dark">@journal.NombreEcritures</span>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mb-2">
+                        <span>Total Débit</span>
+                        <span class="fw-bold text-success">@(journal.TotalDebit.ToString("N2")) MAD</span>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small">
+                        <span>Total Crédit</span>
+                        <span class="fw-bold text-danger">@(journal.TotalCredit.ToString("N2")) MAD</span>
+                    </div>
+                    <div class="mt-3">
+                        <a href="@Url.Action("Ecritures", "Comptabilite", new { journal = journal.Code })" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="bi bi-eye me-1"></i> Voir les écritures
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="col-12">
+            <div class="mc-card p-4 text-center text-muted">
+                <i class="bi bi-book fs-1 d-block mb-2"></i>
+                Aucun journal trouvé.
+            </div>
+        </div>
+    }
+</div>

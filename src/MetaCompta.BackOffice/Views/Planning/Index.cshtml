@@ -1,0 +1,210 @@
+@{
+    ViewData["Title"] = "Planning";
+    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-calendar3 me-2"></i>Planning</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item active">Planning</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalEvent">
+            <i class="bi bi-plus-circle me-1"></i> Nouvel événement
+        </button>
+    </div>
+</div>
+
+<!-- Calendar Container -->
+<div class="mc-card">
+    <div class="card-body">
+        <div id="calendar" style="min-height:600px;"></div>
+    </div>
+</div>
+
+<!-- Modal Create/Edit Event -->
+<div class="modal fade" id="modalEvent" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calendar-plus me-1"></i>Événement</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="eventId" />
+                <div class="mb-3">
+                    <label class="form-label">Titre <span class="text-danger">*</span></label>
+                    <input type="text" id="eventTitre" class="form-control" placeholder="Titre de l'événement" />
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Date début</label>
+                        <input type="datetime-local" id="eventDebut" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Date fin</label>
+                        <input type="datetime-local" id="eventFin" class="form-control" />
+                    </div>
+                </div>
+                <div class="mb-3 mt-3">
+                    <label class="form-label">Type</label>
+                    <select id="eventType" class="form-select">
+                        <option value="Reunion">Réunion</option>
+                        <option value="Echeance">Échéance fiscale</option>
+                        <option value="Tache">Tâche</option>
+                        <option value="Rappel">Rappel</option>
+                        <option value="Autre">Autre</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea id="eventDescription" class="form-control" rows="3" placeholder="Description..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Client</label>
+                    <select id="eventClient" class="form-select">
+                        <option value="">— Aucun —</option>
+                        @if (clients != null)
+                        {
+                            foreach (var c in clients)
+                            {
+                                <option value="@c.Id">@c.RaisonSociale</option>
+                            }
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger d-none" id="btnDeleteEvent"><i class="bi bi-trash me-1"></i> Supprimer</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-mc-primary" id="btnSaveEvent"><i class="bi bi-check me-1"></i> Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(function() {
+            var calendarEl = document.getElementById('calendar');
+            var events = [];
+
+            function loadEvents() {
+
+                $.getJSON('@Url.Action("GetEvents", "Planning")', {}, function(data) {
+                    renderCalendar(data || []);
+                });
+            }
+
+            function renderCalendar(evts) {
+                var $cal = $('#calendar');
+                $cal.empty();
+
+                // Simple month view using ECharts or plain HTML
+                var html = '<div class="table-responsive"><table class="table table-bordered">';
+                html += '<thead><tr>';
+                var jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                jours.forEach(function(j) { html += '<th class="text-center bg-light">' + j + '</th>'; });
+                html += '</tr></thead><tbody>';
+
+                var today = new Date();
+                var year = today.getFullYear();
+                var month = today.getMonth();
+                var firstDay = new Date(year, month, 1);
+                var lastDay = new Date(year, month + 1, 0);
+                var startOffset = (firstDay.getDay() + 6) % 7;
+
+                var day = 1 - startOffset;
+                for (var row = 0; row < 6; row++) {
+                    html += '<tr>';
+                    for (var col = 0; col < 7; col++) {
+                        var currentDate = new Date(year, month, day);
+                        var isCurrentMonth = currentDate.getMonth() === month;
+                        var isToday = currentDate.toDateString() === today.toDateString();
+                        var dayClass = isCurrentMonth ? '' : 'text-muted opacity-50';
+                        var todayClass = isToday ? 'bg-primary text-white rounded px-1' : '';
+
+                        html += '<td style="min-height:80px;vertical-align:top;min-width:120px;" class="' + dayClass + '">';
+                        html += '<div class="fw-bold small mb-1"><span class="' + todayClass + '">' + currentDate.getDate() + '</span></div>';
+
+                        // Show events for this day
+                        var dateStr = currentDate.toISOString().split('T')[0];
+                        evts.forEach(function(e) {
+                            var evtDate = e.dateDebut ? e.dateDebut.split('T')[0] : '';
+                            if (evtDate === dateStr) {
+                                var color = e.type === 'Echeance' ? 'danger' : e.type === 'Reunion' ? 'primary' : 'success';
+                                html += '<div class="badge bg-' + color + ' w-100 text-start mb-1 text-truncate" style="font-size:0.7rem;cursor:pointer;" title="' + e.titre + '">' + e.titre + '</div>';
+                            }
+                        });
+
+                        html += '</td>';
+                        day++;
+                    }
+                    html += '</tr>';
+                    if (day > lastDay.getDate() && row >= 3) break;
+                }
+
+                html += '</tbody></table></div>';
+                html += '<div class="mt-3 d-flex gap-2 justify-content-center">';
+                html += '<span class="badge bg-primary">Réunion</span>';
+                html += '<span class="badge bg-danger">Échéance</span>';
+                html += '<span class="badge bg-success">Tâche</span>';
+                html += '</div>';
+                $cal.html(html);
+            }
+
+            loadEvents();
+
+
+            // Save event
+            $('#btnSaveEvent').on('click', function() {
+                var id = $('#eventId').val();
+                var data = {
+                    id: id ? parseInt(id) : 0,
+                    titre: $('#eventTitre').val(),
+                    dateDebut: $('#eventDebut').val(),
+                    dateFin: $('#eventFin').val(),
+                    type: $('#eventType').val(),
+                    description: $('#eventDescription').val(),
+                    clientId: $('#eventClient').val() || null
+                };
+                var url = id ? '@Url.Action("Update", "Planning")' : '@Url.Action("Create", "Planning")';
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(data),
+                    headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+                    success: function(res) {
+                        if (res && res.success) {
+                            toastr.success(res.message || 'Opération réussie');
+                            $('#modalEvent').modal('hide');
+                            loadEvents();
+                        } else {
+                            toastr.error(res && res.message || 'Erreur');
+                        }
+                    }
+                });
+            });
+
+            // Delete event
+            $('#btnDeleteEvent').on('click', function() {
+                var id = $('#eventId').val();
+                if (!id || !confirm('Supprimer cet événement ?')) return;
+                $.post('@Url.Action("Delete", "Planning")', { id: id }, function(res) {
+                    if (res && res.success) {
+                        toastr.success('Événement supprimé');
+                        $('#modalEvent').modal('hide');
+                        loadEvents();
+                    }
+                });
+            });
+        });
+    </script>
+    @Html.AntiForgeryToken()
+}

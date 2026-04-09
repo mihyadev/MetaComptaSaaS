@@ -1,0 +1,494 @@
+@using MetaCompta.Application.DTOs
+@using MetaCompta.Domain.Common
+@{
+    // ═════════════════════════════════════════════════════════════════
+    //  GENERIC WORKFLOW ACTION BAR — Step-aware, Role-aware, Adaptive
+    //  Shows ONLY the actions possible at the current workflow step
+    //  Respects: AssignmentType, IsClientStep, StepType, permissions
+    // ═════════════════════════════════════════════════════════════════
+
+    var declaration  = ViewBag.ActionBarDeclaration as DeclarationDto;
+    var wfInstance   = ViewBag.ActionBarWorkflow as WorkflowInstanceDto;
+    var wfStep       = ViewBag.ActionBarCurrentStep as WorkflowStepInstanceDto;
+    var wfTemplates  = ViewBag.ActionBarTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+    var userRole     = ViewBag.ActionBarUserRole as string ?? "";
+    var userId       = ViewBag.ActionBarUserId as string ?? "";
+    var isClientPortal = (bool)(ViewBag.ActionBarIsClientPortal ?? false);
+
+    if (declaration == null) { return; }
+
+    var statut = declaration.Statut ?? "";
+    var type   = declaration.Type ?? "";
+    var declId = declaration.Id;
+
+    // — Workflow state —
+    var hasWorkflow     = wfInstance != null;
+    var wfActive        = hasWorkflow && wfInstance.Status == "Active";
+    var wfPaused        = hasWorkflow && wfInstance.Status == "Paused";
+    var wfCompleted     = hasWorkflow && wfInstance.Status == "Completed";
+    var hasCurrentStep  = wfStep != null;
+
+    // — STEP-AWARE permission resolution —
+    // Who can act on this step?
+    var stepAssignment  = hasCurrentStep ? (wfStep.AssignmentType ?? "") : "";
+    var isMyStep        = hasCurrentStep && wfStep.AssignedToUserId == userId;
+    var isClientStep    = hasCurrentStep && wfStep.IsClientStep;
+    var stepType        = hasCurrentStep ? (wfStep.StepType ?? "") : "";
+    var stepStatus      = hasCurrentStep ? (wfStep.Status ?? "") : "";
+
+    // Can the current user advance this step?
+    // Employee: must be assigned OR be a manager/gerant
+    // Client step: only if isClientPortal
+    // AutoSystem: never (handled by system)
+    var canActOnStep = false;
+    if (wfActive && hasCurrentStep)
+    {
+        if (stepAssignment == "AutoSystem")
+            canActOnStep = false; // system auto-advances
+        else if (isClientStep)
+            canActOnStep = isClientPortal; // only client on extranet
+        else if (isMyStep)
+            canActOnStep = true; // assigned employee
+        else if (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin")
+            canActOnStep = true; // managers can always act
+    }
+
+    // — Declaration status buttons — also step-aware —
+    // Edit: only in preparation/data-entry steps (Brouillon, ACompleter, EnCours)
+    var canEdit = statut == RefCodes.StatutDeclaration.Brouillon
+               || statut == RefCodes.StatutDeclaration.ACompleter
+               || statut == RefCodes.StatutDeclaration.EnCours
+               || statut == RefCodes.StatutDeclaration.EnPreparation;
+
+    // Complete: only during Saisie step (data entry)
+    var canComplete = (statut == RefCodes.StatutDeclaration.Brouillon
+                    || statut == RefCodes.StatutDeclaration.ACompleter
+                    || statut == RefCodes.StatutDeclaration.EnPreparation)
+                    && (!hasWorkflow || !wfActive
+                        || stepType == "Saisie"
+                        || stepType == "Collecte");
+
+    // Validate: only during Controle/ValidationInterne steps
+    var canValidate = (statut == RefCodes.StatutDeclaration.Completee
+                    || statut == RefCodes.StatutDeclaration.EnRevision)
+                    && (!hasWorkflow || !wfActive
+                        || stepType == "Controle"
+                        || stepType == "ValidationInterne");
+
+    // Submit: only during DepotSoumission step
+    var canSubmit = statut == RefCodes.StatutDeclaration.Validee
+                  && (!hasWorkflow || !wfActive
+                      || stepType == "DepotSoumission");
+
+    // Delete: never when submitted/validated/paid, and not during active workflow
+    var canDelete = !wfActive
+                  && statut != RefCodes.StatutDeclaration.Soumise
+                  && statut != RefCodes.StatutDeclaration.Validee
+                  && statut != RefCodes.StatutDeclaration.Payee;
+
+    // Workflow control buttons
+    var canAdvanceWf = canActOnStep && stepStatus != "Completed" && stepStatus != "Skipped";
+    var canSkipWf    = canActOnStep && hasCurrentStep && !wfStep.IsRequired;
+    var canPauseWf   = wfActive && (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin");
+    var canResumeWf  = wfPaused && (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin");
+    var canCancelWf  = (wfActive || wfPaused) && (userRole == "Gerant" || userRole == "Admin");
+    var canStartWf   = !hasWorkflow || wfCompleted;
+
+    // Restrict status changes to users who can act on the step
+    if (wfActive && hasCurrentStep && !canActOnStep)
+    {
+        canComplete = false;
+        canValidate = false;
+        canSubmit = false;
+    }
+
+    // — Theme —
+    var themeColor = type switch {
+        "TVA"  => "#059669",
+        "IS"   => "#2563eb",
+        "IR"   => "#7c3aed",
+        "CNSS" => "#d97706",
+        _      => "#64748b"
+    };
+    var themeIcon = type switch {
+        "TVA"  => "bi-receipt",
+        "IS"   => "bi-bank",
+        "IR"   => "bi-person-lines-fill",
+        "CNSS" => "bi-shield-check",
+        _      => "bi-file-earmark-text"
+    };
+    var statutLabel = statut switch {
+        "Brouillon"     => "Brouillon",
+        "ACompleter"    => "À Compléter",
+        "EnCours"       => "En Cours",
+        "EnPreparation" => "En Préparation",
+        "Completee"     => "Complétée",
+        "EnRevision"    => "En Révision",
+        "Validee"       => "Validée",
+        "Soumise"       => "Soumise",
+        "Payee"         => "Payée",
+        "Refusee"       => "Refusée",
+        "Deposee"       => "Déposée",
+        _               => statut
+    };
+    var statutColor = statut switch {
+        "Brouillon"     => "#94a3b8",
+        "ACompleter"    => "#f59e0b",
+        "EnCours"       => "#3b82f6",
+        "EnPreparation" => "#8b5cf6",
+        "Completee"     => "#2563eb",
+        "EnRevision"    => "#a855f7",
+        "Validee"       => "#059669",
+        "Soumise"       => "#166534",
+        "Payee"         => "#047857",
+        "Refusee"       => "#ef4444",
+        "Deposee"       => "#059669",
+        _               => "#64748b"
+    };
+    var statutIcon = statut switch {
+        "Brouillon"     => "bi-pencil",
+        "ACompleter"    => "bi-exclamation-circle",
+        "EnCours"       => "bi-arrow-repeat",
+        "Completee"     => "bi-check",
+        "EnRevision"    => "bi-search",
+        "Validee"       => "bi-check-circle",
+        "Soumise"       => "bi-send-fill",
+        "Payee"         => "bi-cash-coin",
+        "Refusee"       => "bi-x-circle",
+        "Deposee"       => "bi-send-fill",
+        _               => "bi-circle"
+    };
+
+    // Step type label for context
+    var stepLabel = hasCurrentStep ? stepType switch {
+        "Initialisation"    => "Initialisation",
+        "DemandePieces"     => "Demande de piéces",
+        "Collecte"          => "Collecte documents",
+        "Saisie"            => "Saisie comptable",
+        "Controle"          => "Contrœle qualité",
+        "ValidationInterne" => "Validation interne",
+        "ValidationClient"  => "Validation client",
+        "DepotSoumission"   => "Dépœt / Soumission",
+        "ClotureArchivage"  => "Clœture & archivage",
+        _                   => wfStep.StepName
+    } : "";
+
+    // Who is expected to act?
+    var actorLabel = hasCurrentStep ? stepAssignment switch {
+        "Employee"   => wfStep.AssignedToUserName ?? "Employé cabinet",
+        "Role"       => "Rœle: " + (wfStep.AssignedToUserName ?? "Manager"),
+        "Department" => "Département",
+        "Client"     => "Client (Extranet)",
+        "AutoSystem" => "Systéme automatique",
+        _            => ""
+    } : "";
+}
+
+<!-- WORKFLOW ACTION BAR -->
+<div class="wf-action-bar mb-4" style="background:linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+
+    <!-- TOP ROW: Status + Workflow State + Deadline -->
+    <div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 1.25rem; border-bottom:1px solid #e2e8f0; flex-wrap:wrap;">
+
+        <!-- Declaration type badge -->
+        <div style="display:flex;align-items:center;gap:0.4rem;">
+            <div style="width:30px;height:30px;border-radius:10px;background:@(themeColor)12;display:flex;align-items:center;justify-content:center;">
+                <i class="bi @themeIcon" style="color:@themeColor;font-size:0.85rem;"></i>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">@type @(declaration.Periode)</div>
+                <div style="font-size:0.78rem;font-weight:700;color:#1e293b;">@(declaration.ClientName ?? "Client")</div>
+            </div>
+        </div>
+
+        <div style="width:1px;height:26px;background:#cbd5e1;"></div>
+
+        <!-- Statut badge -->
+        <div style="display:flex;align-items:center;gap:0.3rem;padding:0.25rem 0.65rem;border-radius:20px;background:@(statutColor)15;border:1px solid @(statutColor)25;">
+            <i class="bi @statutIcon" style="color:@statutColor;font-size:0.7rem;"></i>
+            <span style="font-size:0.72rem;font-weight:700;color:@statutColor;">@statutLabel</span>
+        </div>
+
+        @if (hasWorkflow && wfInstance != null)
+        {
+            <div style="width:1px;height:26px;background:#cbd5e1;"></div>
+
+            <!-- Workflow progress mini -->
+            <div style="display:flex;align-items:center;gap:0.4rem;flex:1;min-width:180px;">
+                <div style="font-size:0.68rem;color:#7c3aed;font-weight:700;white-space:nowrap;">
+                    <i class="bi bi-lightning-charge-fill me-1"></i>@(wfActive ? "Actif" : wfPaused ? "Pause" : wfCompleted ? "Terminé" : wfInstance.Status)
+                </div>
+                <div style="flex:1;height:5px;border-radius:3px;background:#e2e8f0;overflow:hidden;min-width:60px;">
+                    <div style="height:100%;width:@(wfInstance.ProgressPercent)%;background:linear-gradient(90deg,#7c3aed,#a855f7);border-radius:3px;transition:width 0.5s;"></div>
+                </div>
+                <span style="font-size:0.68rem;font-weight:700;color:#7c3aed;">@wfInstance.CompletedSteps/@wfInstance.TotalSteps</span>
+            </div>
+
+            @if (hasCurrentStep && wfStep != null)
+            {
+                <div style="display:flex;align-items:center;gap:0.3rem;padding:0.2rem 0.55rem;border-radius:14px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);font-size:0.7rem;">
+                    <i class="bi bi-arrow-right-circle-fill" style="color:#3b82f6;font-size:0.65rem;"></i>
+                    <span style="font-weight:600;color:#1e40af;">Étape @(wfStep.StepOrder + 1): @stepLabel</span>
+                </div>
+
+                <!-- Actor indicator -->
+                <div style="display:flex;align-items:center;gap:0.25rem;padding:0.2rem 0.55rem;border-radius:14px;font-size:0.68rem;
+                    @(isClientStep ? "background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);color:#92400e;" :
+                      isMyStep ? "background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);color:#166534;" :
+                      "background:rgba(100,116,139,0.06);border:1px solid rgba(100,116,139,0.15);color:#475569;")">
+                    <i class="bi @(isClientStep ? "bi-person-badge" : isMyStep ? "bi-person-check-fill" : "bi-person")" style="font-size:0.6rem;"></i>
+                    <span style="font-weight:600;">@(isMyStep && !isClientStep ? "Vous" : actorLabel)</span>
+                </div>
+            }
+        }
+
+        <!-- Deadline -->
+        @if (declaration.DaysUntilDeadline < 0)
+        {
+            <div class="ms-auto" style="display:flex;align-items:center;gap:0.25rem;padding:0.2rem 0.55rem;border-radius:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);">
+                <i class="bi bi-exclamation-triangle-fill" style="color:#ef4444;font-size:0.65rem;"></i>
+                <span style="font-size:0.68rem;font-weight:700;color:#ef4444;">RETARD @(Math.Abs(declaration.DaysUntilDeadline))j</span>
+            </div>
+        }
+        else if (declaration.DaysUntilDeadline <= 7)
+        {
+            <div class="ms-auto" style="display:flex;align-items:center;gap:0.25rem;padding:0.2rem 0.55rem;border-radius:14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
+                <i class="bi bi-clock-fill" style="color:#f59e0b;font-size:0.65rem;"></i>
+                <span style="font-size:0.68rem;font-weight:700;color:#f59e0b;">@declaration.DaysUntilDeadline j</span>
+            </div>
+        }
+        else
+        {
+            <div class="ms-auto" style="font-size:0.68rem;color:#94a3b8;">
+                <i class="bi bi-calendar3 me-1"></i>@(declaration.DateLimite.ToString("dd/MM/yyyy"))
+            </div>
+        }
+    </div>
+
+    <!-- BOTTOM ROW: Action Buttons -->
+    <div style="display:flex; align-items:center; gap:0.4rem; padding:0.5rem 1.25rem; flex-wrap:wrap;">
+
+        @* === DECLARATION STATUS ACTIONS (step-aware) === *@
+
+        @if (canEdit)
+        {
+            var editAction = type switch {
+                "TVA"  => "EditTVA",
+                "IS"   => "EditIS",
+                "IR"   => "EditIR",
+                "CNSS" => "EditCNSS",
+                _      => "Details"
+            };
+            <a href="@Url.Action(editAction, "Declarations", new { id = declId })"
+               class="wf-btn wf-btn-edit" title="Modifier la déclaration">
+                <i class="bi bi-pencil-square"></i> <span>Modifier</span>
+            </a>
+        }
+
+        @if (canComplete)
+        {
+            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Completee" />
+                <button type="submit" class="wf-btn wf-btn-complete" title="Marquer comme complétée">
+                    <i class="bi bi-check2-circle"></i> <span>Compléter</span>
+                </button>
+            </form>
+        }
+
+        @if (canValidate)
+        {
+            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Validee" />
+                <button type="submit" class="wf-btn wf-btn-validate" title="Valider la déclaration">
+                    <i class="bi bi-shield-check"></i> <span>Valider</span>
+                </button>
+            </form>
+        }
+
+        @if (canSubmit)
+        {
+            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Soumise" />
+                <button type="submit" class="wf-btn wf-btn-submit" title="Soumettre la déclaration">
+                    <i class="bi bi-send-fill"></i> <span>Soumettre</span>
+                </button>
+            </form>
+        }
+
+        @* === SEPARATOR === *@
+        @if ((canEdit || canComplete || canValidate || canSubmit) && (canAdvanceWf || canStartWf))
+        {
+            <div style="width:1px;height:22px;background:#cbd5e1;margin:0 0.15rem;"></div>
+        }
+
+        @* === WORKFLOW STEP ACTIONS === *@
+
+        @if (canAdvanceWf && wfInstance != null)
+        {
+            <form asp-action="AdvanceWorkflowStep" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-advance" title="Compléter l'étape et avancer le workflow">
+                    <i class="bi bi-skip-forward-fill"></i> <span>Avancer Étape</span>
+                </button>
+            </form>
+        }
+
+        @if (canSkipWf && wfInstance != null)
+        {
+            <form asp-action="AdvanceWorkflowStep" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <input type="hidden" name="forceSkip" value="true" />
+                <button type="submit" class="wf-btn wf-btn-skip" title="Ignorer cette étape (non obligatoire)">
+                    <i class="bi bi-skip-end"></i> <span>Passer</span>
+                </button>
+            </form>
+        }
+
+        @if (canPauseWf && wfInstance != null)
+        {
+            <form asp-action="PauseDeclarationWorkflow" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-pause" title="Pause workflow">
+                    <i class="bi bi-pause-circle"></i>
+                </button>
+            </form>
+        }
+
+        @if (canResumeWf && wfInstance != null)
+        {
+            <form asp-action="ResumeDeclarationWorkflow" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-resume" title="Reprendre le workflow">
+                    <i class="bi bi-play-circle"></i> <span>Reprendre</span>
+                </button>
+            </form>
+        }
+
+        @if (canCancelWf && wfInstance != null)
+        {
+            <form asp-action="CancelDeclarationWorkflow" asp-controller="Declarations" method="post" class="d-inline"
+                  onsubmit="return confirm('Annuler ce workflow ?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-cancel" title="Annuler le workflow">
+                    <i class="bi bi-x-octagon"></i>
+                </button>
+            </form>
+        }
+
+        @if (canStartWf && wfTemplates.Any())
+        {
+            <form asp-action="StartWorkflow" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                @if (wfTemplates.Count == 1)
+                {
+                    <input type="hidden" name="workflowTemplateId" value="@wfTemplates.First().Id" />
+                    <button type="submit" class="wf-btn wf-btn-start" title="Démarrer le workflow">
+                        <i class="bi bi-lightning-charge-fill"></i> <span>Démarrer WF</span>
+                    </button>
+                }
+                else
+                {
+                    <div class="d-inline-flex align-items-center gap-0">
+                        <select name="workflowTemplateId" class="form-select form-select-sm" style="border-radius:14px 0 0 14px;font-size:0.7rem;height:28px;min-width:130px;border-color:#c4b5fd;">
+                            @foreach (var tpl in wfTemplates)
+                            {
+                                <option value="@tpl.Id">@tpl.Name (@tpl.StepCount étapes)</option>
+                            }
+                        </select>
+                        <button type="submit" class="wf-btn wf-btn-start" style="border-radius:0 14px 14px 0;">
+                            <i class="bi bi-lightning-charge-fill"></i>
+                        </button>
+                    </div>
+                }
+            </form>
+        }
+
+        @* === RIGHT SIDE === *@
+        <div class="ms-auto d-flex gap-1">
+            @if (hasWorkflow && wfInstance != null)
+            {
+                <a href="@Url.Action("InstanceDetails", "Workflow", new { id = wfInstance.Id })"
+                   class="wf-btn wf-btn-info" title="Détails workflow">
+                    <i class="bi bi-diagram-3"></i>
+                </a>
+            }
+
+            @if (canDelete)
+            {
+                <form asp-action="Delete" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline"
+                      onsubmit="return confirm('Supprimer cette déclaration ?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="wf-btn wf-btn-danger" title="Supprimer">
+                        <i class="bi bi-trash3"></i>
+                    </button>
+                </form>
+            }
+
+            @if (!string.IsNullOrEmpty(declaration.PdfUrl))
+            {
+                <a href="@declaration.PdfUrl" target="_blank" class="wf-btn wf-btn-secondary" title="PDF">
+                    <i class="bi bi-file-pdf"></i>
+                </a>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .wf-btn {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        padding: 0.25rem 0.55rem; border-radius: 14px;
+        font-size: 0.7rem; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer;
+        text-decoration: none; transition: all 0.15s ease;
+        white-space: nowrap; line-height: 1.3;
+    }
+    .wf-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .wf-btn i { font-size: 0.65rem; }
+
+    .wf-btn-edit      { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+    .wf-btn-edit:hover { background:#fde68a; color:#78350f; }
+    .wf-btn-complete   { background:#dbeafe; color:#1e40af; border-color:#93c5fd; }
+    .wf-btn-complete:hover { background:#bfdbfe; }
+    .wf-btn-validate   { background:#d1fae5; color:#065f46; border-color:#6ee7b7; }
+    .wf-btn-validate:hover { background:#a7f3d0; }
+    .wf-btn-submit     { background:#dcfce7; color:#166534; border-color:#86efac; }
+    .wf-btn-submit:hover { background:#bbf7d0; }
+    .wf-btn-advance    { background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border-color:#7c3aed; }
+    .wf-btn-advance:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.3); }
+    .wf-btn-skip       { background:#f0f0f0; color:#64748b; border-color:#cbd5e1; }
+    .wf-btn-skip:hover { background:#e2e8f0; }
+    .wf-btn-pause      { background:#fef9c3; color:#854d0e; border-color:#fde047; }
+    .wf-btn-pause:hover { background:#fef08a; }
+    .wf-btn-resume     { background:#d1fae5; color:#065f46; border-color:#34d399; }
+    .wf-btn-resume:hover { background:#a7f3d0; }
+    .wf-btn-cancel     { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+    .wf-btn-cancel:hover { background:#fecaca; }
+    .wf-btn-start      { background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border-color:#7c3aed; }
+    .wf-btn-start:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); color:#fff; }
+    .wf-btn-info       { background:#ede9fe; color:#5b21b6; border-color:#c4b5fd; }
+    .wf-btn-info:hover { background:#ddd6fe; }
+    .wf-btn-secondary  { background:#f1f5f9; color:#475569; border-color:#cbd5e1; }
+    .wf-btn-secondary:hover { background:#e2e8f0; }
+    .wf-btn-danger     { background:#fff; color:#dc2626; border-color:#fecaca; }
+    .wf-btn-danger:hover { background:#fef2f2; }
+
+    @@media (max-width: 768px) {
+        .wf-btn span { display: none; }
+        .wf-btn { padding: 0.25rem 0.4rem; }
+    }
+</style>

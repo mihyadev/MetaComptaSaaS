@@ -1,0 +1,242 @@
+﻿
+            <!-- ================================================================ -->
+            <!-- ===  ZONE 1 : ESPACE CABINET (Gestion du cabinet)             === -->
+            <!-- ================================================================ -->
+            <div class="nav-section" style="margin-top:0.25rem;"><i class="bi bi-building-gear" style="font-size:0.65rem; color:#60a5fa;"></i> <span style="color:#60a5fa; font-weight:800;">ESPACE CABINET</span> <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Home" ? "active" : "")" href="@Url.Action("Index", "Home")"><i class="bi bi-grid-1x2-fill"></i> Tableau de bord</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Clients")"><i class="bi bi-buildings"></i> Clients</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Create" ? "active" : "")" href="@Url.Action("Create", "Clients")"><i class="bi bi-plus-circle-dotted"></i> Nouveau client</a></li>
+            </ul>
+
+            <!-- Commercial -->
+            <div class="nav-section"><i class="bi bi-briefcase" style="font-size:0.6rem;"></i> Commercial <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuCommercial" role="button" aria-expanded="@(currentController == "Commercial" ? "true" : "false")">
+                        <i class="bi bi-briefcase-fill"></i><span>Commercial</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Commercial" ? "show" : "")" id="menuCommercial">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Commercial")"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Devis" || currentAction == "DevisDetails" || currentAction == "DevisCreate" || currentAction == "DevisEdit") ? "active" : "")" href="@Url.Action("Devis", "Commercial")"><i class="bi bi-file-earmark-plus"></i> Devis</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "BonsCommande" || currentAction == "BonCommandeDetails") ? "active" : "")" href="@Url.Action("BonsCommande", "Commercial")"><i class="bi bi-cart-check"></i> Bons de commande</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Contrats" || currentAction == "ContratDetails") ? "active" : "")" href="@Url.Action("Contrats", "Commercial")"><i class="bi bi-file-earmark-text"></i> Contrats</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Commercial" && (currentAction == "Factures" || currentAction == "FactureDetails" || currentAction == "FactureCreate") ? "active" : "")" href="@Url.Action("Factures", "Commercial")"><i class="bi bi-receipt"></i> Factures</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+            <!-- Planification -->
+            <div class="nav-section"><i class="bi bi-calendar-check" style="font-size:0.6rem;"></i> Planification <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Planning" && !isClientSection ? "active" : "")" href="@Url.Action("Index", "Planning")"><i class="bi bi-calendar-week-fill"></i> Calendrier</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Tasks" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Tasks")"><i class="bi bi-list-task"></i> T&#226;ches</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Tasks" && currentAction == "MyTasks" ? "active" : "")" href="@Url.Action("MyTasks", "Tasks")"><i class="bi bi-person-check"></i> Mes t&#226;ches</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Tasks" && currentAction == "Overdue" ? "active" : "")" href="@Url.Action("Overdue", "Tasks")"><i class="bi bi-exclamation-triangle-fill"></i> En retard</a></li>
+            </ul>
+
+            <!-- Workflow -->
+            <div class="nav-section"><i class="bi bi-lightning-charge" style="font-size:0.6rem;"></i> Workflow <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuWorkflow" role="button" aria-expanded="@(currentController == "Workflow" || currentController == "Departments" ? "true" : "false")">
+                        <i class="bi bi-lightning-charge-fill"></i><span>Workflow</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Workflow" || currentController == "Departments" ? "show" : "")" id="menuWorkflow">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Workflow")"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && (currentAction == "Builder" || currentAction == "Templates" || currentAction == "CreateTemplate" || currentAction == "EditTemplate" || currentAction == "TemplateDetails") ? "active" : "")" href="@Url.Action("Builder", "Workflow")"><i class="bi bi-kanban-fill"></i> Builder</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && (currentAction == "Instances" || currentAction == "InstanceDetails") ? "active" : "")" href="@Url.Action("Instances", "Workflow")"><i class="bi bi-collection-fill"></i> Ex&#233;cutions</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "MyTasks" ? "active" : "")" href="@Url.Action("MyTasks", "Workflow")"><i class="bi bi-person-check-fill"></i> Mes &#233;tapes</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Departments" ? "active" : "")" href="@Url.Action("Index", "Departments")"><i class="bi bi-diagram-2-fill"></i> D&#233;partements</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Administration Cabinet -->
+            <div class="nav-section"><i class="bi bi-shield-lock" style="font-size:0.6rem;"></i> Administration <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Cabinet" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Cabinet")"><i class="bi bi-people-fill"></i> Collaborateurs</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Cabinet" && currentAction == "Roles" ? "active" : "")" href="@Url.Action("Roles", "Cabinet")"><i class="bi bi-shield-lock-fill"></i> R&#244;les &amp; Permissions</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Cabinet" && currentAction == "Equipes" ? "active" : "")" href="@Url.Action("Equipes", "Cabinet")"><i class="bi bi-microsoft-teams"></i> &#201;quipes</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Cabinet" && currentAction == "AuditLogs" ? "active" : "")" href="@Url.Action("AuditLogs", "Cabinet")"><i class="bi bi-clock-history"></i> Journal d''audit</a></li>
+            </ul>
+            <!-- Rapports & Configuration -->
+            <div class="nav-section"><i class="bi bi-sliders2" style="font-size:0.6rem;"></i> Rapports &amp; Config <span class="section-line"></span></div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuRapports" role="button" aria-expanded="@(currentController == "Rapports" ? "true" : "false")">
+                        <i class="bi bi-graph-up-arrow"></i><span>Rapports</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Rapports" ? "show" : "")" id="menuRapports">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Financiers", "Rapports")"><i class="bi bi-currency-exchange"></i> Financiers</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Fiscaux", "Rapports")"><i class="bi bi-file-earmark-bar-graph"></i> Fiscaux</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Sociaux", "Rapports")"><i class="bi bi-file-earmark-medical"></i> Sociaux</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Activites", "Rapports")"><i class="bi bi-activity"></i> Activit&#233;s</a></li>
+                        </ul>
+                    </div>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuParams" role="button" aria-expanded="@(currentController == "Parametres" ? "true" : "false")">
+                        <i class="bi bi-gear-wide-connected"></i><span>Configuration</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Parametres" ? "show" : "")" id="menuParams">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Parametres")"><i class="bi bi-gear"></i> G&#233;n&#233;ral</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Templates", "Parametres")"><i class="bi bi-file-earmark-ruled"></i> Mod&#232;les docs</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Notifications", "Parametres")"><i class="bi bi-bell-fill"></i> Notifications</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Integrations", "Parametres")"><i class="bi bi-plug-fill"></i> Int&#233;grations</a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- ================================================================ -->
+            <!--  SEPARATEUR VISUEL entre les deux espaces                         -->
+            <!-- ================================================================ -->
+            <div style="margin: 0.75rem 0.85rem 0.5rem; padding: 0; border-top: 2px solid rgba(245,158,11,0.4);"></div>
+
+            <!-- ================================================================ -->
+            <!-- ===  ZONE 2 : ESPACE CLIENT (Dossier du client actif)         === -->
+            <!-- ================================================================ -->
+            <div class="nav-section" style="color: @(hasClient ? "#f59e0b" : "#475569"); margin-top:0.25rem;"><i class="bi bi-folder-symlink-fill" style="font-size:0.65rem;"></i> <span style="font-weight:800;">ESPACE CLIENT</span> <span class="section-line"></span></div>
+
+            @if (!hasClient)
+            {
+                <div class="client-section-warning"><i class="bi bi-info-circle"></i> S&#233;lectionnez un client dans la barre sup&#233;rieure pour acc&#233;der &#224; son dossier.</div>
+            }
+            else
+            {
+                <div class="client-section-warning" style="border-left-color: #f59e0b; background: rgba(245,158,11,0.06);">
+                    <i class="bi bi-building" style="color:#f59e0b;"></i> <strong style="color:#e2e8f0;">@selectedClientName</strong>
+                </div>
+                @if (readOnlyDeclarations)
+                {
+                    <div class="client-section-warning" style="border-left-color: #ef4444; background: rgba(239,68,68,0.06); font-size:0.72rem; padding:0.4rem 0.6rem; margin-top:0.25rem;">
+                        <i class="bi bi-lock text-danger"></i> <span style="color:#fca5a5;">Aucun contrat actif &#8212; consultation seule</span>
+                    </div>
+                }
+            }
+            <ul class="nav flex-column">
+                <!-- Fiscalit&#233; -->
+                @if (!hasClient || HasService("TVA", "IS", "IR"))
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuFiscalite" role="button" aria-expanded="@(currentController == "Declarations" ? "true" : "false")">
+                        <i class="bi bi-receipt"></i><span>Fiscalit&#233;</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Declarations" ? "show" : "")" id="menuFiscalite">
+                        <ul class="nav flex-column">
+                            @if (!hasClient || HasService("TVA"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "TVA" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "TVA" })"><i class="bi bi-receipt-cutoff"></i> TVA</a></li>
+                            }
+                            @if (!hasClient || HasService("IS"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "IS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-bank2"></i> IS</a></li>
+                            }
+                            @if (!hasClient || HasService("IR"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "IR" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IR" })"><i class="bi bi-person-lines-fill"></i> IR</a></li>
+                            }
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type == null ? "active" : "")" href="@Url.Action("Index", "Declarations")"><i class="bi bi-clock-history"></i> Historique</a></li>
+                        </ul>
+                    </div>
+                </li>
+                }
+                <!-- Comptabilit&#233; -->
+                @if (!hasClient || HasService("Comptabilite"))
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuCompta" role="button" aria-expanded="@(currentController == "Comptabilite" ? "true" : "false")">
+                        <i class="bi bi-calculator-fill"></i><span>Comptabilit&#233;</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Comptabilite" ? "show" : "")" id="menuCompta">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Ecritures", "Comptabilite")"><i class="bi bi-pencil-square"></i> &#201;critures</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Journaux", "Comptabilite")"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("GrandLivre", "Comptabilite")"><i class="bi bi-book"></i> Grand livre</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Balance", "Comptabilite")"><i class="bi bi-symmetry-horizontal"></i> Balance</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance &#226;g&#233;e</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Rapprochement</a></li>
+                        </ul>
+                    </div>
+                </li>
+                }
+                <!-- Social & Paie -->
+                @if (!hasClient || HasService("CNSS", "Paie"))
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuPaie" role="button" aria-expanded="@(currentController == "Payroll" || currentController == "Employees" ? "true" : "false")">
+                        <i class="bi bi-cash-stack"></i><span>Social &amp; Paie</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Payroll" || currentController == "Employees" ? "show" : "")" id="menuPaie">
+                        <ul class="nav flex-column">
+                            @if (!hasClient || HasService("CNSS"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && ViewBag.Type?.ToString() == "CNSS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "CNSS" })"><i class="bi bi-shield-check"></i> CNSS</a></li>
+                            }
+                            @if (!hasClient || HasService("Paie"))
+                            {
+                            <li class="nav-item"><a class="nav-link @(currentController == "Payroll" ? "active" : "")" href="@Url.Action("Index", "Payroll")"><i class="bi bi-file-earmark-spreadsheet"></i> Bulletins</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Employees" ? "active" : "")" href="@Url.Action("Index", "Employees")"><i class="bi bi-person-badge"></i> Employ&#233;s</a></li>
+                            }
+                        </ul>
+                    </div>
+                </li>
+                }                <!-- Juridique -->
+                @if (!hasClient || HasService("Juridique"))
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuJuridique" role="button" aria-expanded="@(currentController == "Juridique" ? "true" : "false")">
+                        <i class="bi bi-bank2"></i><span>Juridique</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Juridique" ? "show" : "")" id="menuJuridique">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "CreationSociete" })"><i class="bi bi-building-add"></i> Cr&#233;ation soci&#233;t&#233;</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "ModificationStatuts" })"><i class="bi bi-pencil"></i> Modification statuts</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "PVAG" })"><i class="bi bi-file-earmark-check"></i> PV AG</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "DepotLegal" })"><i class="bi bi-archive"></i> D&#233;p&#244;t l&#233;gal</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "RC" })"><i class="bi bi-card-text"></i> Registre commerce</a></li>
+                        </ul>
+                    </div>
+                </li>
+                }
+                <!-- &#201;tats financiers -->
+                @if (!hasClient || HasService("Bilan", "EtatsFiscaux", "Comptabilite"))
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuEtats" role="button" aria-expanded="@(currentController == "EtatsFiscaux" ? "true" : "false")">
+                        <i class="bi bi-file-earmark-text-fill"></i><span>&#201;tats financiers</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "EtatsFiscaux" ? "show" : "")" id="menuEtats">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Bilan", "EtatsFiscaux")"><i class="bi bi-clipboard-data"></i> Bilan</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("CPC", "EtatsFiscaux")"><i class="bi bi-bar-chart-line"></i> CPC</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("LiasseFiscale", "EtatsFiscaux")"><i class="bi bi-files"></i> Liasse fiscale</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Etat9421", "EtatsFiscaux")"><i class="bi bi-file-text"></i> &#201;tat 9421</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Amortissements", "EtatsFiscaux")"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("EtatsSynthese", "EtatsFiscaux")"><i class="bi bi-journal-text"></i> Synth&#232;se</a></li>
+                        </ul>
+                    </div>
+                </li>
+                }
+                <!-- Documents client -->
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center @(hasClient ? "" : "client-disabled")" data-bs-toggle="collapse" href="#menuDocuments" role="button" aria-expanded="@(currentController == "Documents" ? "true" : "false")">
+                        <i class="bi bi-folder2-open"></i><span>Documents</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Documents" ? "show" : "")" id="menuDocuments">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "PieceJustificative" })"><i class="bi bi-paperclip"></i> Pi&#232;ces justif.</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "Contrat" })"><i class="bi bi-file-earmark-lock"></i> Contrats</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "Formulaire" })"><i class="bi bi-ui-checks-grid"></i> Formulaires</a></li>
+                        </ul>
+                    </div>
+                </li>
+                <!-- &#201;ch&#233;ances fiscales client -->
+                <li class="nav-item"><a class="nav-link @(hasClient ? "" : "client-disabled")" href="@Url.Action("Index", "EtatsFiscaux")"><i class="bi bi-calendar-event-fill"></i> &#201;ch&#233;ances fiscales</a></li>
+            </ul>

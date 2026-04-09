@@ -1,0 +1,65 @@
+﻿using System.Text;
+using System.Text.Json;
+using MetaCompta.Application.DTOs;
+using Microsoft.AspNetCore.Mvc;
+
+namespace MetaCompta.BackOffice.Controllers;
+
+public class AccountController : Controller
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public AccountController(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
+
+    [HttpGet]
+    public IActionResult Login(string? returnUrl = null)
+    {
+        if (!string.IsNullOrEmpty(HttpContext.Session.GetString("JwtToken")))
+            return RedirectToAction("Workspace", "Home");
+        ViewBag.ReturnUrl = returnUrl;
+        return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Login(LoginDto dto, string? returnUrl = null)
+    {
+        if (!ModelState.IsValid) return View(dto);
+
+        var client = _httpClientFactory.CreateClient("MetaComptaAPI");
+        var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        var response = await client.PostAsync("api/auth/login", new StringContent(json, Encoding.UTF8, "application/json"));
+        var content = await response.Content.ReadAsStringAsync();
+
+        var result = JsonSerializer.Deserialize<ApiResponse<TokenDto>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (result?.Success == true && result.Data != null)
+        {
+            HttpContext.Session.SetString("JwtToken", result.Data.AccessToken);
+            HttpContext.Session.SetString("RefreshToken", result.Data.RefreshToken);
+            HttpContext.Session.SetString("UserId", result.Data.User.Id ?? "");
+            HttpContext.Session.SetString("UserName", result.Data.User.FullName);
+            HttpContext.Session.SetString("UserEmail", result.Data.User.Email);
+            HttpContext.Session.SetString("UserRole", result.Data.User.Role ?? "");
+            HttpContext.Session.SetString("CabinetId", result.Data.User.CabinetId?.ToString() ?? "");
+            HttpContext.Session.SetString("CabinetName", result.Data.User.CabinetName ?? "");
+            HttpContext.Session.SetString("ProfileImage", result.Data.User.ProfileImageUrl ?? "");
+            HttpContext.Session.SetString("Language", result.Data.User.PreferredLanguage);
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
+            return RedirectToAction("Workspace", "Home");
+        }
+
+        ModelState.AddModelError("", result?.Message ?? "Identifiants incorrects.");
+        return View(dto);
+    }
+
+    public IActionResult Logout()
+    {
+        HttpContext.Session.Clear();
+        return RedirectToAction("Login");
+    }
+
+    public IActionResult AccessDenied() => View();
+}

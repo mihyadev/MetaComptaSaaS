@@ -1,0 +1,105 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.RapprochementBancaireDto>
+@{
+    ViewData["Title"] = "Rapprochements bancaires";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-bank2 me-2"></i>Rapprochements bancaires</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Comptabilité</li>
+                <li class="breadcrumb-item active">Rapprochements</li>
+            </ol>
+        </nav>
+    </div>
+    <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalNouveauRapprochement">
+        <i class="bi bi-plus-circle me-1"></i> Nouveau rapprochement
+    </button>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
+        <i class="bi bi-building fs-5"></i>
+        <div><strong>@client.RaisonSociale</strong> <span class="text-muted ms-2">@client.FormeJuridique</span></div>
+    </div>
+}
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>Rapprochements</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Compte bancaire</th>
+                        <th>Période</th>
+                        <th class="text-end">Solde banque</th>
+                        <th class="text-end">Solde compta</th>
+                        <th class="text-end">Écart</th>
+                        <th>Statut</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var r in Model)
+                        {
+                            <tr>
+                                <td class="fw-medium">@r.CompteBancaire</td>
+                                <td>@r.Periode</td>
+                                <td class="text-end">@(r.SoldeBanque.ToString("N2"))</td>
+                                <td class="text-end">@(r.SoldeCompta.ToString("N2"))</td>
+                                <td class="text-end @(r.Ecart == 0 ? "text-success" : "text-danger") fw-bold">@(r.Ecart.ToString("N2")) MAD</td>
+                                <td><span class="badge @(r.EstRapproche ? "bg-success" : "bg-warning")">@(r.EstRapproche ? "Rapproché" : "En cours")</span></td>
+                                <td>@(r.DateRapprochement.ToString("dd/MM/yyyy"))</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-bank fs-1 d-block mb-2"></i>
+                                Aucun rapprochement trouvé.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nouveau Rapprochement -->
+<div class="modal fade" id="modalNouveauRapprochement" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="@Url.Action("CreateRapprochement", "Comptabilite")">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle me-1"></i>Nouveau rapprochement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Compte bancaire</label>
+                        <input name="compteBancaire" class="form-control" placeholder="Ex: 00101234567890" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Période</label>
+                        <input name="periode" class="form-control" placeholder="Ex: Janvier 2025" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,133 @@
+@model MetaCompta.Application.DTOs.UserProfileDto
+@{
+    ViewData["Title"] = "Mon profil";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-person-circle me-2"></i>Mon profil</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Cabinet")">Cabinet</a></li>
+                <li class="breadcrumb-item active">Mon profil</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Profile Card -->
+    <div class="col-lg-4">
+        <div class="mc-card text-center">
+            <div class="card-body py-5">
+                @if (!string.IsNullOrEmpty(Model.ProfileImageUrl))
+                {
+                    <img src="@Model.ProfileImageUrl" alt="Photo" class="rounded-circle mb-3" style="width:100px;height:100px;object-fit:cover;" />
+                }
+                else
+                {
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary mx-auto mb-3" style="width:80px;height:80px;font-size:2rem;">
+                        @Model.FullName?.Substring(0, 1).ToUpper()
+                    </div>
+                }
+                <h4 class="mb-1">@Model.FullName</h4>
+                <p class="text-muted mb-2">@Model.Email</p>
+                <span class="badge bg-primary fs-6">
+                    <i class="bi bi-shield-check me-1"></i>@(Model.Role ?? "Non défini")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="col-lg-8">
+        <div class="mc-card mb-4">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Informations du compte</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Prénom</label>
+                        <p class="fw-semibold mb-0">@Model.FirstName</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Nom</label>
+                        <p class="fw-semibold mb-0">@Model.LastName</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Email</label>
+                        <p class="fw-semibold mb-0">
+                            <i class="bi bi-envelope me-1 text-muted"></i>@Model.Email
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Langue</label>
+                        <p class="fw-semibold mb-0">
+                            <i class="bi bi-translate me-1 text-muted"></i>@(Model.PreferredLanguage ?? "fr-FR")
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Compte créé le</label>
+                        <p class="fw-semibold mb-0">
+                            <i class="bi bi-calendar me-1 text-muted"></i>@Model.CreatedAt.ToString("dd/MM/yyyy")
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Dernière connexion</label>
+                        <p class="fw-semibold mb-0">
+                            <i class="bi bi-clock me-1 text-muted"></i>@(Model.LastLoginAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="mc-card">
+            <div class="card-header">
+                <i class="bi bi-shield-lock me-2"></i>Mes permissions
+                <span class="badge bg-primary ms-2">@(Model.Permissions?.Count ?? 0)</span>
+            </div>
+            <div class="card-body">
+                @if (Model.Permissions?.Any() == true)
+                {
+                    var grouped = Model.Permissions
+                        .GroupBy(p => p.Contains('.') ? p.Split('.')[0] : p)
+                        .OrderBy(g => g.Key);
+
+                    <div class="row g-3">
+                        @foreach (var group in grouped)
+                        {
+                            <div class="col-md-6 col-lg-4">
+                                <h6 class="fw-bold text-capitalize mb-2">
+                                    <i class="bi bi-folder2 me-1 text-muted"></i>@group.Key
+                                </h6>
+                                @foreach (var perm in group)
+                                {
+                                    <div class="mb-1">
+                                        <span class="badge bg-light text-dark">
+                                            <i class="bi bi-check2 text-success me-1"></i>@perm
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted text-center py-3">
+                        <i class="bi bi-shield-x fs-3 d-block mb-2"></i>
+                        Aucune permission directe attribuée. Les permissions sont héritées du rôle.
+                    </p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Retour
+    </a>
+</div>

@@ -1,0 +1,131 @@
+@using MetaCompta.Application.DTOs
+@model DeclarationCNSSDto
+@{
+    ViewData["Title"] = "Modifier CNSS";
+    var declaration = ViewBag.Declaration as DeclarationDto;
+}
+
+
+<!-- Workflow Action Bar (generic, step-aware) -->
+@await Html.PartialAsync("_WorkflowActionBar")
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Declarations?type=CNSS">CNSS</a></li>
+                @if (declaration != null)
+                {
+                    <li class="breadcrumb-item"><a href="/Declarations/Details/@declaration.Id">Détails</a></li>
+                }
+                <li class="breadcrumb-item active">Modifier CNSS</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Déclaration CNSS (DMS) — @(declaration?.Periode ?? "")</h4>
+        @if (declaration != null)
+        {
+            <p class="text-muted mb-0 mt-1">Client : <strong>@declaration.ClientName</strong> | Employés : <strong>@Model.NombreEmployes</strong></p>
+        }
+    </div>
+    <div class="d-flex gap-2">
+        <form asp-action="CalculateCNSS" asp-route-id="@Model.DeclarationId" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-info rounded-pill px-3" title="Recalcule automatiquement à partir des employés du client">
+                <i class="bi bi-arrow-clockwise me-1"></i> Auto-Calculer depuis Employés
+            </button>
+        </form>
+        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+<form asp-action="EditCNSS" asp-route-id="@Model.DeclarationId" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="DeclarationId" />
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-primary me-2"></i>Masse Salariale</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label asp-for="NombreEmployes" class="form-label">Nombre d'Employés</label><input asp-for="NombreEmployes" class="form-control" type="number" /></div>
+                        <div class="col-md-6"><label asp-for="TotalSalairesBruts" class="form-label">Total Salaires Bruts</label><input asp-for="TotalSalairesBruts" class="form-control" id="TotalSalairesBruts" type="number" step="0.01" /></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-header bg-transparent border-0 px-4 pt-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack text-success me-2"></i>Cotisations</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label asp-for="TotalCotisationSalariale" class="form-label">Cotisation Salariale <small class="text-muted">(4.48%)</small></label><input asp-for="TotalCotisationSalariale" class="form-control cnss-cot" type="number" step="0.01" /></div>
+                        <div class="col-md-6"><label asp-for="TotalCotisationPatronale" class="form-label">Cotisation Patronale <small class="text-muted">(8.98%)</small></label><input asp-for="TotalCotisationPatronale" class="form-control cnss-cot" type="number" step="0.01" /></div>
+                        <div class="col-md-6"><label asp-for="TotalAMOSalariale" class="form-label">AMO Salariale <small class="text-muted">(2.26%)</small></label><input asp-for="TotalAMOSalariale" class="form-control cnss-cot" type="number" step="0.01" /></div>
+                        <div class="col-md-6"><label asp-for="TotalAMOPatronale" class="form-label">AMO Patronale <small class="text-muted">(4.52%)</small></label><input asp-for="TotalAMOPatronale" class="form-control cnss-cot" type="number" step="0.01" /></div>
+                        <div class="col-md-6"><label asp-for="TotalFormationProfessionnelle" class="form-label">Formation Prof. <small class="text-muted">(1.62%)</small></label><input asp-for="TotalFormationProfessionnelle" class="form-control cnss-cot" type="number" step="0.01" /></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mb-3">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-calculator text-danger me-2"></i>Total CNSS</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-3"><label class="form-label text-muted small">Cot. Salariales</label><div id="sumSalariale" class="fw-bold text-info">@Model.TotalCotisationSalariale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Cot. Patronales</label><div id="sumPatronale" class="fw-bold text-info">@Model.TotalCotisationPatronale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">AMO + FP</label><div id="sumAMOFP" class="fw-bold text-info">@((Model.TotalAMOSalariale + Model.TotalAMOPatronale + Model.TotalFormationProfessionnelle).ToString("N2")) MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Montant Total</label><input asp-for="MontantTotal" class="form-control fw-bold text-danger fs-5" type="number" step="0.01" readonly /></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-warning rounded-3 mb-3" style="font-size:0.85rem;">
+        <i class="bi bi-lightbulb me-1"></i>
+        <strong>Astuce :</strong> Saisissez le <em>Total Salaires Bruts</em> pour auto-calculer toutes les cotisations, ou modifiez chaque cotisation manuellement.
+    </div>
+
+    <div class="d-flex justify-content-end gap-2">
+        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function calcFromBruts() {
+        var bruts = parseFloat(document.getElementById("TotalSalairesBruts").value) || 0;
+        document.getElementById("TotalCotisationSalariale").value = (bruts * 0.0448).toFixed(2);
+        document.getElementById("TotalCotisationPatronale").value = (bruts * 0.0898).toFixed(2);
+        document.getElementById("TotalAMOSalariale").value = (bruts * 0.0226).toFixed(2);
+        document.getElementById("TotalAMOPatronale").value = (bruts * 0.0452).toFixed(2);
+        document.getElementById("TotalFormationProfessionnelle").value = (bruts * 0.0162).toFixed(2);
+        updateTotal();
+    }
+
+    function updateTotal() {
+        var cs = parseFloat(document.getElementById("TotalCotisationSalariale").value) || 0;
+        var cp = parseFloat(document.getElementById("TotalCotisationPatronale").value) || 0;
+        var as2 = parseFloat(document.getElementById("TotalAMOSalariale").value) || 0;
+        var ap = parseFloat(document.getElementById("TotalAMOPatronale").value) || 0;
+        var fp = parseFloat(document.getElementById("TotalFormationProfessionnelle").value) || 0;
+        var total = cs + cp + as2 + ap + fp;
+        document.getElementById("MontantTotal").value = total.toFixed(2);
+        document.getElementById("sumSalariale").textContent = cs.toFixed(2) + " MAD";
+        document.getElementById("sumPatronale").textContent = cp.toFixed(2) + " MAD";
+        document.getElementById("sumAMOFP").textContent = (as2 + ap + fp).toFixed(2) + " MAD";
+    }
+
+    document.getElementById("TotalSalairesBruts").addEventListener("input", calcFromBruts);
+    document.querySelectorAll(".cnss-cot").forEach(function(el) { el.addEventListener("input", updateTotal); });
+</script>
+}

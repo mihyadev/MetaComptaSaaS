@@ -1,0 +1,6 @@
+/* MetaCompta Admin - Custom Styles */
+:root {
+    --mc-primary: #dc2626;
+    --mc-primary-dark: #991b1b;
+}
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }

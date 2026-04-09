@@ -1,0 +1,6 @@
+/* MetaCompta Extranet - Custom Styles */
+:root {
+    --mc-primary: #059669;
+    --mc-primary-dark: #047857;
+}
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }

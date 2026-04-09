@@ -1,0 +1,333 @@
+﻿@using MetaCompta.Application.DTOs
+@model ClientCreateDto
+@{
+    ViewData["Title"] = "Modifier Client";
+    var clientId = ViewBag.ClientId as int? ?? 0;
+    var refFormes = ViewData["Ref_FORME_JURIDIQUE"] as List<ReferenceDataDto> ?? new();
+    var refTva = ViewData["Ref_TYPE_TVA"] as List<ReferenceDataDto> ?? new();
+    var refVilles = ViewData["Ref_VILLE"] as List<ReferenceDataDto> ?? new();
+    var refSecteurs = ViewData["Ref_SECTEUR_ACTIVITE"] as List<ReferenceDataDto> ?? new();
+    var clientServices = ViewBag.ClientServices as List<ServiceContratDto> ?? new List<ServiceContratDto>();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Clients">Clients</a></li>
+                <li class="breadcrumb-item active">Modifier</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-pencil text-warning me-2"></i>Modifier Client</h4>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+</div>
+
+<form asp-action="Edit" asp-route-id="@clientId" method="post">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+    <ul class="nav nav-pills mb-3" id="editTabs" role="tablist">
+        <li class="nav-item"><a class="nav-link active rounded-pill" data-bs-toggle="pill" href="#tabId">Identite</a></li>
+        <li class="nav-item"><a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabCo">Contact</a></li>
+        <li class="nav-item"><a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabFi">Fiscal</a></li>
+        <li class="nav-item"><a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabSv">Services</a></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="tabId">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="RaisonSociale" class="form-label">Raison Sociale <span class="text-danger">*</span></label>
+                            <input asp-for="RaisonSociale" class="form-control" />
+                            <span asp-validation-for="RaisonSociale" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="FormeJuridique" class="form-label">Forme Juridique</label>
+                            <select asp-for="FormeJuridique" class="form-select">
+                                <option value="">-- Choisir --</option>
+                                @foreach (var r in refFormes) { <option value="@r.Code">@r.Label</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="CapitalSocial" class="form-label">Capital Social</label>
+                            <input asp-for="CapitalSocial" class="form-control" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="ICE" class="form-label">ICE</label>
+                            <input asp-for="ICE" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="IF" class="form-label">IF</label>
+                            <input asp-for="IF" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="RC" class="form-label">RC</label>
+                            <input asp-for="RC" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="NumeroCNSS" class="form-label">CNSS</label>
+                            <input asp-for="NumeroCNSS" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="NumeroPatente" class="form-label">Patente</label>
+                            <input asp-for="NumeroPatente" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="SecteurActivite" class="form-label">Secteur</label>
+                            <select asp-for="SecteurActivite" class="form-select">
+                                <option value="">-- Choisir --</option>
+                                @foreach (var r in refSecteurs) { <option value="@r.Code">@r.Label</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="DateCreation" class="form-label">Date Creation</label>
+                            <input asp-for="DateCreation" class="form-control" type="date" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="DateDebutActivite" class="form-label">Debut Activite</label>
+                            <input asp-for="DateDebutActivite" class="form-control" type="date" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tabCo">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="AdresseSiegeSocial" class="form-label">Adresse Siege</label>
+                            <input asp-for="AdresseSiegeSocial" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="VilleSiegeSocial" class="form-label">Ville</label>
+                            <select asp-for="VilleSiegeSocial" class="form-select">
+                                <option value="">-- Choisir --</option>
+                                @foreach (var r in refVilles) { <option value="@r.Code">@r.Label</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="TelephonePrincipal" class="form-label">Telephone</label>
+                            <input asp-for="TelephonePrincipal" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="EmailPrincipal" class="form-label">Email</label>
+                            <input asp-for="EmailPrincipal" class="form-control" type="email" />
+                        </div>
+                        <div class="col-12"><hr /></div>
+                        <div class="col-md-3">
+                            <label asp-for="ContactNom" class="form-label">Contact Nom</label>
+                            <input asp-for="ContactNom" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="ContactFonction" class="form-label">Fonction</label>
+                            <input asp-for="ContactFonction" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="ContactTelephone" class="form-label">Tel Contact</label>
+                            <input asp-for="ContactTelephone" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="ContactEmail" class="form-label">Email Contact</label>
+                            <input asp-for="ContactEmail" class="form-control" type="email" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tabFi">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label asp-for="TypeTVA" class="form-label">Type TVA</label>
+                            <select asp-for="TypeTVA" class="form-select">
+                                <option value="">-- Choisir --</option>
+                                @foreach (var r in refTva) { <option value="@r.Code">@r.Label</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="MoisClotureExercice" class="form-label">Mois Cloture</label>
+                            <input asp-for="MoisClotureExercice" class="form-control" type="number" min="1" max="12" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DateDebutContrat" class="form-label">Debut Contrat</label>
+                            <input asp-for="DateDebutContrat" class="form-control" type="date" />
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="NotesInternes" class="form-label">Notes Internes</label>
+                            <textarea asp-for="NotesInternes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tabSv">
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h6 class="fw-bold mb-0">
+                            <i class="bi bi-briefcase me-2"></i>Services Fiduciaires
+                            <span class="badge bg-info bg-opacity-10 text-info ms-2 rounded-pill" style="font-size:0.72rem;">
+                                <i class="bi bi-shield-check me-1"></i>Géré par Contrat
+                            </span>
+                        </h6>
+                        @if (clientServices.Any(s => s.Actif))
+                        {
+                            <button type="button" class="btn btn-outline-success btn-sm rounded-pill" id="btnGenerateDecl" title="Générer les déclarations automatiquement">
+                                <i class="bi bi-lightning-charge me-1"></i>Générer Déclarations
+                            </button>
+                        }
+                    </div>
+
+                    <!-- Info banner: services are contract-driven -->
+                    <div class="alert alert-info border-0 rounded-3 py-2 px-3 mb-3" style="font-size:0.85rem; background: linear-gradient(135deg, rgba(37,99,235,0.05), rgba(124,58,237,0.05));">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Les services sont gérés exclusivement via les <strong>Contrats Commerciaux</strong>.
+                        Pour modifier les services, créez ou modifiez un contrat dans
+                        <a href="/Commercial" class="fw-semibold text-decoration-none">Commercial → Contrats</a>.
+                    </div>
+
+                    <!-- Summary badges -->
+                    @if (clientServices.Any())
+                    {
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            @{
+                                Func<string, string> getCat = (string t) => t?.ToUpperInvariant() switch {
+                                    "TVA" or "IS" or "IR" or "ETATSFISCAUX" => "Fiscal",
+                                    "CNSS" or "PAIE" => "Social",
+                                    "COMPTABILITE" or "BILAN" => "Comptable",
+                                    "JURIDIQUE" => "Juridique",
+                                    "AUDITCOMPTABLE" or "CONSEILFISCAL" => "Conseil",
+                                    _ => "Autre"
+                                };
+                                var catGroups = clientServices
+                                    .Where(s => s.Actif)
+                                    .GroupBy(s => getCat(s.TypeService))
+                                    .OrderBy(g => g.Key);
+                                var catColors = new Dictionary<string, string> { {"Fiscal","primary"}, {"Social","success"}, {"Comptable","warning"}, {"Juridique","danger"}, {"Conseil","info"} };
+                            }
+                            @foreach (var g in catGroups)
+                            {
+                                var color = catColors.GetValueOrDefault(g.Key, "secondary");
+                                <span class="badge bg-@color bg-opacity-10 text-@color px-3 py-2 rounded-pill">
+                                    <i class="bi bi-check-circle me-1"></i>@g.Key: @g.Count() service(s)
+                                </span>
+                            }
+                            <span class="badge bg-dark bg-opacity-10 text-dark px-3 py-2 rounded-pill">
+                                Total: @clientServices.Count(s => s.Actif) actif(s)
+                            </span>
+                        </div>
+                    }
+
+                    <!-- Read-only services table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Service</th>
+                                    <th>Catégorie</th>
+                                    <th>Fréquence</th>
+                                    <th>Début</th>
+                                    <th>Fin</th>
+                                    <th class="text-end">Tarif</th>
+                                    <th>Exercice</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (clientServices.Any())
+                                {
+                                    @foreach (var svc in clientServices)
+                                    {
+                                        var rowOpacity = svc.Actif ? "" : "opacity-50";
+                                        var borderClass = svc.Actif ? "border-start border-3 border-primary" : "border-start border-3 border-secondary";
+                                        <tr class="@rowOpacity">
+                                            <td class="ps-3 fw-semibold @borderClass">@(svc.LibelleService ?? svc.TypeService)</td>
+                                            <td><span class="badge bg-light text-dark rounded-pill">@(svc.Categorie ?? "-")</span></td>
+                                            <td>@(svc.Frequence ?? "-")</td>
+                                            <td>@svc.DateDebut.ToString("dd/MM/yyyy")</td>
+                                            <td>@(svc.DateFin.HasValue ? svc.DateFin.Value.ToString("dd/MM/yyyy") : "-")</td>
+                                            <td class="text-end">
+                                                @if (svc.HonorairesMensuels.HasValue)
+                                                {
+                                                    @(svc.HonorairesMensuels.Value.ToString("N0") + " MAD/mois")
+                                                }
+                                                else if (svc.HonorairesAnnuels.HasValue)
+                                                {
+                                                    @(svc.HonorairesAnnuels.Value.ToString("N0") + " MAD/an")
+                                                }
+                                                else
+                                                {
+                                                    <text>-</text>
+                                                }
+                                            </td>
+                                            <td>@(svc.ExerciceFiscal?.ToString() ?? "-")</td>
+                                            <td>
+                                                @if (svc.Actif)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success rounded-pill">Actif</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary rounded-pill">Inactif</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="8" class="text-center py-4">
+                                            <div class="text-muted">
+                                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                                Aucun service fiduciaire.<br />
+                                                <small>Les services seront activés automatiquement lors de la validation d'un
+                                                    <a href="/Commercial" class="text-decoration-none">Contrat Commercial</a>.</small>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    // Generate declarations button
+    document.getElementById('btnGenerateDecl')?.addEventListener('click', function() {
+        var clientId = @(ViewBag.ClientId ?? 0);
+        var year = new Date().getFullYear();
+        if (confirm('Générer automatiquement les déclarations pour l\'exercice ' + year + ' ?\nSeules les déclarations manquantes seront créées.')) {
+            fetch('/Clients/GenerateDeclarations?clientId=' + clientId + '&exercice=' + year, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        alert('✅ ' + data.totalGenerated + ' déclaration(s) générée(s).\n' + (data.warnings || []).join('\n'));
+                        location.reload();
+                    } else {
+                        alert('⚠️ ' + (data.message || 'Erreur lors de la génération.'));
+                    }
+                })
+                .catch(function() { alert('Erreur réseau.'); });
+        }
+    });
+</script>
+}

@@ -1,0 +1,85 @@
+﻿@model MetaCompta.Application.DTOs.TaskItemDto
+@{
+    ViewData["Title"] = "Détails de la tâche";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-check2-square me-2"></i>@Model.Titre</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Tasks")">Tâches</a></li>
+                <li class="breadcrumb-item active">Détails</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Index", "Tasks")" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Retour
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Informations</div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th class="text-muted" style="width:180px">Titre</th>
+                        <td class="fw-medium">@Model.Titre</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Description</th>
+                        <td>@(Model.Description ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Client</th>
+                        <td>@Model.ClientNom</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Assignée à</th>
+                        <td>@Model.AssigneA</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Priorité</th>
+                        <td><span class="badge badge-@Model.Priorite?.ToLower()">@Model.Priorite</span></td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Échéance</th>
+                        <td>@(Model.DateEcheance?.ToString("dd/MM/yyyy") ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Statut</th>
+                        <td><span class="badge badge-@Model.Statut?.ToLower()">@Model.Statut</span></td>
+                    </tr>
+                    <tr>
+                        <th class="text-muted">Créée le</th>
+                        <td>@(Model.DateCreation.ToString("dd/MM/yyyy HH:mm"))</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-gear me-2"></i>Changer le statut</div>
+            <div class="card-body">
+                <form method="post" action="@Url.Action("ChangeStatus", "Tasks")">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="mb-3">
+                        <select name="statut" class="form-select">
+                            <option value="ATraiter">À traiter</option>
+                            <option value="@RefCodes.StatutTache.EnCours">En cours</option>
+                            <option value="Terminee">Terminée</option>
+                            <option value="Annulee">Annulée</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-check me-1"></i>
+                        Appliquer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

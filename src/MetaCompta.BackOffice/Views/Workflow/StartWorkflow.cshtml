@@ -1,0 +1,185 @@
+@using MetaCompta.Application.DTOs
+@model StartWorkflowDto
+@{
+    ViewData["Title"] = "Démarrer un Workflow";
+    var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
+    var templates = ViewBag.Templates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+}
+
+<style>
+    .sw-header {
+        background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+        border-radius: 18px;
+        color: #fff;
+        padding: 1.75rem 2.25rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .sw-header::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 250px;
+        height: 250px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .sw-glass {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    .sw-form-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 0.3rem;
+    }
+
+    .sw-form-control {
+        border-radius: 10px;
+        border: 1.5px solid #e2e8f0;
+        font-size: 0.85rem;
+        transition: all .2s;
+        padding: 0.6rem 0.85rem;
+    }
+
+    .sw-form-control:focus {
+        border-color: #059669;
+        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    .sw-form-select {
+        border-radius: 10px;
+        border: 1.5px solid #e2e8f0;
+        font-size: 0.85rem;
+        padding: 0.6rem 0.85rem;
+    }
+
+    .sw-info-card {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+
+    .sw-section-title {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+</style>
+
+<!-- HEADER -->
+<div class="sw-header mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3" style="position:relative; z-index:2;">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2" style="font-size:0.8rem;">
+                    <li class="breadcrumb-item"><a href="@Url.Action("Index")"
+                            style="color:rgba(255,255,255,0.7);">Workflow</a></li>
+                    <li class="breadcrumb-item"><a href="@Url.Action("Instances")"
+                            style="color:rgba(255,255,255,0.7);">Instances</a></li>
+                    <li class="breadcrumb-item text-white">Démarrer</li>
+                </ol>
+            </nav>
+            <h4 class="fw-bold mb-1"><i class="bi bi-play-circle-fill me-2"></i>Démarrer un nouveau Workflow</h4>
+            <p class="mb-0" style="font-size:0.85rem; opacity:0.85;">Lancez un processus pour un client avec le modèle
+                adapté</p>
+        </div>
+        <a asp-action="Instances" class="btn btn-outline-light"
+            style="border-radius:10px; font-weight:600; font-size:0.83rem;"><i class="bi bi-arrow-left me-1"></i>
+            Retour</a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <form asp-action="StartWorkflow" method="post">
+            @Html.AntiForgeryToken()
+
+            <!-- CLIENT & TYPE -->
+            <div class="sw-glass p-4 mb-4">
+                <div class="sw-section-title"><i class="bi bi-building text-success"></i> Client et type</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="sw-form-label">Client <span class="text-danger">*</span></label>
+                        <select asp-for="ClientId" class="form-select sw-form-select" required>
+                            <option value="">&#8212; Sélectionner un client &#8212;</option>
+                            @foreach (var c in clients)
+                            {
+                                <option value="@c.Id">@c.RaisonSociale</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="sw-form-label">Type de déclaration</label>
+                        <select asp-for="DeclarationType" class="form-select sw-form-select">
+                            <option value="">&#8212; Auto (selon modèle) &#8212;</option>
+                            @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique",
+                                                        "Comptabilite" })
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TEMPLATE & DECLARATION -->
+            <div class="sw-glass p-4 mb-4">
+                <div class="sw-section-title"><i class="bi bi-diagram-3 text-success"></i> Modèle et lien</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="sw-form-label">Modèle de workflow</label>
+                        <select asp-for="WorkflowTemplateId" class="form-select sw-form-select">
+                            <option value="">&#8212; Résolution automatique &#8212;</option>
+                            @foreach (var t in templates.Where(t => t.IsActive))
+                            {
+                                <option value="@t.Id">@t.Name (@t.DeclarationType, @t.StepCount étapes)</option>
+                            }
+                        </select>
+                        <small class="text-muted" style="font-size:0.75rem;">Si vide, le système choisira le meilleur
+                            modèle automatiquement.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="sw-form-label">Déclaration liée (optionnel)</label>
+                        <input asp-for="DeclarationId" type="number" class="form-control sw-form-control"
+                            placeholder="ID de la déclaration..." />
+                    </div>
+                </div>
+            </div>
+
+            <!-- INFO -->
+            <div class="sw-info-card mb-4">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-info-circle-fill text-success" style="font-size:1.2rem; margin-top:2px;"></i>
+                    <div>
+                        <div class="fw-bold" style="font-size:0.85rem; color:#065f46;">Comment ça marche ?</div>
+                        <p class="mb-0 text-muted" style="font-size:0.8rem;">Le système crée une instance de workflow
+                            avec toutes les étapes définies dans le modèle. Chaque étape sera assignée automatiquement
+                            selon la configuration. Vous pourrez suivre la progression en temps réel.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <a asp-action="Instances" class="btn btn-outline-secondary"
+                    style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:600;">Annuler</a>
+                <button type="submit" class="btn btn-success"
+                    style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:700; background:linear-gradient(135deg,#059669,#10b981); border:none;"><i
+                        class="bi bi-play-circle-fill me-2"></i>Démarrer le workflow</button>
+            </div>
+        </form>
+    </div>
+</div>

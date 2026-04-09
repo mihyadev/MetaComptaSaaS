@@ -1,0 +1,46 @@
+@{ ViewData["Title"] = "Journaux d'Audit"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h5 class="fw-bold mb-0">Journaux d'Audit</h5>
+    <div class="d-flex gap-2">
+        <input type="date" class="form-control form-control-sm" style="width:150px;" />
+        <select class="form-select form-select-sm" style="width:150px;">
+            <option>Toutes actions</option>
+            <option>Création</option>
+            <option>Modification</option>
+            <option>Suppression</option>
+            <option>Connexion</option>
+        </select>
+        <button class="btn btn-danger btn-sm rounded-pill px-3"><i class="bi bi-funnel me-1"></i>Filtrer</button>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th class="ps-4">Date</th><th>Utilisateur</th><th>Action</th><th>Entité</th><th>Détails</th><th>IP</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="ps-4">2026-01-15 10:30</td>
+                        <td><code>gerant@cabinet-demo.ma</code></td>
+                        <td><span class="badge bg-success">Création</span></td>
+                        <td>Client</td>
+                        <td>Nouveau client: ABC Consulting SARL</td>
+                        <td class="text-muted">192.168.1.10</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4">2026-01-15 09:15</td>
+                        <td><code>admin@metacompta.ma</code></td>
+                        <td><span class="badge bg-warning text-dark">Modification</span></td>
+                        <td>ReferenceData</td>
+                        <td>Mise à jour taux TVA 20%</td>
+                        <td class="text-muted">10.0.0.1</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

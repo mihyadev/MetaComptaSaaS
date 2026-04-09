@@ -1,0 +1,253 @@
+@model EmployeeDto
+@{
+    ViewData["Title"] = "Détails Employé - " + Model.FullName;
+    var initials = (Model.Prenom?.Length > 0 ? Model.Prenom.Substring(0, 1) : "") + (Model.Nom?.Length > 0 ? Model.Nom.Substring(0, 1) : "");
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1">@Model.FullName</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Employees")">Employés</a></li>
+                <li class="breadcrumb-item active">@Model.FullName</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("Edit", "Employees", new { id = Model.Id })" class="btn btn-warning rounded-pill px-3">
+            <i class="bi bi-pencil me-1"></i> Modifier
+        </a>
+        <a href="@Url.Action("Index", "Employees")" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i> Retour
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Employee Profile Card -->
+    <div class="col-xl-4">
+        <div class="mc-card">
+            <div class="card-body text-center pt-4 pb-3">
+                <!-- Avatar -->
+                <div class="mx-auto mb-3" style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:700;font-size:1.8rem;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(5,150,105,0.3);">
+                    @initials.ToUpper()
+                </div>
+                <h4 class="fw-bold mb-1">@Model.Prenom @Model.Nom</h4>
+                <p class="text-muted mb-2">@(Model.Poste ?? "Poste non défini")</p>
+
+                <!-- Status Badge -->
+                @if (Model.Statut == RefCodes.StatutEmploye.Actif)
+                {
+                    <span class="badge rounded-pill px-3 py-2" style="background:linear-gradient(135deg,#059669,#10b981);font-size:0.85rem;">
+                        <i class="bi bi-check-circle me-1"></i>Actif
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-danger rounded-pill px-3 py-2" style="font-size:0.85rem;">
+                        <i class="bi bi-x-circle me-1"></i>@Model.Statut
+                    </span>
+                }
+            </div>
+
+            <hr class="mx-4 my-0 opacity-25" />
+
+            <!-- Quick Info -->
+            <div class="card-body px-4">
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-fingerprint text-primary"></i>
+                        <small class="text-muted">CIN</small>
+                    </div>
+                    <code class="fw-bold">@Model.CIN</code>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-check text-success"></i>
+                        <small class="text-muted">CNSS</small>
+                    </div>
+                    <span class="fw-semibold">@(Model.NumeroCNSS ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-building text-info"></i>
+                        <small class="text-muted">Client</small>
+                    </div>
+                    <span class="fw-semibold text-primary">@(Model.ClientName ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-file-earmark-text text-warning"></i>
+                        <small class="text-muted">Contrat</small>
+                    </div>
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">@(Model.TypeContrat ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3 text-purple"></i>
+                        <small class="text-muted">Département</small>
+                    </div>
+                    <span class="fw-semibold">@(Model.Departement ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-opacity-10">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar-check text-success"></i>
+                        <small class="text-muted">Embauche</small>
+                    </div>
+                    <span class="fw-semibold">@(@Model.DateEmbauche.ToString("dd/MM/yyyy"))</span>
+                </div>
+                @if (Model.DateSortie.HasValue)
+                {
+                    <div class="d-flex justify-content-between align-items-center py-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-calendar-x text-danger"></i>
+                            <small class="text-muted">Sortie</small>
+                        </div>
+                        <span class="fw-semibold text-danger">@(@Model.DateSortie.Value.ToString("dd/MM/yyyy"))</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="mc-card mt-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-lightning-charge text-warning me-2"></i>Actions Rapides</h6>
+                <div class="d-grid gap-2">
+                    <a href="@Url.Action("Index", "Payroll", new { })" class="btn btn-outline-success rounded-pill btn-sm">
+                        <i class="bi bi-cash-stack me-1"></i> Bulletins de Paie
+                    </a>
+                    <a href="@Url.Action("Index", "Declarations", new { })" class="btn btn-outline-primary rounded-pill btn-sm">
+                        <i class="bi bi-file-earmark-text me-1"></i> Déclarations
+                    </a>
+                    <form asp-action="Delete" asp-route-id="@Model.Id" method="post"
+                        onsubmit="return confirm('Supprimer cet employé ? Cette action est irréversible.');">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-danger rounded-pill btn-sm w-100">
+                            <i class="bi bi-trash me-1"></i> Supprimer l'Employé
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Tabs -->
+    <div class="col-xl-8">
+        <div class="mc-card">
+            <div class="card-body p-0">
+                <ul class="nav nav-pills p-3 gap-2 border-bottom" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active rounded-pill px-4" data-bs-toggle="pill" data-bs-target="#dContact" type="button">
+                            <i class="bi bi-person-lines-fill me-1"></i> Contact
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link rounded-pill px-4" data-bs-toggle="pill" data-bs-target="#dSalary" type="button">
+                            <i class="bi bi-wallet2 me-1"></i> Rémunération
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link rounded-pill px-4" data-bs-toggle="pill" data-bs-target="#dBank" type="button">
+                            <i class="bi bi-bank2 me-1"></i> Banque
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <div class="tab-content">
+                    <!-- Contact Tab -->
+                    <div class="tab-pane fade show active" id="dContact">
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:rgba(37,99,235,0.04);">
+                                    <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-phone"></i></div>
+                                    <div>
+                                        <small class="text-muted d-block">Téléphone Portable</small>
+                                        <span class="fw-bold">@(Model.TelephonePortable ?? "Non renseigné")</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:rgba(37,99,235,0.04);">
+                                    <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-envelope"></i></div>
+                                    <div>
+                                        <small class="text-muted d-block">Email</small>
+                                        <span class="fw-bold">@(Model.Email ?? "Non renseigné")</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:rgba(37,99,235,0.04);">
+                                    <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-heart"></i></div>
+                                    <div>
+                                        <small class="text-muted d-block">Situation Familiale</small>
+                                        <span class="fw-bold">@(Model.SituationFamiliale ?? "Non renseigné")</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:rgba(37,99,235,0.04);">
+                                    <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-people"></i></div>
+                                    <div>
+                                        <small class="text-muted d-block">Enfants à Charge</small>
+                                        <span class="fw-bold">@Model.NombreEnfantsACharge</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Salary Tab -->
+                    <div class="tab-pane fade" id="dSalary">
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6">
+                                <div class="p-4 rounded-3 text-center" style="background:linear-gradient(135deg,rgba(37,99,235,0.05),rgba(124,58,237,0.05));border:1px solid rgba(37,99,235,0.1);">
+                                    <i class="bi bi-currency-exchange text-primary fs-3 mb-2 d-block"></i>
+                                    <small class="text-muted d-block mb-1">Salaire de Base</small>
+                                    <h3 class="fw-bold text-primary mb-0">@(@Model.SalaireBase.ToString("N2"))</h3>
+                                    <small class="text-muted">MAD / mois</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="p-4 rounded-3 text-center" style="background:rgba(5,150,105,0.04);border:1px solid rgba(5,150,105,0.1);">
+                                    <i class="bi bi-credit-card text-success fs-3 mb-2 d-block"></i>
+                                    <small class="text-muted d-block mb-1">Mode de Paiement</small>
+                                    <h4 class="fw-bold text-success mb-0">@(Model.ModePaiement ?? "Non défini")</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bank Tab -->
+                    <div class="tab-pane fade" id="dBank">
+                        <div class="row g-4 mt-1">
+                            <div class="col-12">
+                                <div class="p-4 rounded-3" style="background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.1);">
+                                    <div class="d-flex align-items-center gap-2 mb-3">
+                                        <i class="bi bi-credit-card-2-front text-primary fs-4"></i>
+                                        <h6 class="fw-bold mb-0">Relevé d'Identité Bancaire (RIB)</h6>
+                                    </div>
+                                    <div class="p-3 bg-white rounded-3 border">
+                                        <code class="fs-5 fw-bold letter-spacing-1">@(Model.RIB ?? "Non renseigné")</code>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:rgba(37,99,235,0.04);">
+                                    <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-bank2"></i></div>
+                                    <div>
+                                        <small class="text-muted d-block">Banque</small>
+                                        <span class="fw-bold">@(Model.NomBanque ?? "Non renseigné")</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

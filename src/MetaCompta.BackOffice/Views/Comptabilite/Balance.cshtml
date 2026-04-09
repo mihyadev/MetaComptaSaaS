@@ -1,0 +1,62 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.BalanceDto>
+@{
+    ViewData["Title"] = "Balance";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-bar-chart-line me-2"></i>Balance</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Comptabilité</li>
+                <li class="breadcrumb-item active">Balance</li>
+            </ol>
+        </nav>
+    </div>
+    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i> Imprimer</button>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-building me-1"></i> Client : <strong>@client.RaisonSociale</strong>
+    </div>
+}
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>Balance des comptes</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mc-datatable mb-0">
+                <thead>
+                    <tr>
+                        <th>Compte</th>
+                        <th>Libellé</th>
+                        <th class="text-end">Débit</th>
+                        <th class="text-end">Crédit</th>
+                        <th class="text-end">Solde Débiteur</th>
+                        <th class="text-end">Solde Créditeur</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null)
+                    {
+                        foreach (var b in Model)
+                        {
+                            <tr>
+                                <td class="fw-medium">@b.NumeroCompte</td>
+                                <td>@b.LibelleCompte</td>
+                                <td class="text-end">@(b.TotalDebit.ToString("N2"))</td>
+                                <td class="text-end">@(b.TotalCredit.ToString("N2"))</td>
+                                <td class="text-end text-success">@(b.SoldeDebiteur.ToString("N2"))</td>
+                                <td class="text-end text-danger">@(b.SoldeCrediteur.ToString("N2"))</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

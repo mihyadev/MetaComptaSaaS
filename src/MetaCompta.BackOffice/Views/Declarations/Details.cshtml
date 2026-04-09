@@ -1,0 +1,494 @@
+﻿@using MetaCompta.Application.DTOs
+@model DeclarationDto
+@{
+    ViewData["Title"] = "Déclaration - " + Model.Type + " " + Model.Periode;
+    var tvaData = ViewBag.TVAData as DeclarationTVADto;
+    var isData = ViewBag.ISData as DeclarationISDto;
+    var irData = ViewBag.IRData as DeclarationIRDto;
+    var cnssData = ViewBag.CNSSData as DeclarationCNSSDto;
+    var wfInstance = ViewBag.WorkflowInstance as WorkflowInstanceDto;
+    var wfCurrentStep = ViewBag.WorkflowCurrentStep as WorkflowStepInstanceDto;
+    var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+    var hasActiveWorkflow = wfInstance != null && (wfInstance.Status == "Active" || wfInstance.Status == "Paused");
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Declarations?type=@Model.Type">@Model.Type</a></li>
+                <li class="breadcrumb-item active">@Model.Type - @Model.Periode</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text text-primary me-2"></i>@Model.Type - @Model.Periode</h4>
+    </div>
+    <div class="btn-group">
+        <a asp-action="Index" asp-route-type="@Model.Type" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+<!-- Workflow Action Bar (generic, step-aware) -->
+@await Html.PartialAsync("_WorkflowActionBar")
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-primary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div><div class="stat-label">Client</div><div class="stat-value" style="font-size:1rem;">@Model.ClientName</div></div>
+                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:var(--mc-primary);"><i class="bi bi-building"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-accent);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div><div class="stat-label">Date Limite</div><div class="stat-value" style="font-size:1rem;">@(Model.DateLimite.ToString("dd/MM/yyyy"))</div></div>
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--mc-accent);"><i class="bi bi-calendar"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--mc-secondary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div><div class="stat-label">Montant Dû</div><div class="stat-value">@(Model.MontantDu.HasValue ? Model.MontantDu.Value.ToString("N0") : "0") MAD</div></div>
+                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:var(--mc-secondary);"><i class="bi bi-cash"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid #8b5cf6;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div><div class="stat-label">Jours Restants</div><div class="stat-value">@Model.DaysUntilDeadline j</div></div>
+                <div class="stat-icon" style="background:rgba(139,92,246,0.1);color:#8b5cf6;"><i class="bi bi-clock"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- General Info -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-info-circle text-primary me-2"></i>Informations Générales</h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3"><label class="form-label text-muted small">Type</label>
+                <div>
+                    @{
+                        var typeColor = Model.Type switch
+                        {
+                            RefCodes.TypeDeclaration.TVA => "bg-success-subtle text-success",
+                            RefCodes.TypeDeclaration.IS => "bg-primary-subtle text-primary",
+                            RefCodes.TypeDeclaration.IR => "bg-info-subtle text-info",
+                            RefCodes.TypeDeclaration.CNSS => "bg-warning-subtle text-warning",
+                            _ => "bg-secondary-subtle text-secondary"
+                        };
+                    }
+                    <span class="badge @typeColor rounded-pill fs-6">@Model.Type</span>
+                </div>
+            </div>
+            <div class="col-md-3"><label class="form-label text-muted small">Période</label><div class="fw-semibold">@Model.Periode</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Date Début</label><div>@(Model.DateDebut.ToString("dd/MM/yyyy"))</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Date Fin</label><div>@(Model.DateFin.ToString("dd/MM/yyyy"))</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Statut</label><div><span class="badge bg-info-subtle text-info rounded-pill px-3">@Model.Statut</span></div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Date Soumission</label><div>@(Model.DateSoumission.HasValue ? Model.DateSoumission.Value.ToString("dd/MM/yyyy") : "-")</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Assistant</label><div>@(Model.AssistantName ?? "-")</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Validateur</label><div>@(Model.ValidateurName ?? "-")</div></div>
+            <div class="col-md-3"><label class="form-label text-muted small">Montant Crédit</label><div>@(Model.MontantCredit.HasValue ? Model.MontantCredit.Value.ToString("N0") + " MAD" : "-")</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- TYPE-SPECIFIC DATA -->
+@if (tvaData != null)
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-receipt text-success me-2"></i>Données TVA</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-2"><label class="form-label text-muted small">CA HT 20%</label><div class="fw-semibold">@tvaData.CAHT_20.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">CA HT 14%</label><div class="fw-semibold">@tvaData.CAHT_14.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">CA HT 10%</label><div class="fw-semibold">@tvaData.CAHT_10.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">CA HT 7%</label><div class="fw-semibold">@tvaData.CAHT_7.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">CA Exonéré</label><div class="fw-semibold">@tvaData.CAExonere.ToString("N2")</div></div>
+                <div class="col-12"><hr/></div>
+                <div class="col-md-3"><label class="form-label text-muted small">TVA Collectée</label><div class="fw-bold text-danger">@tvaData.TVACollecteeTotale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">TVA Récupérable</label><div class="fw-bold text-success">@tvaData.TVARecuperableTotale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">TVA à Payer</label><div class="fw-bold text-danger fs-5">@tvaData.TVAaPayer.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Crédit TVA</label><div class="fw-bold text-success fs-5">@tvaData.CreditTVA.ToString("N2") MAD</div></div>
+            </div>
+        </div>
+    </div>
+
+    @* Invoice Lines in Details *@
+    @if (tvaData.LignesFactures != null && tvaData.LignesFactures.Any())
+    {
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0"><i class="bi bi-receipt-cutoff text-success me-2"></i>Lignes de Factures (@tvaData.LignesFactures.Count)</h6>
+            <a asp-action="ExportTVAXml" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-success rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>Export XML EDI</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th class="ps-3">Type</th><th>N° Facture</th><th>Date</th><th>Fournisseur/Client</th><th>ICE</th><th class="text-end">HT</th><th>Taux</th><th class="text-end">TVA</th><th class="text-end">TTC</th><th>Opération</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in tvaData.LignesFactures)
+                        {
+                        <tr class="@(l.TypeOperation == "Achat" ? "table-info" : "")">
+                            <td class="ps-3">@l.TypePiece</td>
+                            <td class="fw-semibold">@(l.NumeroFacture ?? "-")</td>
+                            <td>@l.DateFacture.ToString("dd/MM/yyyy")</td>
+                            <td>@(l.FournisseurClient ?? "-")</td>
+                            <td><small class="text-muted">@(l.ICE ?? "-")</small></td>
+                            <td class="text-end">@l.MontantHT.ToString("N2")</td>
+                            <td><span class="badge bg-secondary-subtle text-secondary rounded-pill">@l.TauxTVA%</span></td>
+                            <td class="text-end">@l.MontantTVA.ToString("N2")</td>
+                            <td class="text-end fw-bold">@l.MontantTTC.ToString("N2")</td>
+                            <td>@(l.TypeOperation == "Vente" ? "Collectée" : "Déductible")</td>
+                        </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    }
+    else
+    {
+    <div class="d-flex justify-content-end mb-4">
+        <a asp-action="ExportTVAXml" asp-route-id="@Model.Id" class="btn btn-outline-success rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>Export XML EDI</a>
+    </div>
+    }
+}
+
+@if (isData != null)
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>Données IS</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label text-muted small">Résultat Comptable</label><div class="fw-semibold">@isData.ResultatComptable.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Réintégrations</label><div class="fw-semibold">@isData.Reintegrations.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Déductions</label><div class="fw-semibold">@isData.Deductions.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Résultat Fiscal</label><div class="fw-bold">@isData.ResultatFiscal.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Base Imposable</label><div class="fw-bold">@isData.BaseImposable.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Taux IS</label><div class="fw-bold">@isData.TauxIS.ToString("N0")%</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">IS Dû</label><div class="fw-bold text-danger">@isData.ISDu.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">IS Net</label><div class="fw-bold text-primary fs-5">@isData.ISNet.ToString("N2") MAD</div></div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (irData != null)
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-person-lines-fill text-info me-2"></i>Données IR</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label text-muted small">Revenu Brut Global</label><div class="fw-semibold">@irData.RevenuBrutGlobal.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Revenu Net Imposable</label><div class="fw-bold">@irData.RevenuNetImposable.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">IR Brut</label><div class="fw-bold text-warning">@irData.IRBrut.ToString("N2")</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">IR Net à Payer</label><div class="fw-bold text-danger fs-5">@irData.IRNet.ToString("N2") MAD</div></div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (cnssData != null)
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Données CNSS</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-2"><label class="form-label text-muted small">Employés</label><div class="fw-bold">@cnssData.NombreEmployes</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">Salaires Bruts</label><div class="fw-semibold">@cnssData.TotalSalairesBruts.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">Cot. Salariale</label><div>@cnssData.TotalCotisationSalariale.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">Cot. Patronale</label><div>@cnssData.TotalCotisationPatronale.ToString("N2")</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">AMO Total</label><div>@((cnssData.TotalAMOSalariale + cnssData.TotalAMOPatronale).ToString("N2"))</div></div>
+                <div class="col-md-2"><label class="form-label text-muted small">Total</label><div class="fw-bold text-danger fs-5">@cnssData.MontantTotal.ToString("N2") MAD</div></div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════ WORKFLOW PROGRESS ═══════ -->
+@if (hasActiveWorkflow && wfInstance != null)
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #7c3aed !important;">
+        <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0"><i class="bi bi-lightning-charge-fill text-purple me-2" style="color:#7c3aed;"></i>Workflow en cours</h6>
+            <div class="d-flex align-items-center gap-2">
+                @if (wfInstance.Status == "Active")
+                {
+                    <span class="badge bg-success bg-opacity-10 text-success" style="border-radius:20px;font-size:0.72rem;"><i class="bi bi-lightning-charge me-1"></i>Actif</span>
+                }
+                else if (wfInstance.Status == "Paused")
+                {
+                    <span class="badge bg-warning bg-opacity-10 text-warning" style="border-radius:20px;font-size:0.72rem;"><i class="bi bi-pause-circle me-1"></i>En pause</span>
+                }
+                <a href="@Url.Action("InstanceDetails", "Workflow", new { id = wfInstance.Id })" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0" style="font-size:0.72rem;" title="Voir détails complets"><i class="bi bi-box-arrow-up-right"></i></a>
+            </div>
+        </div>
+        <div class="card-body pt-2">
+            <!-- Workflow info -->
+            <div class="row g-2 mb-3" style="font-size:0.82rem;">
+                <div class="col-md-4">
+                    <span class="text-muted">Modèle:</span> <strong>@(wfInstance.WorkflowTemplateName ?? "Standard")</strong>
+                </div>
+                <div class="col-md-4">
+                    <span class="text-muted">Progression:</span> <strong>@wfInstance.CompletedSteps / @wfInstance.TotalSteps étapes</strong>
+                </div>
+                <div class="col-md-4">
+                    <span class="text-muted">Démarré:</span> <strong>@wfInstance.StartedAt.ToString("dd/MM/yyyy HH:mm")</strong>
+                </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span style="font-size:0.75rem; font-weight:600; color:#475569;">Avancement</span>
+                    <span style="font-size:0.75rem; font-weight:700; color:#7c3aed;">@wfInstance.ProgressPercent%</span>
+                </div>
+                <div style="height:8px; border-radius:4px; background:#e2e8f0; overflow:hidden;">
+                    <div style="height:100%; width:@(wfInstance.ProgressPercent)%; background:linear-gradient(90deg,#7c3aed,#a855f7); border-radius:4px; transition:width 0.5s;"></div>
+                </div>
+            </div>
+
+            <!-- Steps timeline (compact horizontal) -->
+            @if (wfInstance.StepInstances?.Any() == true)
+            {
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    @foreach (var step in wfInstance.StepInstances.OrderBy(s => s.StepOrder))
+                    {
+                        var stepColor = step.Status switch
+                        {
+                            "Completed" => "background:#22c55e; color:#fff;",
+                            "InProgress" => "background:#3b82f6; color:#fff; animation:pulse 2s infinite;",
+                            "WaitingForClient" => "background:#f59e0b; color:#fff;",
+                            "WaitingForValidation" => "background:#8b5cf6; color:#fff;",
+                            "Blocked" => "background:#ef4444; color:#fff;",
+                            "Failed" => "background:#dc2626; color:#fff;",
+                            "Skipped" => "background:#94a3b8; color:#fff;",
+                            _ => "background:#e2e8f0; color:#64748b;"
+                        };
+                        var stepIcon = step.Status switch
+                        {
+                            "Completed" => "bi-check-lg",
+                            "InProgress" => "bi-arrow-right",
+                            "WaitingForClient" => "bi-person-exclamation",
+                            "WaitingForValidation" => "bi-shield-check",
+                            "Blocked" => "bi-exclamation-triangle",
+                            "Failed" => "bi-x-lg",
+                            "Skipped" => "bi-skip-forward",
+                            _ => "bi-circle"
+                        };
+                        <div style="display:flex; align-items:center; gap:0.25rem; padding:0.2rem 0.6rem; border-radius:20px; font-size:0.7rem; font-weight:600; @stepColor" title="@step.StepName — @step.Status@(step.AssignedToUserName != null ? " (Assigné: " + step.AssignedToUserName + ")" : "")">
+                            <i class="bi @stepIcon" style="font-size:0.65rem;"></i>
+                            <span>@step.StepOrder. @step.StepName</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Current step detail -->
+            @if (wfCurrentStep != null)
+            {
+                <div style="background:rgba(124,58,237,0.04); border:1px solid rgba(124,58,237,0.15); border-radius:12px; padding:0.75rem 1rem; margin-bottom:0.75rem;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div style="font-size:0.72rem; color:#7c3aed; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Étape actuelle</div>
+                            <div style="font-size:0.92rem; font-weight:600; color:#1e293b;">@wfCurrentStep.StepOrder. @wfCurrentStep.StepName</div>
+                            @if (wfCurrentStep.AssignedToUserName != null)
+                            {
+                                <div style="font-size:0.75rem; color:#64748b;"><i class="bi bi-person-fill me-1"></i>Assigné à: <strong>@wfCurrentStep.AssignedToUserName</strong></div>
+                            }
+                            @if (wfCurrentStep.DueDate.HasValue)
+                            {
+                                <div style="font-size:0.75rem; color:@(wfCurrentStep.IsOverdue ? "#ef4444" : "#64748b");"><i class="bi bi-clock me-1"></i>Échéance: @wfCurrentStep.DueDate.Value.ToString("dd/MM/yyyy HH:mm") @(wfCurrentStep.IsOverdue ? "⚠️ EN RETARD" : "")</div>
+                            }
+                        </div>
+                        <div class="d-flex flex-column gap-1">
+                            @if (wfInstance.Status == "Active")
+                            {
+                                <form asp-action="AdvanceWorkflowStep" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="declarationId" value="@Model.Id" />
+                                    <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-arrow-right-circle me-1"></i>Avancer</button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Workflow control buttons -->
+            <div class="d-flex flex-wrap gap-2">
+                @if (wfInstance.Status == "Active")
+                {
+                    <form asp-action="PauseDeclarationWorkflow" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="declarationId" value="@Model.Id" />
+                        <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-warning rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-pause-circle me-1"></i>Pause</button>
+                    </form>
+                }
+                @if (wfInstance.Status == "Paused")
+                {
+                    <form asp-action="ResumeDeclarationWorkflow" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="declarationId" value="@Model.Id" />
+                        <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-success rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-play-circle me-1"></i>Reprendre</button>
+                    </form>
+                }
+                <form asp-action="CancelDeclarationWorkflow" method="post" class="d-inline" onsubmit="return confirm('Annuler ce workflow ?');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="declarationId" value="@Model.Id" />
+                    <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-x-octagon me-1"></i>Annuler</button>
+                </form>
+                <a href="@Url.Action("InstanceDetails", "Workflow", new { id = wfInstance.Id })" class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-eye me-1"></i>Détails complets</a>
+            </div>
+        </div>
+    </div>
+}
+else if (wfInstance != null && wfInstance.Status == "Completed")
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #22c55e !important;">
+        <div class="card-body py-3 d-flex align-items-center gap-3">
+            <div style="width:40px;height:40px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;"><i class="bi bi-check-circle-fill" style="color:#22c55e;font-size:1.2rem;"></i></div>
+            <div>
+                <div class="fw-bold" style="font-size:0.88rem;">Workflow terminé</div>
+                <div style="font-size:0.78rem; color:#64748b;">@(wfInstance.WorkflowTemplateName ?? "Standard") — Complété le @(wfInstance.CompletedAt?.ToString("dd/MM/yyyy HH:mm") ?? "")</div>
+            </div>
+            <a href="@Url.Action("InstanceDetails", "Workflow", new { id = wfInstance.Id })" class="btn btn-sm btn-outline-success rounded-pill px-3 ms-auto" style="font-size:0.78rem;"><i class="bi bi-eye me-1"></i>Historique</a>
+        </div>
+    </div>
+}
+else
+{
+    <!-- No workflow — offer to start one -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #94a3b8 !important;">
+        <div class="card-body py-3 d-flex align-items-center gap-3 flex-wrap">
+            <div style="width:40px;height:40px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><i class="bi bi-lightning-charge" style="color:#94a3b8;font-size:1.1rem;"></i></div>
+            <div>
+                <div class="fw-bold" style="font-size:0.88rem;">Aucun workflow</div>
+                <div style="font-size:0.78rem; color:#64748b;">Démarrer un workflow pour suivre le processus de cette déclaration étape par étape.</div>
+            </div>
+            <div class="ms-auto d-flex gap-2 flex-wrap">
+                @if (wfTemplates.Any())
+                {
+                    <form asp-action="StartWorkflow" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="declarationId" value="@Model.Id" />
+                        @if (wfTemplates.Count == 1)
+                        {
+                            <input type="hidden" name="workflowTemplateId" value="@wfTemplates.First().Id" />
+                            <button type="submit" class="btn btn-sm rounded-pill px-3" style="font-size:0.78rem; background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border:0;"><i class="bi bi-lightning-charge-fill me-1"></i>Démarrer: @wfTemplates.First().Name</button>
+                        }
+                        else
+                        {
+                            <div class="input-group input-group-sm" style="max-width:400px;">
+                                <select name="workflowTemplateId" class="form-select form-select-sm" style="border-radius:20px 0 0 20px; font-size:0.78rem; border-color:#c4b5fd;">
+                                    @foreach (var tpl in wfTemplates)
+                                    {
+                                        <option value="@tpl.Id">@tpl.Name (@tpl.StepCount étapes)</option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn btn-sm px-3" style="font-size:0.78rem; background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border:0; border-radius:0 20px 20px 0;"><i class="bi bi-lightning-charge-fill me-1"></i>Démarrer</button>
+                            </div>
+                        }
+                    </form>
+                }
+                else
+                {
+                    <span class="text-muted" style="font-size:0.78rem;">Aucun modèle de workflow disponible. <a href="@Url.Action("Builder", "Workflow")">Créer un modèle</a></span>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+</style>
+
+<!-- Actions -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-gear text-warning me-2"></i>Actions</h6>
+        <div class="d-flex flex-wrap gap-2">
+            @if (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnCours)
+            {
+                @switch (Model.Type)
+                {
+                    case "TVA":
+                        <a asp-action="EditTVA" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier TVA</a>
+                        break;
+                    case "IS":
+                        <a asp-action="EditIS" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier IS</a>
+                        break;
+                    case "IR":
+                        <a asp-action="EditIR" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier IR</a>
+                        break;
+                    case "CNSS":
+                        <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier CNSS</a>
+                        break;
+                }
+            }
+            @if (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnPreparation)
+            {
+                <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Completee" />
+                    <button type="submit" class="btn btn-info rounded-pill px-3"><i class="bi bi-check2-circle me-1"></i>Marquer Complétée</button>
+                </form>
+            }
+            @if (Model.Statut == RefCodes.StatutDeclaration.Completee || Model.Statut == RefCodes.StatutDeclaration.EnRevision)
+            {
+                <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Validee" />
+                    <button type="submit" class="btn btn-primary rounded-pill px-3"><i class="bi bi-check-lg me-1"></i>Valider</button>
+                </form>
+            }
+            @if (Model.Statut == RefCodes.StatutDeclaration.Validee)
+            {
+                <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Soumise" />
+                    <button type="submit" class="btn btn-success rounded-pill px-3"><i class="bi bi-send me-1"></i>Soumettre</button>
+                </form>
+            }
+            @if (Model.Statut != RefCodes.StatutDeclaration.Soumise && Model.Statut != RefCodes.StatutDeclaration.Validee && Model.Statut != RefCodes.StatutDeclaration.Payee)
+            {
+                <form asp-action="Delete" asp-route-id="@Model.Id" method="post" class="d-inline"
+                      onsubmit="return confirm('Supprimer cette déclaration ?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger rounded-pill px-3"><i class="bi bi-trash me-1"></i>Supprimer</button>
+                </form>
+            }
+            @if (!string.IsNullOrEmpty(Model.PdfUrl))
+            {
+                <a href="@Model.PdfUrl" target="_blank" class="btn btn-outline-primary rounded-pill px-3"><i class="bi bi-file-pdf me-1"></i>Télécharger PDF</a>
+            }
+        </div>
+    </div>
+</div>

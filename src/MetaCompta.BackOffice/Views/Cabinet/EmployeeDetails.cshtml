@@ -1,0 +1,341 @@
+@model MetaCompta.Application.DTOs.CabinetEmployeeDto
+@{
+    ViewData["Title"] = "D&eacute;tails employ&eacute;";
+    var initials = (!string.IsNullOrEmpty(Model.FirstName) ? Model.FirstName[0].ToString().ToUpper() : "") +
+    (!string.IsNullOrEmpty(Model.LastName) ? Model.LastName[0].ToString().ToUpper() : "");
+    var roleColor = Model.Role switch
+    {
+        "SuperAdmin" => "#dc2626",
+        "Manager" => "#7c3aed",
+        "Comptable" => "#2563eb",
+        "Fiscaliste" => "#d97706",
+        "Assistant" => "#64748b",
+        _ => "#475569"
+    };
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-person-badge text-primary me-2"></i>Fiche Employ&eacute;</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Cabinet")">Cabinet</a></li>
+                <li class="breadcrumb-item active">@Model.NomComplet</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("EditEmployee", "Cabinet", new { id = Model.Id })"
+            class="btn btn-mc-primary rounded-pill px-3">
+            <i class="bi bi-pencil me-1"></i>Modifier
+        </a>
+        <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+</div>
+
+<!-- ==================== Profile Header Card ==================== -->
+<div class="mc-card mb-4">
+    <div class="card-body px-4 py-4">
+        <div class="row align-items-center g-3">
+            <div class="col-auto">
+                <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                    style="width:88px;height:88px;font-size:1.8rem;background:linear-gradient(135deg, @(roleColor), @(roleColor)cc);box-shadow:0 8px 24px @(roleColor)33;">
+                    @initials
+                </div>
+            </div>
+            <div class="col">
+                <h3 class="mb-1 fw-bold">@Model.NomComplet</h3>
+                <p class="text-muted mb-2"><i class="bi bi-envelope me-1"></i>@Model.Email</p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="badge rounded-pill px-3 py-2" style="background:@(roleColor);font-size:.8rem;">
+                        <i class="bi bi-shield-check me-1"></i>@(Model.Role ?? "Non d&eacute;fini")
+                    </span>
+                    @if (!string.IsNullOrEmpty(Model.Departement))
+                    {
+                        <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-3 py-2"><i
+                                class="bi bi-building me-1"></i>@Model.Departement</span>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.Poste))
+                    {
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-3 py-2"><i
+                                class="bi bi-briefcase me-1"></i>@Model.Poste</span>
+                    }
+                    <span
+                        class="badge rounded-pill px-3 py-2 @(Model.EstActif ? "bg-success bg-opacity-10 text-success" : "bg-danger bg-opacity-10 text-danger")">
+                        @(Model.EstActif ? "\u2705 Actif" : "\u274c Inactif")
+                    </span>
+                </div>
+            </div>
+            <div class="col-auto text-end">
+                @if (Model.DerniereConnexion.HasValue)
+                {
+                    <div class="p-3 bg-light rounded-3 text-center" style="min-width:140px;">
+                        <div class="text-muted small fw-medium mb-1">Derni&egrave;re connexion</div>
+                        <div class="fw-bold">@Model.DerniereConnexion.Value.ToString("dd/MM/yyyy")</div>
+                        <div class="text-muted small">@Model.DerniereConnexion.Value.ToString("HH:mm")</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-3 bg-warning bg-opacity-10 rounded-3 text-center" style="min-width:140px;">
+                        <i class="bi bi-clock-history text-warning fs-4 d-block mb-1"></i>
+                        <div class="small text-warning fw-semibold">Jamais connect&eacute;</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- ==================== LEFT COLUMN ==================== -->
+    <div class="col-lg-8">
+
+        <!-- Personal Info -->
+        <div class="mc-card mb-4">
+            <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-vcard"></i></div>
+                <div>
+                    <h5 class="mb-0 fw-bold">Informations Personnelles</h5>
+                    <small class="text-muted">Identit&eacute; civile</small>
+                </div>
+            </div>
+            <div class="card-body px-4 pb-4 pt-3">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-fingerprint text-primary small"></i>
+                                <span class="text-muted small fw-medium">CIN</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.CIN ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-gender-ambiguous text-warning small"></i>
+                                <span class="text-muted small fw-medium">Sexe</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.Sexe ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-heart text-danger small"></i>
+                                <span class="text-muted small fw-medium">Situation familiale</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.SituationFamiliale ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-calendar-event text-info small"></i>
+                                <span class="text-muted small fw-medium">Date de naissance</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.DateNaissance?.ToString("dd/MM/yyyy") ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-geo text-success small"></i>
+                                <span class="text-muted small fw-medium">Lieu de naissance</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.LieuNaissance ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-phone text-success small"></i>
+                                <span class="text-muted small fw-medium">T&eacute;l&eacute;phone</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.Telephone ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-geo-alt text-danger small"></i>
+                                <span class="text-muted small fw-medium">Adresse</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.Adresse ?? "\u2014")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Professional Info -->
+        <div class="mc-card mb-4">
+            <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-briefcase-fill"></i></div>
+                <div>
+                    <h5 class="mb-0 fw-bold">Informations Professionnelles</h5>
+                    <small class="text-muted">Contrat et affiliation</small>
+                </div>
+            </div>
+            <div class="card-body px-4 pb-4 pt-3">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-briefcase text-primary small"></i>
+                                <span class="text-muted small fw-medium">Poste</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.Poste ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-building text-info small"></i>
+                                <span class="text-muted small fw-medium">D&eacute;partement</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.Departement ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-file-earmark-text text-warning small"></i>
+                                <span class="text-muted small fw-medium">Type de contrat</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.TypeContrat ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-calendar-check text-success small"></i>
+                                <span class="text-muted small fw-medium">Date d'embauche</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.DateEmbauche?.ToString("dd/MM/yyyy") ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-shield-check text-danger small"></i>
+                                <span class="text-muted small fw-medium">N&deg; CNSS</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.NumeroCNSS ?? "\u2014")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="bi bi-translate text-secondary small"></i>
+                                <span class="text-muted small fw-medium">Langue</span>
+                            </div>
+                            <div class="fw-semibold">@(Model.PreferredLanguage ?? "fr-FR")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Stats -->
+        <div class="mc-card mb-4">
+            <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-graph-up-arrow"></i></div>
+                <div>
+                    <h5 class="mb-0 fw-bold">Activit&eacute;</h5>
+                    <small class="text-muted">Vue d'ensemble de l'activit&eacute;</small>
+                </div>
+            </div>
+            <div class="card-body px-4 pb-4 pt-3">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="stat-card text-center p-4">
+                            <div class="stat-icon bg-primary bg-opacity-10 text-primary mx-auto mb-2"><i
+                                    class="bi bi-people-fill"></i></div>
+                            <div class="stat-value">@Model.ClientsAssignes</div>
+                            <div class="stat-label">Clients assign&eacute;s</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card text-center p-4">
+                            <div class="stat-icon bg-warning bg-opacity-10 text-warning mx-auto mb-2"><i
+                                    class="bi bi-list-task"></i></div>
+                            <div class="stat-value">@Model.TachesEnCours</div>
+                            <div class="stat-label">T&acirc;ches en cours</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card text-center p-4">
+                            <div class="stat-icon bg-success bg-opacity-10 text-success mx-auto mb-2"><i
+                                    class="bi bi-shield-lock-fill"></i></div>
+                            <div class="stat-value">@(Model.Permissions?.Count ?? 0)</div>
+                            <div class="stat-label">Permissions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ==================== RIGHT: Permissions ==================== -->
+    <div class="col-lg-4">
+        <div class="mc-card" style="position:sticky;top:80px;">
+            <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-shield-lock-fill"></i></div>
+                <div>
+                    <h5 class="mb-0 fw-bold">Permissions</h5>
+                    <small class="text-muted"><span class="badge bg-primary rounded-pill">@(Model.Permissions?.Count ??
+                                                        0)</span> actives</small>
+                </div>
+            </div>
+            <div class="card-body px-4 pb-4 pt-3" style="max-height:580px;overflow-y:auto;">
+                @if (Model.Permissions?.Any() == true)
+                {
+                    var grouped = Model.Permissions
+                    .GroupBy(p => p.Contains('.') ? p.Split('.')[0] : p)
+                    .OrderBy(g => g.Key);
+                    foreach (var group in grouped)
+                    {
+                        <div class="mb-3 p-3 bg-light rounded-3">
+                            <h6 class="fw-bold text-capitalize mb-2 small">
+                                <i class="bi bi-folder2-open me-1 text-primary"></i>@group.Key
+                                <span class="badge bg-primary bg-opacity-10 text-primary ms-1"
+                                    style="font-size:.65rem;">@group.Count()</span>
+                            </h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (var perm in group)
+                                {
+                                    <span class="badge bg-white text-dark border rounded-pill px-2 py-1 small"
+                                        style="font-size:.72rem;">
+                                        <i class="bi bi-check-circle-fill text-success me-1"></i>@perm.Split('.').Last()
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-shield-x fs-1 d-block mb-3 opacity-50"></i>
+                        <p class="mb-1 fw-semibold">Aucune permission directe</p>
+                        <small>Attribuez des permissions via l'&eacute;dition du profil.</small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="mt-4 mb-5">
+    <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary rounded-pill px-4 py-2">
+        <i class="bi bi-arrow-left me-2"></i>Retour &agrave; la liste
+    </a>
+</div>

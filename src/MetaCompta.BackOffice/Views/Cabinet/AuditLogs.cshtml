@@ -1,0 +1,107 @@
+﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.AuditLogDto>
+@{
+    ViewData["Title"] = "Historique de connexion";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-clock-history me-2"></i>Historique de connexion</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Cabinet</li>
+                <li class="breadcrumb-item active">Historique</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="mc-card mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Utilisateur</label>
+                <input type="text" name="utilisateur" class="form-control" value="@ViewBag.Utilisateur" placeholder="Nom d'utilisateur..." />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Action</label>
+                <select name="action" class="form-select">
+                    <option value="">Toutes</option>
+                    <option value="Connexion" selected="@(ViewBag.Action?.ToString() == "Connexion")">Connexion</option>
+                    <option value="Deconnexion" selected="@(ViewBag.Action?.ToString() == "Deconnexion")">Déconnexion</option>
+                    <option value="Creation" selected="@(ViewBag.Action?.ToString() == "Creation")">Création</option>
+                    <option value="Modification" selected="@(ViewBag.Action?.ToString() == "Modification")">Modification</option>
+                    <option value="Suppression" selected="@(ViewBag.Action?.ToString() == "Suppression")">Suppression</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Date début</label>
+                <input type="date" name="dateDebut" class="form-control" value="@(ViewBag.DateDebut != null ? ((DateTime)ViewBag.DateDebut).ToString("yyyy-MM-dd") : "")" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Date fin</label>
+                <input type="date" name="dateFin" class="form-control" value="@(ViewBag.DateFin != null ? ((DateTime)ViewBag.DateFin).ToString("yyyy-MM-dd") : "")" />
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>Logs (@(Model?.TotalCount ?? 0))</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Date & Heure</th>
+                        <th>Utilisateur</th>
+                        <th>Action</th>
+                        <th>Détails</th>
+                        <th>Adresse IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        foreach (var log in Model.Items)
+                        {
+                            var iconClass = log.Action switch
+                            {
+                                "Connexion" => "bi-box-arrow-in-right text-success",
+                                "Deconnexion" => "bi-box-arrow-right text-warning",
+                                "Creation" => "bi-plus-circle text-primary",
+                                "Modification" => "bi-pencil text-info",
+                                "Suppression" => "bi-trash text-danger",
+                                _ => "bi-activity text-muted"
+                            };
+                            <tr>
+                                <td>@(log.DateAction.ToString("dd/MM/yyyy HH:mm:ss"))</td>
+                                <td class="fw-medium">@log.Utilisateur</td>
+                                <td>
+                                    <i class="bi @iconClass me-1"></i>
+                                    @log.Action
+                                </td>
+                                <td class="text-muted small">@log.Details</td>
+                                <td><code>@log.AdresseIP</code></td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                <i class="bi bi-clock-history fs-1 d-block mb-2"></i>
+                                Aucun log trouvé.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,74 @@
+﻿@model MetaCompta.Application.DTOs.DocumentDto
+@{
+    ViewData["Title"] = "Détails du document";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-file-earmark me-2"></i>@Model.Nom</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Documents")">Documents</a></li>
+                <li class="breadcrumb-item active">Détails</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <form method="post" action="@Url.Action("ToggleShare", "Documents")" class="d-inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <button type="submit" class="btn btn-mc-primary">
+                <i class="bi bi-share me-1"></i>
+                @(Model.EstPartage ? "Retirer le partage" : "Partager avec le client")
+            </button>
+        </form>
+        <a href="@Url.Action("Index", "Documents")" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Retour
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Informations du document</div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr><th class="text-muted" style="width:200px">Nom</th><td class="fw-medium">@Model.Nom</td></tr>
+                    <tr><th class="text-muted">Client</th><td>@Model.ClientNom</td></tr>
+                    <tr><th class="text-muted">Catégorie</th><td><span class="badge bg-light text-dark">@Model.Categorie</span></td></tr>
+                    <tr><th class="text-muted">Type de fichier</th><td>@Model.TypeDocument</td></tr>
+                    <tr><th class="text-muted">Taille</th><td>@Model.TailleFichier</td></tr>
+                    <tr><th class="text-muted">Date d'upload</th><td>@(Model.DateUpload.ToString("dd/MM/yyyy HH:mm"))</td></tr>
+                    <tr><th class="text-muted">Statut</th><td><span class="badge badge-@Model.Statut?.ToLower()">@Model.Statut</span></td></tr>
+                    <tr><th class="text-muted">Partagé</th><td>@(Model.EstPartage ? "✅ Oui" : "❌ Non")</td></tr>
+                    @if (!string.IsNullOrEmpty(Model.UploadePar))
+                    {
+                        <tr><th class="text-muted">Uploadé par</th><td>@Model.UploadePar</td></tr>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="mc-card">
+            <div class="card-header"><i class="bi bi-gear me-2"></i>Actions</div>
+            <div class="card-body">
+                <form method="post" action="@Url.Action("ChangeStatus", "Documents")">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="mb-3">
+                        <label class="form-label">Changer le statut</label>
+                        <select name="statut" class="form-select">
+                            <option value="@RefCodes.StatutDocument.EnAttente">Brouillon</option>
+                            <option value="Valide">Validé</option>
+                            <option value="Archive">Archivé</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-check me-1"></i> Appliquer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

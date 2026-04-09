@@ -1,0 +1,8 @@
+@* DevisEdit — Réutilise le template DevisCreate avec le DevisId dans ViewBag *@
+@model DevisCreateDto
+@{
+    ViewData["Title"] = "Modifier le Devis";
+    ViewBag.DevisId = ViewBag.DevisId;
+}
+
+@await Html.PartialAsync("DevisCreate", Model)

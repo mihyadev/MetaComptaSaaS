@@ -1,0 +1,64 @@
+﻿@model IEnumerable<MetaCompta.Application.DTOs.BalanceAgeeDto>
+@{
+    ViewData["Title"] = "Balance âgée";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-clock-history me-2"></i>Balance âgée</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item">Comptabilité</li>
+                <li class="breadcrumb-item active">Balance âgée</li>
+            </ol>
+        </nav>
+    </div>
+    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i> Imprimer</button>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-building me-1"></i> Client : <strong>@client.RaisonSociale</strong>
+    </div>
+}
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-table me-2"></i>Balance âgée des créances</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Compte</th>
+                        <th>Tiers</th>
+                        <th class="text-end">0–30 jours</th>
+                        <th class="text-end">30–60 jours</th>
+                        <th class="text-end">60–90 jours</th>
+                        <th class="text-end">+90 jours</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null)
+                    {
+                        foreach (var b in Model)
+                        {
+                            <tr>
+                                <td class="fw-medium">@b.NumeroCompte</td>
+                                <td>@b.NomTiers</td>
+                                <td class="text-end">@(b.Tranche0_30.ToString("N2"))</td>
+                                <td class="text-end">@(b.Tranche30_60.ToString("N2"))</td>
+                                <td class="text-end text-warning">@(b.Tranche60_90.ToString("N2"))</td>
+                                <td class="text-end text-danger fw-bold">@(b.TrancheSuperieur90.ToString("N2"))</td>
+                                <td class="text-end fw-bold">@(b.Total.ToString("N2")) MAD</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

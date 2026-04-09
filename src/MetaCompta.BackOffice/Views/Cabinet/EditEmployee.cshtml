@@ -1,0 +1,293 @@
+@model MetaCompta.Application.DTOs.CabinetEmployeeUpdateDto
+@{
+    ViewData["Title"] = "Modifier employ&eacute;";
+    var claimsByDomain = ViewBag.ClaimsByDomain as Dictionary<string, List<string>> ?? new Dictionary<string, List<string>>();
+    var roles = ViewBag.Roles as List<MetaCompta.Application.DTOs.RoleDto> ?? new List<MetaCompta.Application.DTOs.RoleDto>();
+    var employeeId = ViewBag.EmployeeId as string;
+    var employeeEmail = ViewBag.EmployeeEmail as string;
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-pencil-square text-primary me-2"></i>Modifier Employ&eacute;</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Cabinet")">Cabinet</a></li>
+                <li class="breadcrumb-item active">Modifier</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("EmployeeDetails", "Cabinet", new { id = employeeId })" class="btn btn-outline-info rounded-pill px-3">
+            <i class="bi bi-eye me-1"></i>Voir d&eacute;tails
+        </a>
+        <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Erreur de validation :</strong>
+        @Html.ValidationSummary(true)
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<form method="post" asp-action="EditEmployee" asp-route-id="@employeeId">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-4">
+
+        <!-- ==================== LEFT COLUMN ==================== -->
+        <div class="col-lg-8">
+
+            <!-- Email (non-editable) -->
+            <div class="mc-card mb-4">
+                <div class="card-body px-4 py-3 d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-envelope-fill"></i></div>
+                    <div class="flex-grow-1">
+                        <div class="text-muted small fw-medium mb-1">Email (non modifiable)</div>
+                        <div class="fw-bold">@employeeEmail</div>
+                    </div>
+                    <span class="badge bg-light text-muted border rounded-pill px-3 py-2"><i class="bi bi-lock me-1"></i>Verrouill&eacute;</span>
+                </div>
+            </div>
+
+            <!-- Personal Info -->
+            <div class="mc-card mb-4">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-vcard"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Informations Personnelles</h5>
+                        <small class="text-muted">Identit&eacute; civile de l'employ&eacute;</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="FirstName" class="form-label fw-semibold">Pr&eacute;nom <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                <input asp-for="FirstName" class="form-control border-start-0" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="LastName" class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                <input asp-for="LastName" class="form-control border-start-0" required />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="CIN" class="form-label fw-semibold">CIN</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-fingerprint text-muted"></i></span>
+                                <input asp-for="CIN" class="form-control border-start-0" placeholder="AB123456" />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Sexe" class="form-label fw-semibold">Sexe</label>
+                            <select asp-for="Sexe" class="form-select">
+                                <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                <option value="Homme">Homme</option>
+                                <option value="Femme">Femme</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SituationFamiliale" class="form-label fw-semibold">Situation familiale</label>
+                            <select asp-for="SituationFamiliale" class="form-select">
+                                <option value="">&#8212;</option>
+                                <option value="C&eacute;libataire">C&eacute;libataire</option>
+                                <option value="Mari&eacute;(e)">Mari&eacute;(e)</option>
+                                <option value="Divorc&eacute;(e)">Divorc&eacute;(e)</option>
+                                <option value="Veuf/Veuve">Veuf/Veuve</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                        <div class="col-md-4">
+                            <label asp-for="DateNaissance" class="form-label fw-semibold">Date de naissance</label>
+                            <input asp-for="DateNaissance" type="date" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="LieuNaissance" class="form-label fw-semibold">Lieu de naissance</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo text-muted"></i></span>
+                                <input asp-for="LieuNaissance" class="form-control border-start-0" />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Telephone" class="form-label fw-semibold">T&eacute;l&eacute;phone</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-phone text-muted"></i></span>
+                                <input asp-for="Telephone" class="form-control border-start-0" placeholder="+212 6XX" />
+                            </div>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                        <div class="col-12">
+                            <label asp-for="Adresse" class="form-label fw-semibold">Adresse</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo-alt text-muted"></i></span>
+                                <input asp-for="Adresse" class="form-control border-start-0" placeholder="Adresse compl&egrave;te" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Professional Info -->
+            <div class="mc-card mb-4">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center gap-2 px-4 pt-4 pb-0">
+                    <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-briefcase-fill"></i></div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">Informations Professionnelles</h5>
+                        <small class="text-muted">Poste, contrat et r&ocirc;le</small>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="Poste" class="form-label fw-semibold">Poste / Fonction</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-briefcase text-muted"></i></span>
+                                <input asp-for="Poste" class="form-control border-start-0" placeholder="Ex: Comptable senior" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="Departement" class="form-label fw-semibold">D&eacute;partement</label>
+                            <select asp-for="Departement" class="form-select">
+                                <option value="">&#8212; S&eacute;lectionner &#8212;</option>
+                                <option value="Direction">Direction</option>
+                                <option value="Comptabilit&eacute;">Comptabilit&eacute;</option>
+                                <option value="Fiscal">Fiscal</option>
+                                <option value="Social">Social / Paie</option>
+                                <option value="Juridique">Juridique</option>
+                                <option value="Audit">Audit</option>
+                                <option value="Support">Support / Admin</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                        <div class="col-md-4">
+                            <label asp-for="TypeContrat" class="form-label fw-semibold">Contrat</label>
+                            <select asp-for="TypeContrat" class="form-select">
+                                <option value="">&#8212;</option>
+                                <option value="CDI">CDI</option>
+                                <option value="CDD">CDD</option>
+                                <option value="Stage">Stage</option>
+                                <option value="Freelance">Freelance</option>
+                                <option value="Int&eacute;rim">Int&eacute;rim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="DateEmbauche" class="form-label fw-semibold">Date d'embauche</label>
+                            <input asp-for="DateEmbauche" type="date" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="NumeroCNSS" class="form-label fw-semibold">N&deg; CNSS</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-shield-check text-muted"></i></span>
+                                <input asp-for="NumeroCNSS" class="form-control border-start-0" />
+                            </div>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1 opacity-25" /></div>
+
+                        <div class="col-md-6">
+                            <label asp-for="Role" class="form-label fw-semibold">R&ocirc;le <span class="text-danger">*</span></label>
+                            <select asp-for="Role" class="form-select" required>
+                                <option value="Assistant">Assistant</option>
+                                <option value="Comptable">Comptable</option>
+                                <option value="Fiscaliste">Fiscaliste</option>
+                                <option value="Manager">Manager</option>
+                                <option value="SuperAdmin">Super Admin</option>
+                                @foreach (var role in roles.Where(r => r.Name != "SuperAdmin" && r.Name != "Manager" && r.Name != "Assistant" && r.Name != "Comptable" && r.Name != "Fiscaliste"))
+                                {
+                                    <option value="@role.Name">@role.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="IsActive" class="form-label fw-semibold">Statut du compte</label>
+                            <select asp-for="IsActive" class="form-select">
+                                <option value="true">&#10004;&#65039; Actif</option>
+                                <option value="false">&#10060; Inactif</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== RIGHT: Permissions ==================== -->
+        <div class="col-lg-4">
+            <div class="mc-card" style="position:sticky;top:80px;">
+                <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between px-4 pt-4 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-shield-lock-fill"></i></div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">Permissions</h5>
+                            <small class="text-muted"><span class="badge bg-primary rounded-pill">@(Model.Permissions?.Count ?? 0)</span> actives</small>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill me-1" onclick="toggleAllPerms(true)"><i class="bi bi-check-all"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="toggleAllPerms(false)"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4 pt-3" style="max-height:650px;overflow-y:auto;">
+                    @foreach (var domain in claimsByDomain.OrderBy(d => d.Key))
+                    {
+                        <div class="mb-3 p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="fw-bold text-capitalize mb-0 small">
+                                    <i class="bi bi-folder2-open me-1 text-primary"></i>@domain.Key
+                                    <span class="badge bg-primary bg-opacity-10 text-primary ms-1" style="font-size:.65rem;">@domain.Value.Count</span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none small" onclick="toggleDomain('@domain.Key')">
+                                    <i class="bi bi-check2-square me-1"></i>tout
+                                </button>
+                            </div>
+                            @foreach (var claim in domain.Value)
+                            {
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input perm-cb" data-domain="@domain.Key"
+                                           name="Permissions" value="@claim" id="ep_@claim.Replace(".", "_")"
+                                           @(Model.Permissions?.Contains(claim) == true ? "checked" : "") />
+                                    <label class="form-check-label small" for="ep_@claim.Replace(".", "_")">@claim.Split('.').Last()</label>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-between mt-4 mb-5">
+        <a href="@Url.Action("Index", "Cabinet")" class="btn btn-outline-secondary rounded-pill px-4 py-2">
+            <i class="bi bi-arrow-left me-2"></i>Annuler
+        </a>
+        <button type="submit" class="btn btn-mc-success rounded-pill px-4 py-2">
+            <i class="bi bi-check-lg me-2"></i>Enregistrer les modifications
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+function toggleAllPerms(c) { document.querySelectorAll('.perm-cb').forEach(x => x.checked = c); }
+function toggleDomain(d) { let cbs = document.querySelectorAll('.perm-cb[data-domain="'+d+'"]'); let a = Array.from(cbs).every(x => x.checked); cbs.forEach(x => x.checked = !a); }
+</script>
+}

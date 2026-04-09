@@ -1,0 +1,123 @@
+﻿@model BonCommandeDto
+@{
+    ViewData["Title"] = $"Bon de Commande {Model.Reference}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-cart-check text-info me-2"></i>@Model.Reference</h4>
+        <p class="text-muted mb-0">@Model.ClientName — Depuis devis <code>@Model.DevisReference</code></p>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Model.Statut == RefCodes.StatutBonCommande.Brouillon)
+        {
+            <form asp-action="BonCommandeConfirmer" asp-route-id="@Model.Id" method="post" class="d-inline">
+                <button type="submit" class="btn btn-info rounded-pill text-white"><i class="bi bi-check me-1"></i>Confirmer</button>
+            </form>
+        }
+        @if (Model.Statut == RefCodes.StatutBonCommande.Confirme)
+        {
+            <form asp-action="BonCommandeApprouver" asp-route-id="@Model.Id" method="post" class="d-inline">
+                <button type="submit" class="btn btn-success rounded-pill"><i class="bi bi-check-circle me-1"></i>Approuver</button>
+            </form>
+        }
+        @if (Model.Statut == RefCodes.StatutBonCommande.Approuve)
+        {
+            <a asp-action="BonCommandeConvertir" asp-route-id="@Model.Id" class="btn btn-primary rounded-pill"><i class="bi bi-arrow-right-circle me-1"></i>Convertir en Contrat</a>
+        }
+        <form asp-action="BonCommandeDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
+            <button type="submit" class="btn btn-outline-info rounded-pill"><i class="bi bi-copy me-1"></i>Dupliquer</button>
+        </form>
+        <a asp-action="BonsCommande" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-left me-1"></i>Retour</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label small text-muted">Client</label><p class="fw-semibold mb-2">@Model.ClientName</p></div>
+                    <div class="col-md-6"><label class="form-label small text-muted">Statut</label><p class="mb-2">
+                        @{ var bc = Model.Statut switch { RefCodes.StatutBonCommande.Brouillon => "secondary", RefCodes.StatutBonCommande.Confirme => "info", RefCodes.StatutBonCommande.Approuve => "success", _ => "dark" }; }
+                        <span class="badge bg-@bc rounded-pill fs-6">@Model.Statut</span></p></div>
+                    <div class="col-md-4"><label class="form-label small text-muted">Date d'émission</label><p class="mb-2">@Model.DateEmission.ToString("dd/MM/yyyy")</p></div>
+                    <div class="col-md-4"><label class="form-label small text-muted">Objet</label><p class="mb-2">@(Model.Objet ?? "-")</p></div>
+                    <div class="col-md-4"><label class="form-label small text-muted">Version</label><p class="mb-2">v@Model.Version</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-3">Montants</h6>
+                <div class="mb-2"><span class="text-muted">HT:</span> <span class="fw-semibold">@Model.MontantHT.ToString("N2") @Model.Devise</span></div>
+                <div class="mb-2"><span class="text-muted">TVA:</span> <span>@Model.MontantTVA.ToString("N2")</span></div>
+                <hr />
+                <div><span class="text-muted">TTC:</span> <span class="fw-bold fs-5 text-primary">@Model.MontantTTC.ToString("N2") @Model.Devise</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lignes -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0 pt-3"><h6 class="fw-semibold"><i class="bi bi-list-ul me-2"></i>Lignes (@Model.Lignes.Count)</h6></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th class="ps-3">#</th><th>Description</th><th>Type</th><th>Service décl.</th><th class="text-end">Qté</th><th class="text-end">Prix HT</th><th class="text-end">Montant HT</th><th class="text-end">TTC</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in Model.Lignes.OrderBy(x => x.Ordre))
+                    {
+                        <tr>
+                            <td class="ps-3">@l.Ordre</td>
+                            <td>
+                                <div class="fw-semibold">@l.Description</div>
+                                @if (!string.IsNullOrWhiteSpace(l.TypeService)) { <small class="text-muted">@l.TypeService</small> }
+                            </td>
+                            <td><span class="badge bg-light text-dark">@l.TypeLigne</span></td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(l.ServiceContratLibelle))
+                                {
+                                    <span class="badge bg-info bg-opacity-10 text-info"><i class="bi bi-link-45deg me-1"></i>@l.ServiceContratLibelle</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td class="text-end">@l.Quantite</td><td class="text-end">@l.PrixUnitaireHT.ToString("N2")</td>
+                            <td class="text-end fw-semibold">@l.MontantHT.ToString("N2")</td><td class="text-end fw-semibold">@l.MontantTTC.ToString("N2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (Model.Historique.Any())
+{
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0 pt-3"><h6 class="fw-semibold"><i class="bi bi-clock-history me-2"></i>Historique</h6></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light"><tr><th class="ps-3">Date</th><th>Action</th><th>Statut</th><th>Commentaire</th></tr></thead>
+                    <tbody>
+                        @foreach (var h in Model.Historique)
+                        {
+                            <tr><td class="ps-3"><small>@h.DateAction.ToString("dd/MM/yyyy HH:mm")</small></td><td class="fw-semibold">@h.Action</td>
+                                <td>@if (h.AncienStatut != null) {<span class="badge bg-secondary rounded-pill">@h.AncienStatut</span> <text>→</text>} <span class="badge bg-primary rounded-pill">@h.NouveauStatut</span></td>
+                                <td><small>@h.Commentaire</small></td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

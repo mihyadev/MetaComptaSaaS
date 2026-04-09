@@ -1,0 +1,409 @@
+@using MetaCompta.Application.DTOs
+@model DeclarationTVADto
+@{
+    ViewData["Title"] = "Modifier Déclaration TVA";
+    var declaration = ViewBag.Declaration as DeclarationDto;
+    var client = ViewBag.Client as ClientDto;
+    var cabinetName = ViewBag.CabinetName as string ?? "Cabinet Comptable";
+}
+
+
+<!-- Workflow Action Bar (generic, step-aware) -->
+@await Html.PartialAsync("_WorkflowActionBar")
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Declarations?type=TVA">TVA</a></li>
+                <li class="breadcrumb-item"><a href="/Declarations/Details/@Model.DeclarationId">Détails</a></li>
+                <li class="breadcrumb-item active">Modifier TVA</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-pencil text-warning me-2"></i>Déclaration TVA — @(declaration?.Periode ?? "")</h4>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="ExportTVAXml" asp-route-id="@Model.DeclarationId" class="btn btn-outline-success rounded-pill px-3" title="Exporter XML EDI Télédéclaration">
+            <i class="bi bi-filetype-xml me-1"></i> Export XML EDI
+        </a>
+        <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+@* ═══ CABINET & CLIENT INFO ═══ *@
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 px-4 pt-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-building text-primary me-2"></i>Cabinet Comptable</h6>
+            </div>
+            <div class="card-body pt-2">
+                <div class="fw-semibold text-primary">@cabinetName</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 px-4 pt-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-person-badge text-info me-2"></i>Contribuable</h6>
+            </div>
+            <div class="card-body pt-2">
+                <div class="row g-2">
+                    <div class="col-md-6"><span class="text-muted small">Raison Sociale</span><div class="fw-semibold">@(client?.RaisonSociale ?? declaration?.ClientName ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">ICE</span><div class="fw-semibold">@(client?.ICE ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">IF</span><div class="fw-semibold">@(client?.IF ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">RC</span><div>@(client?.RC ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">Patente</span><div>@(client?.NumeroPatente ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">CNSS</span><div>@(client?.NumeroCNSS ?? "-")</div></div>
+                    <div class="col-md-3"><span class="text-muted small">Régime TVA</span><div>@(client?.TypeTVA ?? "-")</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ═══ RÉSUMÉ TVA (auto-calculé depuis les lignes) ═══ *@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-calculator text-primary me-2"></i>Résumé TVA (calculé automatiquement depuis les lignes)</h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card bg-light border-0 rounded-3 p-3">
+                    <h6 class="fw-semibold text-danger mb-3"><i class="bi bi-arrow-up-circle me-1"></i>TVA Collectée (Ventes)</h6>
+                    <div class="row g-2">
+                        <div class="col-6"><span class="text-muted small d-block">CA HT 20%</span><span class="fw-bold">@Model.CAHT_20.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">TVA 20%</span><span class="fw-bold text-danger">@Model.TVA_20.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">CA HT 14%</span><span class="fw-bold">@Model.CAHT_14.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">TVA 14%</span><span class="fw-bold text-danger">@Model.TVA_14.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">CA HT 10%</span><span class="fw-bold">@Model.CAHT_10.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">TVA 10%</span><span class="fw-bold text-danger">@Model.TVA_10.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">CA HT 7%</span><span class="fw-bold">@Model.CAHT_7.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">TVA 7%</span><span class="fw-bold text-danger">@Model.TVA_7.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">CA Exonéré</span><span class="fw-bold">@Model.CAExonere.ToString("N2")</span></div>
+                        <div class="col-6"></div>
+                        <div class="col-12 border-top pt-2 mt-2">
+                            <span class="text-muted small d-block">Total TVA Collectée</span>
+                            <span class="fw-bold text-danger fs-5">@Model.TVACollecteeTotale.ToString("N2") MAD</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card bg-light border-0 rounded-3 p-3">
+                    <h6 class="fw-semibold text-success mb-3"><i class="bi bi-arrow-down-circle me-1"></i>TVA Récupérable (Achats)</h6>
+                    <div class="row g-2">
+                        <div class="col-6"><span class="text-muted small d-block">TVA Récup. Charges</span><span class="fw-bold text-success">@Model.TVARecuperableCharges.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">TVA Récup. Immobilisations</span><span class="fw-bold text-success">@Model.TVARecuperableImmobilisations.ToString("N2")</span></div>
+                        <div class="col-6"><span class="text-muted small d-block">Crédit Précédent</span><span class="fw-bold text-success">@Model.CreditPrecedent.ToString("N2")</span></div>
+                        <div class="col-6"></div>
+                        <div class="col-12 border-top pt-2 mt-2">
+                            <span class="text-muted small d-block">Total TVA Récupérable</span>
+                            <span class="fw-bold text-success fs-5">@Model.TVARecuperableTotale.ToString("N2") MAD</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="card border-0 rounded-3 p-3 @(Model.TVANette >= 0 ? "bg-danger bg-opacity-10" : "bg-success bg-opacity-10")">
+                    <div class="row align-items-center">
+                        <div class="col-md-4 text-center">
+                            <span class="text-muted small d-block">TVA Collectée</span>
+                            <span class="fw-bold text-danger fs-5">@Model.TVACollecteeTotale.ToString("N2")</span>
+                        </div>
+                        <div class="col-md-1 text-center"><i class="bi bi-dash-lg fs-4"></i></div>
+                        <div class="col-md-4 text-center">
+                            <span class="text-muted small d-block">TVA Récupérable + Crédit</span>
+                            <span class="fw-bold text-success fs-5">@((Model.TVARecuperableTotale + Model.CreditPrecedent).ToString("N2"))</span>
+                        </div>
+                        <div class="col-md-1 text-center"><i class="bi bi-arrow-right-short fs-4"></i></div>
+                        <div class="col-md-2 text-center">
+                            @if (Model.TVANette >= 0)
+                            {
+                                <span class="text-muted small d-block">À Payer</span>
+                                <span class="fw-bold text-danger fs-4">@Model.TVAaPayer.ToString("N2") MAD</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small d-block">Crédit TVA</span>
+                                <span class="fw-bold text-success fs-4">@Model.CreditTVA.ToString("N2") MAD</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ═══ AJUSTEMENTS MANUELS (Immobilisations + Crédit précédent) ═══ *@
+<form asp-action="EditTVA" asp-route-id="@Model.DeclarationId" method="post">
+    @Html.AntiForgeryToken()
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 px-4 pt-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-sliders text-info me-2"></i>Ajustements manuels</h6>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info py-2 mb-3" style="font-size:0.85rem;">
+                <i class="bi bi-info-circle me-1"></i>
+                Les totaux CA HT et TVA Collectée/Récupérable Charges sont <strong>calculés automatiquement</strong> depuis les lignes de factures ci-dessous.
+                Seuls les champs suivants sont à saisir manuellement :
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label asp-for="TVARecuperableImmobilisations" class="form-label">TVA Récup. Immobilisations</label>
+                    <input asp-for="TVARecuperableImmobilisations" class="form-control" type="number" step="0.01" />
+                    <small class="text-muted">TVA sur investissements (pas dans les lignes)</small>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="CreditPrecedent" class="form-label">Crédit TVA Précédent</label>
+                    <input asp-for="CreditPrecedent" class="form-control" type="number" step="0.01" />
+                    <small class="text-muted">Report du crédit de la période précédente</small>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 w-100"><i class="bi bi-check-lg me-1"></i>Enregistrer les ajustements</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@* ═══════════════════════════════════════════════════════════════ *@
+@* LIGNES DE FACTURES (Invoice Lines)                              *@
+@* ═══════════════════════════════════════════════════════════════ *@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-receipt-cutoff text-success me-2"></i>Lignes de Factures / Pièces</h6>
+        <button class="btn btn-sm btn-success rounded-pill px-3" type="button" data-bs-toggle="collapse" data-bs-target="#addLigneForm">
+            <i class="bi bi-plus-circle me-1"></i> Ajouter une ligne
+        </button>
+    </div>
+
+    @* Add line form (collapsible) *@
+    <div class="collapse" id="addLigneForm">
+        <div class="card-body border-top">
+            <form asp-action="AddTVALigne" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@Model.DeclarationId" />
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label small">Type Pièce</label>
+                        <select name="TypePiece" class="form-select form-select-sm">
+                            <option value="Facture">Facture</option>
+                            <option value="Avoir">Avoir</option>
+                            <option value="AutoFacture">Auto-Facture</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">N° Facture</label>
+                        <input name="NumeroFacture" class="form-control form-control-sm" placeholder="FAC-001" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Date</label>
+                        <input name="DateFacture" type="date" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Fournisseur / Client</label>
+                        <input name="FournisseurClient" class="form-control form-control-sm" placeholder="Nom" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">ICE Fournisseur/Client</label>
+                        <input name="ICE" class="form-control form-control-sm" placeholder="ICE 15 chiffres" maxlength="15" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">IF</label>
+                        <input name="IdentifiantFiscal" class="form-control form-control-sm" placeholder="IF" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Description</label>
+                        <input name="Description" class="form-control form-control-sm" placeholder="Libellé opération" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Montant HT</label>
+                        <input name="MontantHT" type="number" step="0.01" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label small">Taux %</label>
+                        <select name="TauxTVA" class="form-select form-select-sm">
+                            <option value="20">20%</option>
+                            <option value="14">14%</option>
+                            <option value="10">10%</option>
+                            <option value="7">7%</option>
+                            <option value="0">0%</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Opération</label>
+                        <select name="TypeOperation" class="form-select form-select-sm">
+                            <option value="Vente">Vente (Collectée)</option>
+                            <option value="Achat">Achat (Déductible)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Régime</label>
+                        <select name="Regime" class="form-select form-select-sm">
+                            <option value="Encaissement">Encaissement</option>
+                            <option value="Debit">Débit</option>
+                        </select>
+                    </div>
+                    <div class="col-12 text-end mt-2">
+                        <button type="submit" class="btn btn-success rounded-pill px-4"><i class="bi bi-plus-lg me-1"></i>Ajouter la ligne</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Lines table *@
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Type</th>
+                        <th>N° Facture</th>
+                        <th>Date</th>
+                        <th>Fournisseur/Client</th>
+                        <th>ICE</th>
+                        <th>Description</th>
+                        <th class="text-end">HT</th>
+                        <th>Taux</th>
+                        <th class="text-end">TVA</th>
+                        <th class="text-end">TTC</th>
+                        <th>Opération</th>
+                        <th class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.LignesFactures != null && Model.LignesFactures.Any())
+                    {
+                        var totalHTVente = Model.LignesFactures.Where(l => l.TypeOperation == "Vente").Sum(l => l.MontantHT);
+                        var totalTVAVente = Model.LignesFactures.Where(l => l.TypeOperation == "Vente").Sum(l => l.MontantTVA);
+                        var totalHTAchat = Model.LignesFactures.Where(l => l.TypeOperation == "Achat").Sum(l => l.MontantHT);
+                        var totalTVAAchat = Model.LignesFactures.Where(l => l.TypeOperation == "Achat").Sum(l => l.MontantTVA);
+
+                        @foreach (var ligne in Model.LignesFactures)
+                        {
+                            var rowClass = ligne.TypeOperation == "Achat" ? "table-info" : "";
+                            <tr class="@rowClass">
+                                <td class="ps-3">
+                                    @{
+                                        var pieceIcon = ligne.TypePiece switch { "Avoir" => "bi-arrow-return-left text-danger", "AutoFacture" => "bi-arrow-repeat text-warning", _ => "bi-receipt text-success" };
+                                    }
+                                    <i class="bi @pieceIcon me-1"></i>@ligne.TypePiece
+                                </td>
+                                <td class="fw-semibold">@(ligne.NumeroFacture ?? "-")</td>
+                                <td>@ligne.DateFacture.ToString("dd/MM/yyyy")</td>
+                                <td>@(ligne.FournisseurClient ?? "-")</td>
+                                <td><small class="text-muted">@(ligne.ICE ?? "-")</small></td>
+                                <td>@(ligne.Description ?? "-")</td>
+                                <td class="text-end fw-semibold">@ligne.MontantHT.ToString("N2")</td>
+                                <td><span class="badge bg-secondary-subtle text-secondary rounded-pill">@ligne.TauxTVA%</span></td>
+                                <td class="text-end">@ligne.MontantTVA.ToString("N2")</td>
+                                <td class="text-end fw-bold">@ligne.MontantTTC.ToString("N2")</td>
+                                <td>
+                                    @if (ligne.TypeOperation == "Vente")
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger rounded-pill">Collectée</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success rounded-pill">Déductible</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    <form asp-action="DeleteTVALigne" method="post" class="d-inline" onsubmit="return confirm('Supprimer cette ligne ?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="declarationId" value="@Model.DeclarationId" />
+                                        <input type="hidden" name="ligneId" value="@ligne.Id" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        @* Totals row *@
+                        <tr class="table-warning fw-bold">
+                            <td class="ps-3" colspan="6">
+                                <i class="bi bi-sigma me-1"></i>Totaux &mdash;
+                                <span class="text-danger">Ventes: @totalHTVente.ToString("N2") HT / @totalTVAVente.ToString("N2") TVA</span> |
+                                <span class="text-success">Achats: @totalHTAchat.ToString("N2") HT / @totalTVAAchat.ToString("N2") TVA</span>
+                            </td>
+                            <td class="text-end">@Model.LignesFactures.Sum(l => l.MontantHT).ToString("N2")</td>
+                            <td></td>
+                            <td class="text-end">@Model.LignesFactures.Sum(l => l.MontantTVA).ToString("N2")</td>
+                            <td class="text-end">@Model.LignesFactures.Sum(l => l.MontantTTC).ToString("N2")</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Aucune ligne de facture. Cliquez sur <strong>Ajouter une ligne</strong> pour commencer.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@* ═══ IMPORT LIGNES FROM CSV ═══ *@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-arrow-up text-info me-2"></i>Importer des lignes depuis un fichier CSV</h6>
+        <a asp-action="DownloadTVATemplate" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+            <i class="bi bi-download me-1"></i> Télécharger le modèle CSV
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info mb-3 py-2 small">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Format attendu :</strong> Fichier CSV séparateur <code>;</code> (point-virgule) — Colonnes :
+            <code>TypePiece;NumeroFacture;DateFacture;FournisseurClient;ICE;IdentifiantFiscal;Description;MontantHT;TauxTVA;TypeOperation;Regime</code>
+            <br/>
+            <strong>TypePiece :</strong> Facture, Avoir, AutoFacture &nbsp;|&nbsp;
+            <strong>TauxTVA :</strong> 20, 14, 10, 7, 0 &nbsp;|&nbsp;
+            <strong>TypeOperation :</strong> Vente, Achat &nbsp;|&nbsp;
+            <strong>Régime :</strong> Encaissement, Débit
+        </div>
+        <form asp-action="ImportTVALignes" method="post" enctype="multipart/form-data">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="declarationId" value="@Model.DeclarationId" />
+            <div class="row g-2 align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Fichier CSV</label>
+                    <input type="file" name="fichierCSV" class="form-control" accept=".csv,.txt" required />
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-info rounded-pill px-4 w-100">
+                        <i class="bi bi-upload me-1"></i> Importer les lignes
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* ═══ EDI EXPORT SECTION ═══ *@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-filetype-xml text-success me-2"></i>Télédéclaration EDI — Export XML</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">
+            Générez le fichier XML au format EDI pour la télédéclaration TVA auprès de la DGI (Simpl-TVA).
+            Le fichier inclut : les informations du cabinet, du contribuable (ICE, IF, RC), le détail du CA par taux,
+            la TVA collectée/récupérable, et toutes les lignes de factures.
+        </p>
+        <div class="d-flex gap-2">
+            <a asp-action="ExportTVAXml" asp-route-id="@Model.DeclarationId" class="btn btn-success rounded-pill px-4">
+                <i class="bi bi-download me-1"></i> Télécharger XML EDI
+            </a>
+        </div>
+    </div>
+</div>

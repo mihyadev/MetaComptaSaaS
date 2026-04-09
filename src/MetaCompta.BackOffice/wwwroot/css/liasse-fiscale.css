@@ -1,0 +1,185 @@
+﻿/* ═══════════════════════════════════════════════════════
+   MetaCompta Liasse Fiscale v4.0 — Excel-like Accounting
+   Professional design • 40 years experience
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ SIDEBAR NAV — Clean & Minimal ═══ */
+.lf-nav-section{margin-bottom:.25rem;padding-bottom:.25rem;border-bottom:1px solid #eee;}
+.lf-nav-section:last-child{border-bottom:none;}
+.lf-nav-group-title{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;padding:.45rem .6rem .15rem;}
+.lf-nav-btn{display:flex;align-items:center;gap:.4rem;width:100%;border:none;background:transparent;padding:.32rem .6rem;font-size:.76rem;font-weight:500;color:#374151;border-radius:.35rem;text-align:left;cursor:pointer;transition:all .12s;}
+.lf-nav-btn:hover{background:#f3f4f6;color:#111827;}
+.lf-nav-btn.active{background:#2563eb;color:#fff;font-weight:600;}
+.lf-nav-btn i{font-size:.78rem;width:.9rem;text-align:center;flex-shrink:0;}
+
+/* ═══ PANES ═══ */
+.lf-pane{animation:lfIn .15s ease;}
+@keyframes lfIn{from{opacity:0}to{opacity:1}}
+
+/* ═══ EXCEL-LIKE TABLES ═══ */
+.lf-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'Inter',Calibri,Arial,sans-serif;border:1px solid #d1d5db;}
+.lf-table thead th{background:#f9fafb;font-weight:600;padding:6px 8px;border:1px solid #d1d5db;color:#374151;font-size:11px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;}
+.lf-table td{padding:4px 8px;border:1px solid #e5e7eb;vertical-align:middle;color:#111827;}
+.lf-table tbody tr:nth-child(even){background:#fafbfc;}
+.lf-table tbody tr:hover{background:#eff6ff;}
+.lf-table .text-end{text-align:right !important;}
+.lf-table .text-center{text-align:center !important;}
+.lf-table .mono{font-family:'Cascadia Code','Consolas',monospace;font-size:11px;}
+
+/* Row types — subtle, no gradients */
+.lf-section-row{background:#e8edf5 !important;font-weight:700;color:#1e3a5f;font-size:12px;}
+.lf-section-row td{padding:6px 8px;border-bottom:2px solid #93a3c0;}
+.lf-subsection-row{background:#f0f3f9 !important;font-weight:600;color:#374d6e;}
+.lf-total-row{background:#e0e7ff !important;font-weight:700;border-top:1.5px solid #6366f1;}
+.lf-total-row td{padding:5px 8px;}
+.lf-result-row{background:#dbeafe !important;font-weight:700;color:#1e40af;font-size:12px;}
+.lf-result-row td{padding:6px 8px;border-top:2px solid #3b82f6;border-bottom:2px solid #3b82f6;}
+.lf-grand-total{background:#1e40af !important;color:#fff !important;font-weight:700;font-size:12px;}
+.lf-grand-total td{padding:6px 8px;border:1px solid #1e3a8a;color:#fff !important;}
+
+/* ═══ FORMULA CELLS — The key feature ═══ */
+.lf-cell{position:relative;min-width:90px;cursor:default;text-align:center;font-weight:600;font-variant-numeric:tabular-nums;}
+/* .lf-cell-val removed — value directly in td */
+/* .lf-cell-ref removed — formula in tooltip only */
+.lf-cell:hover{background:#fefce8 !important;cursor:pointer;}
+/* .lf-cell:hover .lf-cell-ref removed */
+.lf-cell.lf-override{background:#fef3c7 !important;border-left:3px solid #f59e0b;}
+.lf-cell.lf-override{color:#92400e;}
+.lf-cell.lf-configured{border-left:3px solid #8b5cf6;}
+/* .lf-cell.lf-configured .lf-cell-ref removed */
+
+/* Inline editor */
+.lf-cell-input{width:100%;border:2px solid #2563eb;border-radius:3px;padding:2px 6px;font-size:12px;text-align:right;background:#fffef5;outline:none;font-family:'Inter',sans-serif;}
+.lf-cell-input:focus{box-shadow:0 0 0 3px rgba(37,99,235,.15);}
+
+/* ═══ FORMULA CONFIG MODAL ═══ */
+.lf-modal-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9998;display:none;}
+.lf-modal-backdrop.show{display:flex;align-items:center;justify-content:center;}
+.lf-modal{background:#fff;border-radius:8px;width:560px;max-height:80vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);z-index:9999;}
+.lf-modal-header{padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;}
+.lf-modal-header h6{margin:0;font-weight:700;font-size:14px;color:#111827;}
+.lf-modal-close{background:none;border:none;font-size:18px;color:#6b7280;cursor:pointer;padding:0 4px;}
+.lf-modal-close:hover{color:#111827;}
+.lf-modal-body{padding:16px 20px;}
+.lf-modal-body label{font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;}
+.lf-modal-body .lf-formula-display{background:#f9fafb;border:1px solid #d1d5db;border-radius:4px;padding:8px 12px;font-family:'Cascadia Code','Consolas',monospace;font-size:12px;color:#1e40af;margin-bottom:12px;min-height:36px;word-break:break-all;}
+.lf-modal-body input[type="text"],.lf-modal-body textarea{width:100%;border:1px solid #d1d5db;border-radius:4px;padding:6px 10px;font-size:12px;font-family:'Cascadia Code','Consolas',monospace;}
+.lf-modal-body input:focus,.lf-modal-body textarea:focus{border-color:#2563eb;outline:none;box-shadow:0 0 0 2px rgba(37,99,235,.1);}
+.lf-modal-body textarea{min-height:60px;resize:vertical;}
+.lf-modal-body .lf-acct-list{max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:4px;margin-top:6px;}
+.lf-modal-body .lf-acct-row{display:flex;align-items:center;gap:8px;padding:4px 10px;font-size:11px;border-bottom:1px solid #f3f4f6;cursor:pointer;}
+.lf-modal-body .lf-acct-row:hover{background:#eff6ff;}
+.lf-modal-body .lf-acct-row.selected{background:#dbeafe;font-weight:600;}
+.lf-modal-body .lf-acct-code{font-family:'Cascadia Code',monospace;font-weight:600;color:#1e40af;min-width:50px;}
+.lf-modal-body .lf-acct-name{color:#374151;flex:1;}
+.lf-modal-body .lf-acct-val{color:#059669;font-weight:600;font-variant-numeric:tabular-nums;}
+.lf-modal-footer{padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:8px;}
+.lf-modal-footer .btn{font-size:12px;padding:5px 16px;border-radius:4px;}
+
+/* ═══ BILAN LAYOUT — Real standard ═══ */
+.bilan-container{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #d1d5db;}
+.bilan-side{overflow:hidden;}
+.bilan-side-header{padding:7px 12px;font-weight:700;font-size:12px;text-align:center;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #d1d5db;}
+.bilan-actif .bilan-side-header{background:#e0e7ff;color:#1e3a8a;border-right:2px solid #d1d5db;}
+.bilan-passif .bilan-side-header{background:#dcfce7;color:#14532d;}
+.bilan-actif{border-right:2px solid #d1d5db;}
+.equilibre-badge{font-size:11px;padding:2px 8px;border-radius:3px;font-weight:600;}
+.equilibre-badge.ok{background:#dcfce7;color:#166534;}
+.equilibre-badge.ko{background:#fecaca;color:#991b1b;}
+
+/* ═══ KPI BAR — Compact ═══ */
+.lf-kpi-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.lf-kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:6px 12px;text-align:center;flex:1;min-width:100px;}
+.lf-kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;font-weight:600;}
+.lf-kpi-value{font-size:14px;font-weight:700;color:#111827;font-variant-numeric:tabular-nums;}
+.lf-kpi.positive .lf-kpi-value{color:#059669;}
+.lf-kpi.negative .lf-kpi-value{color:#dc2626;}
+.lf-kpi.highlight{border-color:#2563eb;background:#eff6ff;}
+
+/* ═══ CARD ═══ */
+.etat-card{background:#fff;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px;overflow:hidden;}
+.etat-card-header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb;}
+.etat-card-header h5{font-size:13px;font-weight:700;margin:0;color:#111827;}
+.etat-card-body{padding:0;}
+
+/* ═══ CONTROLS ═══ */
+.lf-checks-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;}
+.lf-check-card{border-radius:4px;padding:8px 12px;display:flex;align-items:flex-start;gap:8px;border:1px solid #e5e7eb;background:#fff;font-size:12px;}
+.lf-check-card.pass{border-left:3px solid #22c55e;background:#f0fdf4;}
+.lf-check-card.fail{border-left:3px solid #ef4444;background:#fef2f2;}
+.lf-check-card.warn{border-left:3px solid #f59e0b;background:#fffbeb;}
+.lf-check-icon{font-size:14px;flex-shrink:0;}
+.lf-check-body h6{font-size:12px;font-weight:600;margin:0;color:#111827;}
+.lf-check-body p{font-size:11px;color:#6b7280;margin:2px 0 0;}
+
+/* ═══ SEARCH ═══ */
+.lf-search-bar{display:flex;gap:6px;margin:8px 10px;align-items:center;}
+.lf-search-bar input,.lf-search-bar select{font-size:12px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;background:#fff;}
+.lf-search-bar input:focus,.lf-search-bar select:focus{border-color:#2563eb;outline:none;}
+.lf-search-bar input{flex:1;min-width:160px;}
+.lf-journal-date{font-weight:600;color:#1e40af;font-size:11px;}
+.lf-journal-piece{color:#6b7280;font-size:11px;}
+.lf-account-tag{font-size:11px;font-weight:600;color:#1e40af;font-family:'Cascadia Code',monospace;}
+.lf-amount-debit{color:#dc2626;font-weight:600;}
+.lf-amount-credit{color:#059669;font-weight:600;}
+.lf-gl-account-header{background:#e8edf5;padding:6px 10px;font-weight:700;color:#1e3a5f;font-size:12px;display:flex;justify-content:space-between;align-items:center;margin-top:8px;border:1px solid #d1d5db;border-bottom:none;}
+.lf-gl-account-header:first-child{margin-top:0;}
+.lf-gl-solde{font-size:11px;padding:1px 6px;border-radius:3px;font-weight:600;}
+.lf-balance-class-header{background:#e8edf5 !important;font-weight:700;color:#1e3a5f;}
+.lf-balance-class-header td{padding:6px 8px;border-bottom:2px solid #93a3c0;}
+.lf-scrollable-table{max-height:70vh;overflow-y:auto;border:1px solid #d1d5db;border-radius:4px;}
+.lf-scrollable-table thead{position:sticky;top:0;z-index:3;}
+.lf-etic-section{margin-bottom:12px;}
+.lf-etic-section-title{font-size:12px;font-weight:700;color:#1e3a5f;padding:6px 10px;background:#f0f3f9;border-left:3px solid #2563eb;margin-bottom:6px;}
+.lf-toolbar{display:flex;align-items:center;gap:4px;}
+.lf-toolbar .btn{font-size:11px;padding:2px 8px;border-radius:3px;}
+
+/* Row number column */
+.lf-table .lf-row-num{width:28px;text-align:center;color:#9ca3af;font-size:10px;font-weight:600;background:#f9fafb;border-right:1px solid #e5e7eb;}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:991px){.bilan-container{grid-template-columns:1fr;}}
+@media(max-width:767px){.lf-kpi-bar{flex-direction:column;}}
+
+/* ═══ PRINT ═══ */
+@media print{
+    .lf-nav-section,.lf-toolbar,.lf-search-bar,.btn,.breadcrumb,.lf-modal-backdrop{display:none !important;}
+    .col-lg-2,.col-md-3{display:none !important;}
+    .col-lg-10,.col-md-9{flex:0 0 100%;max-width:100%;}
+    .lf-pane{display:block !important;page-break-inside:avoid;}
+    .lf-table{font-size:9pt;}
+    .etat-card{box-shadow:none;border:1px solid #999;break-inside:avoid;}
+    .lf-scrollable-table{max-height:none;overflow:visible;}
+}
+/* ═══ V4 ADDITIONS ═══ */
+.lf-split-view{display:flex;gap:12px;flex-wrap:wrap;}
+.lf-split-panel{flex:1;min-width:480px;}
+.lf-panel-title{font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--mc-primary,#2563eb);border-bottom:2px solid var(--mc-primary,#2563eb);padding-bottom:6px;margin-bottom:10px;}
+.lf-etic-section{margin-bottom:16px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#fafbfc;}
+.lf-etic-section h6{font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:8px;}
+.lf-detail-section{margin-bottom:14px;}
+.lf-section-title{font-size:0.76rem;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;}
+.lf-gl-account{margin-bottom:14px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;}
+.lf-gl-header{padding:8px 12px;background:#f3f4f6;font-size:0.78rem;font-weight:600;border-bottom:1px solid #e5e7eb;}
+.lf-toolbar{display:flex;align-items:center;gap:10px;padding:8px 0;margin-bottom:8px;}
+.lf-select{padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.78rem;background:#fff;}
+.lf-input{padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.78rem;width:220px;}
+.lf-toolbar-info{font-size:0.72rem;color:#9ca3af;margin-left:auto;}
+.lf-cfg-formula-display{font-family:'Cascadia Code','Consolas',monospace;font-size:0.78rem;padding:8px 10px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;color:#4b5563;}
+
+.lf-kpi-ok{border-color:#059669!important;background:#ecfdf5!important;}
+.lf-kpi-ok .lf-kpi-value{color:#059669!important;}
+.lf-kpi-err{border-color:#dc2626!important;background:#fef2f2!important;}
+.lf-kpi-err .lf-kpi-value{color:#dc2626!important;}
+
+.lf-table-sm th,.lf-table-sm td{padding:3px 8px!important;font-size:0.72rem!important;}
+.text-end{text-align:right!important;}
+.text-center{text-align:center!important;}
+
+@media print{
+    .lf-nav-section,.col-lg-2,.lf-toolbar,.btn,.lf-modal-backdrop{display:none!important;}
+    .col-lg-10{width:100%!important;max-width:100%!important;flex:0 0 100%!important;}
+    .lf-pane{display:block!important;}
+    .lf-table{font-size:0.7rem!important;page-break-inside:auto;}
+    .lf-table tr{page-break-inside:avoid;}
+}

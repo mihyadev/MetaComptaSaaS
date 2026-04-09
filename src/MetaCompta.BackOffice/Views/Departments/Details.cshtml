@@ -1,0 +1,120 @@
+@using MetaCompta.Application.DTOs
+@model DepartmentDto
+@{
+    ViewData["Title"] = $"Département: {Model.Name}";
+    var members = ViewBag.Members as List<DepartmentMemberDto> ?? new List<DepartmentMemberDto>();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a asp-action="Index">Départements</a></li>
+                <li class="breadcrumb-item active">@Model.Name</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-diagram-2-fill text-primary me-2"></i>@Model.Name</h4>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill px-3"><i class="bi bi-pencil me-1"></i> Modifier</a>
+        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Department Info -->
+    <div class="col-lg-4">
+        <div class="mc-card h-100">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Informations</h6>
+                <table class="table table-sm mb-0" style="font-size:0.875rem;">
+                    <tr><td class="text-muted" style="width:40%;">Code</td><td class="fw-medium">@Model.Code</td></tr>
+                    <tr><td class="text-muted">Statut</td><td>@(Model.IsActive ? "✅ Actif" : "❌ Inactif")</td></tr>
+                    <tr><td class="text-muted">Responsable</td><td>@(Model.HeadOfDepartmentName ?? "Non défini")</td></tr>
+                    <tr><td class="text-muted">Membres</td><td class="fw-bold">@Model.MemberCount</td></tr>
+                </table>
+                @if (!string.IsNullOrEmpty(Model.Description))
+                {
+                    <hr />
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">@Model.Description</p>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Members -->
+    <div class="col-lg-8">
+        <div class="mc-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-people me-2"></i>Membres (@members.Count)</span>
+                <button class="btn btn-sm btn-mc-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#addMemberModal"><i class="bi bi-person-plus me-1"></i> Ajouter</button>
+            </div>
+            <div class="card-body p-0">
+                @if (members.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table mc-table mb-0">
+                            <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Depuis</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var m in members)
+                                {
+                                    <tr>
+                                        <td class="fw-medium">@m.UserName</td>
+                                        <td><small class="text-muted">@m.UserEmail</small></td>
+                                        <td>
+                                            @if (m.IsLead) { <span class="badge bg-primary">Chef d'équipe</span> }
+                                            else { <span class="badge bg-secondary bg-opacity-50">Membre</span> }
+                                        </td>
+                                        <td style="font-size:0.8rem;">@m.JoinedAt.ToString("dd/MM/yyyy")</td>
+                                        <td>
+                                            <form asp-action="RemoveMember" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="departmentId" value="@Model.Id" />
+                                                <input type="hidden" name="userId" value="@m.UserId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill" onclick="return confirm('Retirer ce membre ?')"><i class="bi bi-person-dash"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-4 text-center text-muted">
+                        <i class="bi bi-people fs-3 d-block mb-2"></i>
+                        Aucun membre dans ce département.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Member Modal -->
+<div class="modal fade" id="addMemberModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="AddMember" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="departmentId" value="@Model.Id" />
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Ajouter un membre</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">ID Utilisateur *</label>
+                        <input name="userId" class="form-control" required placeholder="ID de l'employé du cabinet..." />
+                    </div>
+                    <div class="form-check form-switch">
+                        <input name="isLead" type="checkbox" class="form-check-input" value="true" />
+                        <label class="form-check-label">Chef d'équipe</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-mc-primary rounded-pill">Ajouter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

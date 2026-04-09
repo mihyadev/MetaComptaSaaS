@@ -1,0 +1,297 @@
+using MetaCompta.Application.DTOs;
+using MetaCompta.Domain.Entities;
+
+namespace MetaCompta.Application.Interfaces;
+
+public interface IAuthService
+{
+    Task<ApiResponse<TokenDto>> LoginAsync(LoginDto dto);
+    Task<ApiResponse<TokenDto>> RegisterAsync(RegisterDto dto);
+    Task<ApiResponse<TokenDto>> RefreshTokenAsync(string refreshToken);
+    Task<ApiResponse<bool>> ChangePasswordAsync(string userId, ChangePasswordDto dto);
+    Task<ApiResponse<bool>> ResetPasswordAsync(string email);
+}
+
+public interface IClientService
+{
+    Task<ApiResponse<PagedResult<ClientDto>>> GetAllAsync(int cabinetId, int page = 1, int pageSize = 20, string? search = null, string? statut = null);
+    Task<ApiResponse<ClientDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<ClientDto>> CreateAsync(ClientCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ClientDto>> UpdateAsync(int id, ClientCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
+    Task<List<string>> GetActiveServicesAsync(int clientId, int cabinetId);
+    /// <summary>Returns true if the client has at least one contract with status Valide or Actif.</summary>
+    Task<bool> HasActiveContractAsync(int clientId, int cabinetId);
+    // Enterprise service contract management
+    Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(int clientId, int cabinetId, int? exerciceFiscal = null);
+    Task<ApiResponse<ServiceContratDto>> GetServiceContratByIdAsync(int serviceContratId, int cabinetId);
+    Task<ApiResponse<GenerateDeclarationsResultDto>> GenerateDeclarationsFromServicesAsync(GenerateDeclarationsRequestDto request, int cabinetId, string userId);
+    Task<ApiResponse<List<ServiceContratDto>>> InitializeServicesForExerciceAsync(int clientId, int exerciceFiscal, int cabinetId, string userId);
+}
+
+public interface IEmployeeService
+{
+    Task<ApiResponse<PagedResult<EmployeeDto>>> GetAllAsync(int cabinetId, int? clientId = null, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<EmployeeDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<EmployeeDto>> CreateAsync(EmployeeCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<EmployeeDto>> UpdateAsync(int id, EmployeeCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
+}
+
+public interface IDeclarationService
+{
+    Task<ApiResponse<PagedResult<DeclarationDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? type = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<DeclarationDto>> GetByIdAsync(int id, int cabinetId);
+    // Generic create for any type
+    Task<ApiResponse<DeclarationDto>> CreateAsync(CreateDeclarationDto dto, int cabinetId, string userId);
+    // Delete
+    Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
+    // TVA
+    Task<ApiResponse<DeclarationDto>> CreateTVAAsync(int clientId, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationTVADto>> SaveTVADataAsync(int declarationId, DeclarationTVADto dto, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationTVADto>> SaveTVAAjustementsAsync(int declarationId, decimal immobilisations, decimal creditPrecedent, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationTVADto>> CalculateTVAAsync(DeclarationTVADto dto);
+    Task<ApiResponse<DeclarationTVADto>> GetTVADataAsync(int declarationId, int cabinetId);
+    // TVA Invoice Lines
+    Task<ApiResponse<TVALigneFactureDto>> AddTVALigneAsync(int declarationId, TVALigneFactureDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteTVALigneAsync(int declarationId, int ligneId, int cabinetId, string userId);
+    Task<ApiResponse<List<TVALigneFactureDto>>> ImportTVALignesAsync(int declarationId, List<TVALigneFactureDto> lignes, int cabinetId, string userId);
+    // IS
+    Task<ApiResponse<DeclarationDto>> CreateISAsync(int clientId, int anneeFiscale, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationISDto>> SaveISDataAsync(int declarationId, DeclarationISDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationISDto>> CalculateISAsync(DeclarationISDto dto);
+    Task<ApiResponse<DeclarationISDto>> GetISDataAsync(int declarationId, int cabinetId);
+    // IR
+    Task<ApiResponse<DeclarationDto>> CreateIRAsync(int clientId, int anneeFiscale, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationIRDto>> SaveIRDataAsync(int declarationId, DeclarationIRDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationIRDto>> CalculateIRAsync(DeclarationIRDto dto);
+    Task<ApiResponse<DeclarationIRDto>> GetIRDataAsync(int declarationId, int cabinetId);
+    // CNSS
+    Task<ApiResponse<DeclarationDto>> CreateCNSSAsync(int clientId, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationCNSSDto>> SaveCNSSDataAsync(int declarationId, DeclarationCNSSDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationCNSSDto>> CalculateCNSSAsync(int declarationId, int cabinetId);
+    Task<ApiResponse<DeclarationCNSSDto>> GetCNSSDataAsync(int declarationId, int cabinetId);
+    // Status
+    Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId, string? comment = null);
+}
+
+public interface IPayrollService
+{
+    Task<ApiResponse<List<PayrollPeriodDto>>> GetAllPeriodsAsync(int cabinetId, int? clientId = null);
+    Task<ApiResponse<PayrollPeriodDto>> InitializeAsync(int clientId, int annee, int mois, int cabinetId, string userId);
+    Task<ApiResponse<PayrollPeriodDto>> GetPeriodAsync(int id, int cabinetId);
+    Task<ApiResponse<List<PaySlipDto>>> GetPaySlipsAsync(int periodId, int cabinetId);
+    Task<ApiResponse<PaySlipDto>> UpdateVariablesAsync(int periodId, PaySlipVariablesDto dto, int cabinetId, string userId);
+    Task<ApiResponse<PayrollPeriodDto>> CalculateAllAsync(int periodId, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ValidateAsync(int periodId, int cabinetId, string userId);
+}
+
+public interface IDocumentService
+{
+    Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? categorie = null, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<DocumentDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId, string? motif = null);
+    Task<ApiResponse<bool>> ToggleShareAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<Stream>> DownloadAsync(int id, int cabinetId);
+}
+
+public interface INotificationService
+{
+    Task<ApiResponse<List<NotificationDto>>> GetUserNotificationsAsync(string userId, bool unreadOnly = false, int count = 20);
+    Task<ApiResponse<int>> GetUnreadCountAsync(string userId);
+    Task<ApiResponse<bool>> MarkAsReadAsync(int id, string userId);
+    Task<ApiResponse<bool>> MarkAllAsReadAsync(string userId);
+    Task CreateAsync(string userId, string titre, string message, string type = "Info", string? module = null, string? url = null, int? cabinetId = null);
+}
+
+public interface ITaskService
+{
+    Task<ApiResponse<PagedResult<TaskItemDto>>> GetAllAsync(int cabinetId, string? assignedToUserId = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<TaskItemDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<TaskItemDto>> CreateAsync(TaskItemDto dto, int cabinetId, string userId);
+    Task<ApiResponse<TaskItemDto>> UpdateAsync(int id, TaskItemDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId);
+}
+
+public interface IDashboardService
+{
+    Task<ApiResponse<DashboardDto>> GetManagerDashboardAsync(int cabinetId, string userId);
+    Task<ApiResponse<DashboardDto>> GetAssistantDashboardAsync(int cabinetId, string userId);
+    Task<ApiResponse<object>> GetExtranetDashboardAsync(int clientId);
+}
+
+public interface IReferenceDataService
+{
+    Task<ApiResponse<List<Domain.Common.ReferenceData>>> GetByCategoryAsync(string category, int? cabinetId = null);
+    Task<ApiResponse<Domain.Common.ReferenceData>> CreateOrUpdateAsync(Domain.Common.ReferenceData data);
+    Task<decimal> GetNumericValueAsync(string category, string code);
+}
+
+/// <summary>
+/// Service for cabinet management operations: employees (BackOffice users), roles, permissions, and cabinet info.
+/// </summary>
+public interface ICabinetService
+{
+    // ── Cabinet Info ─────────────────────────────────────────────
+    Task<ApiResponse<CabinetDetailDto>> GetCabinetAsync(int cabinetId);
+    Task<ApiResponse<CabinetDetailDto>> UpdateCabinetAsync(int cabinetId, CabinetEditDto dto, string userId);
+
+    // ── Cabinet Employees (BackOffice Users) ─────────────────────
+    Task<ApiResponse<PagedResult<CabinetEmployeeDto>>> GetEmployeesAsync(int cabinetId, string? departement = null, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<CabinetEmployeeDto>> GetEmployeeByIdAsync(string id, int cabinetId);
+    Task<ApiResponse<CabinetEmployeeDto>> CreateEmployeeAsync(CabinetEmployeeCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<CabinetEmployeeDto>> UpdateEmployeeAsync(string id, CabinetEmployeeUpdateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ToggleEmployeeActiveAsync(string id, int cabinetId, string userId);
+
+    // ── Roles & Permissions ──────────────────────────────────────
+    Task<ApiResponse<PagedResult<RoleDto>>> GetRolesAsync(int cabinetId, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<RoleDto>> GetRoleByIdAsync(string roleId, int cabinetId);
+    Task<ApiResponse<RoleDto>> CreateRoleAsync(string name, string? description, List<string> permissions, int cabinetId, string userId);
+    Task<ApiResponse<RoleDto>> UpdateRolePermissionsAsync(string roleId, List<string> permissions, int cabinetId, string userId);
+
+    // ── Audit Logs ───────────────────────────────────────────────
+    Task<ApiResponse<PagedResult<AuditLogDto>>> GetAuditLogsAsync(int cabinetId, string? userId = null, string? action = null, DateTime? dateDebut = null, DateTime? dateFin = null, int page = 1, int pageSize = 50);
+
+    // ── User Profile ─────────────────────────────────────────────
+    Task<ApiResponse<UserProfileDto>> GetProfileAsync(string userId, int cabinetId);
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║                     WORKFLOW ENGINE — SERVICE INTERFACES                ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+/// <summary>
+/// Service for department management within a cabinet.
+/// </summary>
+public interface IDepartmentService
+{
+    Task<ApiResponse<List<DepartmentDto>>> GetAllAsync(int cabinetId);
+    Task<ApiResponse<DepartmentDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<DepartmentDto>> CreateAsync(DepartmentCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DepartmentDto>> UpdateAsync(int id, DepartmentCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<bool>> AddMemberAsync(int departmentId, string userId, bool isLead, int cabinetId, string actionUserId);
+    Task<ApiResponse<bool>> RemoveMemberAsync(int departmentId, string userId, int cabinetId, string actionUserId);
+    Task<ApiResponse<List<DepartmentMemberDto>>> GetMembersAsync(int departmentId, int cabinetId);
+}
+
+/// <summary>
+/// Core workflow engine service — manages templates, instances, step execution,
+/// task auto-creation, notifications, and workflow lifecycle.
+/// </summary>
+public interface IWorkflowService
+{
+    // ── Templates ────────────────────────────────────────────────
+    Task<ApiResponse<PagedResult<WorkflowTemplateDto>>> GetTemplatesAsync(int cabinetId, string? declarationType = null, int? clientId = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<WorkflowTemplateDto>> GetTemplateByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<WorkflowTemplateDto>> CreateTemplateAsync(WorkflowTemplateCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<WorkflowTemplateDto>> UpdateTemplateAsync(int id, WorkflowTemplateCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteTemplateAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<WorkflowTemplateDto>> CreateDefaultTemplateAsync(int cabinetId, string userId);
+    Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId);
+
+    // ── Instances (Workflow Execution) ───────────────────────────
+    Task<ApiResponse<WorkflowInstanceDto>> StartWorkflowAsync(StartWorkflowDto dto, int cabinetId, string userId);
+    Task<ApiResponse<WorkflowInstanceDto>> GetInstanceByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<PagedResult<WorkflowInstanceDto>>> GetInstancesAsync(int cabinetId, int? clientId = null, string? status = null, int? declarationId = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<bool>> CancelWorkflowAsync(int instanceId, string reason, int cabinetId, string userId);
+    Task<ApiResponse<bool>> PauseWorkflowAsync(int instanceId, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ResumeWorkflowAsync(int instanceId, int cabinetId, string userId);
+
+    // ── Step Operations ──────────────────────────────────────────
+    Task<ApiResponse<WorkflowStepInstanceDto>> AdvanceStepAsync(int instanceId, AdvanceStepDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto, int cabinetId, string userId);
+    Task<ApiResponse<WorkflowStepInstanceDto>> GetCurrentStepAsync(int instanceId, int cabinetId);
+    Task<ApiResponse<List<WorkflowStepInstanceDto>>> GetMyPendingStepsAsync(int cabinetId, string userId, int? clientId = null);
+
+    // ── Client Workflow Config ───────────────────────────────────
+    Task<ApiResponse<List<ClientWorkflowConfigDto>>> GetClientConfigsAsync(int clientId, int cabinetId);
+    Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto, int cabinetId, string userId);
+
+    // ── Dashboard / Monitoring ───────────────────────────────────
+    Task<ApiResponse<WorkflowDashboardDto>> GetDashboardAsync(int cabinetId, string userId);
+    Task<ApiResponse<List<WorkflowHistoryDto>>> GetHistoryAsync(int instanceId, int cabinetId);
+
+    // ── Template Resolution ──────────────────────────────────────
+    /// <summary>
+    /// Resolves the most specific workflow template for a given client + declaration type.
+    /// Priority: Client+Type > Client+All > Type > Global default.
+    /// </summary>
+    Task<WorkflowTemplate?> ResolveTemplateAsync(int cabinetId, int clientId, string? declarationType);
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║             DOCUMENTS COMMERCIAUX — SERVICE INTERFACE                  ║
+// ║  Devis → Bon de Commande → Contrat → Facture + Paiements             ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+public interface ICommercialService
+{
+    // ── Devis ────────────────────────────────────────────────────
+    Task<ApiResponse<PagedResult<DevisDto>>> GetDevisAsync(int cabinetId, int? clientId = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<DevisDto>> GetDevisByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<DevisDto>> CreateDevisAsync(DevisCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DevisDto>> UpdateDevisAsync(int id, DevisCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteDevisAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<DevisDto>> SoumettreDevisAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<DevisDto>> ApprouverDevisAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<DevisDto>> RejeterDevisAsync(int id, string motif, int cabinetId, string userId);
+    Task<ApiResponse<DevisDto>> DupliquerDevisAsync(int id, int cabinetId, string userId);
+
+    // ── Conversion Devis → Bon de Commande ──────────────────────
+    Task<ApiResponse<BonCommandeDto>> ConvertirDevisEnBonCommandeAsync(int devisId, int cabinetId, string userId);
+
+    // ── Conversion Devis → Contrat (directe) ────────────────────
+    Task<ApiResponse<ContratCommercialDto>> ConvertirDevisEnContratAsync(ConvertDevisEnContratDto dto, int cabinetId, string userId);
+
+    // ── Bons de Commande ─────────────────────────────────────────
+    Task<ApiResponse<PagedResult<BonCommandeDto>>> GetBonsCommandeAsync(int cabinetId, int? clientId = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<BonCommandeDto>> GetBonCommandeByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<BonCommandeDto>> ConfirmerBonCommandeAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<BonCommandeDto>> ApprouverBonCommandeAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<BonCommandeDto>> DupliquerBonCommandeAsync(int id, int cabinetId, string userId);
+
+    // ── Conversion Bon de Commande → Contrat ─────────────────────
+    Task<ApiResponse<ContratCommercialDto>> ConvertirBonCommandeEnContratAsync(ConvertBonCommandeEnContratDto dto, int cabinetId, string userId);
+
+    // ── Contrats ─────────────────────────────────────────────────
+    Task<ApiResponse<PagedResult<ContratCommercialDto>>> GetContratsAsync(int cabinetId, int? clientId = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<ContratCommercialDto>> GetContratByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<ContratCommercialDto>> CreateContratAsync(ContratCommercialCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> UpdateContratAsync(int id, ContratCommercialCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> SignerContratAsync(int id, ContratSignatureDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> ValiderContratAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> SuspendreContratAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> TerminerContratAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> DupliquerContratAsync(int id, int cabinetId, string userId);
+
+    /// <summary>
+    /// Re-sync services from a specific validated contract.
+    /// Used when services need to be re-activated (e.g. after code migration).
+    /// </summary>
+    Task<ApiResponse<int>> SyncServicesFromContratAsync(int contratId, int cabinetId, string userId);
+
+    // ── Factures ─────────────────────────────────────────────────
+    Task<ApiResponse<PagedResult<FactureDto>>> GetFacturesAsync(int cabinetId, int? clientId = null, string? statut = null, int page = 1, int pageSize = 20);
+    Task<ApiResponse<FactureDto>> GetFactureByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<FactureDto>> CreateFactureAsync(FactureCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<FactureDto>> EnvoyerFactureAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<FactureDto>> AnnulerFactureAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<FactureDto>> DupliquerFactureAsync(int id, int cabinetId, string userId);
+
+    // ── Paiements ────────────────────────────────────────────────
+    Task<ApiResponse<PaiementDto>> EnregistrerPaiementAsync(PaiementCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<List<PaiementDto>>> GetPaiementsFactureAsync(int factureId, int cabinetId);
+
+    // ── Dashboard ────────────────────────────────────────────────
+    Task<ApiResponse<DashboardCommercialDto>> GetDashboardAsync(int cabinetId);
+}
+
+
+// Workflow Scheduler Service
+public interface IWorkflowSchedulerService
+{
+    Task SyncScheduledJobsAsync();
+    Task ExecuteScheduledStepAsync(int stepTemplateId, int cabinetId);
+}

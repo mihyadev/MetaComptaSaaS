@@ -1,0 +1,61 @@
+@{
+    ViewData["Title"] = "Notifications";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-bell me-2"></i>Paramètres de notifications</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Parametres")">Paramètres</a></li>
+                <li class="breadcrumb-item active">Notifications</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-bell me-2"></i>Configuration des notifications</div>
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-envelope me-1"></i>Notifications par email</h6>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="notifEcheance" checked>
+                    <label class="form-check-label" for="notifEcheance">Rappel d'échéances fiscales</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="notifTache" checked>
+                    <label class="form-check-label" for="notifTache">Tâches en retard</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="notifDocument">
+                    <label class="form-check-label" for="notifDocument">Nouveaux documents client</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="notifDeclaration" checked>
+                    <label class="form-check-label" for="notifDeclaration">Validation de déclarations</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-clock me-1"></i>Fréquence des rappels</h6>
+                <div class="mb-3">
+                    <label class="form-label">Rappel avant échéance (jours)</label>
+                    <input type="number" class="form-control" value="7" min="1" max="30" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Heure d'envoi</label>
+                    <input type="time" class="form-control" value="08:00" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email destinataire</label>
+                    <input type="email" class="form-control" placeholder="admin@cabinet.ma" />
+                </div>
+            </div>
+        </div>
+        <div class="mt-4">
+            <button class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Sauvegarder</button>
+        </div>
+    </div>
+</div>

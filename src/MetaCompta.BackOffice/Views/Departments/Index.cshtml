@@ -1,0 +1,78 @@
+@using MetaCompta.Application.DTOs
+@model List<DepartmentDto>
+@{
+    ViewData["Title"] = "Départements";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-diagram-2-fill text-primary me-2"></i>Départements</h4>
+        <p class="text-muted mb-0">Organisation du cabinet par département</p>
+    </div>
+    <a asp-action="Create" class="btn btn-mc-primary rounded-pill px-4"><i class="bi bi-plus-circle me-2"></i> Nouveau département</a>
+</div>
+
+@if (Model.Any())
+{
+    <div class="row g-3">
+        @foreach (var dept in Model)
+        {
+            <div class="col-lg-6 col-xl-4">
+                <div class="mc-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h6 class="fw-bold mb-1">
+                                    <i class="bi bi-diagram-2 me-1 text-primary"></i>@dept.Name
+                                </h6>
+                                <small class="text-muted">Code: @dept.Code</small>
+                            </div>
+                            @if (dept.IsActive)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success">Actif</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Inactif</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(dept.Description))
+                        {
+                            <p class="text-muted mb-3" style="font-size:0.85rem;">@dept.Description</p>
+                        }
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="text-muted" style="font-size:0.75rem;">RESPONSABLE</div>
+                                <span style="font-size:0.875rem;">@(dept.HeadOfDepartmentName ?? "Non défini")</span>
+                            </div>
+                            <div class="col-6 text-end">
+                                <div class="text-muted" style="font-size:0.75rem;">MEMBRES</div>
+                                <span class="fw-bold" style="font-size:1.25rem;">@dept.MemberCount</span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a asp-action="Details" asp-route-id="@dept.Id" class="btn btn-sm btn-outline-primary rounded-pill flex-fill"><i class="bi bi-eye me-1"></i> Détails</a>
+                            <a asp-action="Edit" asp-route-id="@dept.Id" class="btn btn-sm btn-outline-secondary rounded-pill"><i class="bi bi-pencil"></i></a>
+                            <form asp-action="Delete" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@dept.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill" onclick="return confirm('Supprimer ce département ?')"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="mc-card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-diagram-2 fs-1 text-muted d-block mb-3"></i>
+            <h5 class="fw-bold">Aucun département</h5>
+            <p class="text-muted">Créez des départements pour organiser votre cabinet (Comptabilité, Fiscalité, Social/Paie, Juridique...)</p>
+            <a asp-action="Create" class="btn btn-mc-primary rounded-pill px-4"><i class="bi bi-plus-circle me-2"></i> Créer un département</a>
+        </div>
+    </div>
+}

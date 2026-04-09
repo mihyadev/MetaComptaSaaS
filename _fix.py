@@ -1,0 +1,1 @@
+# replace MetaCompta.Domain.Entities.User with ApplicationUser in Program.cs

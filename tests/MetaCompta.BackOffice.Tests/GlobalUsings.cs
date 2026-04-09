@@ -1,0 +1,9 @@
+global using Xunit;
+global using Moq;
+global using FluentAssertions;
+global using MetaCompta.Application.DTOs;
+global using MetaCompta.BackOffice.Services;
+global using MetaCompta.BackOffice.Controllers;
+global using MetaCompta.BackOffice.Filters;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.AspNetCore.Http;

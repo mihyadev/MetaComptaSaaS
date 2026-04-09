@@ -1,0 +1,127 @@
+﻿@using MetaCompta.Application.DTOs
+@model PagedResult<EmployeeDto>
+@{
+    ViewData["Title"] = "Employés";
+    var search = ViewBag.Search as string ?? "";
+    var typeContrat = ViewBag.TypeContrat as string ?? "";
+    var client = ViewBag.Client as ClientDto;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-people text-primary me-2"></i>Employés</h4>
+        <p class="text-muted mb-0">@Model.TotalCount employé(s)</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary rounded-pill px-3"><i class="bi bi-plus-circle me-1"></i> Nouvel Employé</a>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+        <i class="bi bi-building fs-5"></i>
+        <div>
+            <strong>@client.RaisonSociale</strong>
+            @if (!string.IsNullOrEmpty(client.ICE)) { <span class="ms-2 text-muted small">ICE: @client.ICE</span> }
+        </div>
+    </div>
+}
+
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Recherche</label>
+                <input type="text" name="search" value="@search" class="form-control" placeholder="Nom, CIN..." />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Type Contrat</label>
+                <select name="typeContrat" class="form-select">
+                    <option value="">Tous</option>
+                    <option value="CDI" selected="@(typeContrat == "CDI")">CDI</option>
+                    <option value="CDD" selected="@(typeContrat == "CDD")">CDD</option>
+                    <option value="Stage" selected="@(typeContrat == "Stage")">Stage</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary rounded-pill w-100"><i class="bi bi-search me-1"></i>Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Employé</th>
+                        <th>CIN</th>
+                        <th>N° CNSS</th>
+                        <th>Poste</th>
+                        <th>Contrat</th>
+                        <th class="text-end">Salaire Base</th>
+                        <th>Statut</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items != null && Model.Items.Any())
+                    {
+                        @foreach (var e in Model.Items)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-semibold">@e.FullName</div>
+                                    <small class="text-muted">@e.Email</small>
+                                </td>
+                                <td><code>@e.CIN</code></td>
+                                <td><code>@(e.NumeroCNSS ?? "-")</code></td>
+                                <td>@(e.Poste ?? "-")</td>
+                                <td><span class="badge bg-primary-subtle text-primary rounded-pill">@e.TypeContrat</span></td>
+                                <td class="text-end">@(e.SalaireBase.ToString("N0")) MAD</td>
+                                <td>
+                                    @{
+                                        var sBadge = e.Statut == RefCodes.StatutEmploye.Actif ? "bg-success-subtle text-success" : "bg-secondary";
+                                    }
+                                    <span class="badge @sBadge rounded-pill">@e.Statut</span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="Details" asp-route-id="@e.Id" class="btn btn-outline-primary rounded-start-pill"><i class="bi bi-eye"></i></a>
+                                        <a asp-action="Edit" asp-route-id="@e.Id" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
+                                        <form asp-action="Delete" asp-route-id="@e.Id" method="post" class="d-inline" onsubmit="return confirm('Supprimer cet employé?')">
+                                            @Html.AntiForgeryToken()
+                                            <button class="btn btn-outline-danger btn-sm rounded-end-pill"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-people display-4 d-block mb-2 opacity-25"></i>
+                            <p class="mb-0">Aucun employé trouvé pour ce client.</p>
+                        </td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (Model.TotalPages > 1)
+{
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            @for (var p = 1; p <= Model.TotalPages; p++)
+            {
+                <li class="page-item @(p == Model.Page ? "active" : "")">
+                    <a class="page-link rounded-pill mx-1" href="?page=@p&search=@search&typeContrat=@typeContrat">@p</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}

@@ -1,0 +1,206 @@
+@using MetaCompta.Application.DTOs
+@model WorkflowTemplateCreateDto
+@{
+    ViewData["Title"] = "Modifier le modèle de workflow";
+    var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
+    var departments = ViewBag.Departments as List<DepartmentDto> ?? new List<DepartmentDto>();
+    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "ClotureArchivage" };
+    var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
+    var taskTypes = new[] { "Standard", "DocumentRequest", "DataEntry", "Review", "Validation", "Submission", "Archiving", "ClientAction" };
+    var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
+    var templateId = (int)ViewBag.TemplateId;
+}
+
+<style>
+    .ct-header { background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 50%,#7c3aed 100%); border-radius:18px; color:#fff; padding:1.75rem 2.25rem; position:relative; overflow:hidden; }
+    .ct-header::before { content:''; position:absolute; top:-50%; right:-15%; width:300px; height:300px; border-radius:50%; background:rgba(255,255,255,0.05); }
+    .ct-glass { background:rgba(255,255,255,0.92); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.5); border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,0.05); }
+    .ct-section-title { font-size:0.88rem; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem; }
+    .ct-step-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; transition:all .3s ease; position:relative; }
+    .ct-step-card:hover { box-shadow:0 8px 25px rgba(0,0,0,0.06); }
+    .ct-step-card .step-accent { position:absolute; top:0; left:0; width:4px; height:100%; border-radius:4px 0 0 4px; }
+    .ct-step-header { display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1rem; background:#f8fafc; border-bottom:1px solid #f1f5f9; cursor:pointer; }
+    .ct-step-header:hover { background:#f1f5f9; }
+    .ct-step-num { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.82rem; }
+    .ct-step-body { padding:1rem; }
+    .ct-form-label { font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:0.3rem; }
+    .ct-form-control { border-radius:10px; border:1.5px solid #e2e8f0; font-size:0.83rem; transition:all .2s; }
+    .ct-form-control:focus { border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,0.1); }
+    .ct-form-select { border-radius:10px; border:1.5px solid #e2e8f0; font-size:0.83rem; }
+    .ct-form-check .form-check-input { border-radius:6px; }
+    .ct-form-check .form-check-label { font-size:0.8rem; color:#475569; font-weight:500; }
+</style>
+
+<!-- HEADER -->
+<div class="ct-header mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3" style="position:relative; z-index:2;">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-2" style="font-size:0.8rem;">
+                    <li class="breadcrumb-item"><a href="@Url.Action("Index")" style="color:rgba(255,255,255,0.7);">Workflow</a></li>
+                    <li class="breadcrumb-item"><a href="@Url.Action("Templates")" style="color:rgba(255,255,255,0.7);">Modèles</a></li>
+                    <li class="breadcrumb-item"><a href="@Url.Action("TemplateDetails", new { id = templateId })" style="color:rgba(255,255,255,0.7);">Détails</a></li>
+                    <li class="breadcrumb-item text-white">Modifier</li>
+                </ol>
+            </nav>
+            <h4 class="fw-bold mb-1"><i class="bi bi-pencil-fill me-2"></i>@ViewData["Title"]</h4>
+            <p class="mb-0" style="font-size:0.85rem; opacity:0.8;">Modifiez les étapes et paramètres du modèle</p>
+        </div>
+        <a asp-action="TemplateDetails" asp-route-id="@templateId" class="btn btn-outline-light" style="border-radius:10px; font-weight:600; font-size:0.83rem;"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+<form asp-action="EditTemplate" asp-route-id="@templateId" method="post">
+    @Html.AntiForgeryToken()
+
+    <!-- GENERAL INFO -->
+    <div class="ct-glass p-4 mb-4">
+        <div class="ct-section-title"><i class="bi bi-info-circle text-primary"></i> Informations générales</div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="ct-form-label">Nom du modèle *</label>
+                <input asp-for="Name" class="form-control ct-form-control" required />
+            </div>
+            <div class="col-md-3">
+                <label class="ct-form-label">Type de déclaration</label>
+                <select asp-for="DeclarationType" class="form-select ct-form-select">
+                    <option value="All">Tous types</option>
+                    @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" })
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="ct-form-label">Client</label>
+                <select asp-for="ClientId" class="form-select ct-form-select">
+                    <option value="">&#8212; Global &#8212;</option>
+                    @foreach (var c in clients)
+                    {
+                        <option value="@c.Id">@c.RaisonSociale</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="ct-form-label">Description</label>
+                <textarea asp-for="Description" class="form-control ct-form-control" rows="2"></textarea>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch mt-2 ct-form-check">
+                    <input asp-for="IsDefault" class="form-check-input" type="checkbox" />
+                    <label class="form-check-label">Modèle par défaut</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEPS -->
+    <div class="ct-glass p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="ct-section-title mb-0"><i class="bi bi-list-ol text-primary"></i> Étapes du workflow</div>
+            <button type="button" class="btn btn-sm btn-mc-primary" style="border-radius:10px; font-weight:600;" onclick="addStep()"><i class="bi bi-plus-circle me-1"></i> Ajouter</button>
+        </div>
+        <div id="stepsContainer">
+            @if (Model.Steps != null)
+            {
+                for (int i = 0; i < Model.Steps.Count; i++)
+                {
+                    var s = Model.Steps[i];
+                    <div class="ct-step-card mb-3" data-index="@i" id="step-@i">
+                        <div class="step-accent" style="background:#94a3b8;"></div>
+                        <div class="ct-step-header" onclick="toggleStep(@i)">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="ct-step-num" style="background:#f1f5f9; color:#475569;">@(i+1)</div>
+                                <div><div class="fw-bold" style="font-size:0.85rem;">@s.Name</div><div style="font-size:0.7rem; color:#94a3b8;">@s.StepType &middot; @s.AssignmentType</div></div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:6px;" onclick="event.stopPropagation(); removeStep(@i)"><i class="bi bi-trash3"></i></button>
+                                <i class="bi bi-chevron-down" id="chevron-@i" style="transition:transform .3s;"></i>
+                            </div>
+                        </div>
+                        <div class="ct-step-body" id="body-@i">
+                            <div class="row g-3">
+                                <div class="col-md-4"><label class="ct-form-label">Nom *</label><input name="Steps[@i].Name" class="form-control ct-form-control step-name-input" value="@s.Name" required /></div>
+                                <div class="col-md-3"><label class="ct-form-label">Type</label><select name="Steps[@i].StepType" class="form-select ct-form-select step-type-select">@foreach (var t in stepTypes) { <option value="@t" selected="@(s.StepType == t)">@t</option> }</select></div>
+                                <div class="col-md-2"><label class="ct-form-label">Ordre</label><input name="Steps[@i].StepOrder" type="number" class="form-control ct-form-control" value="@s.StepOrder" /></div>
+                                <div class="col-md-3"><label class="ct-form-label">SLA (h)</label><input name="Steps[@i].SLAHours" type="number" class="form-control ct-form-control" value="@s.SLAHours" /></div>
+                                <div class="col-12"><label class="ct-form-label">Description</label><input name="Steps[@i].Description" class="form-control ct-form-control" value="@s.Description" /></div>
+                                <div class="col-12">
+                                    <div class="p-3 rounded-3" style="background:#f8fafc; border:1px solid #f1f5f9;">
+                                        <div class="ct-form-label mb-2"><i class="bi bi-people-fill text-primary me-1"></i> Assignation</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-3"><select name="Steps[@i].AssignmentType" class="form-select ct-form-select" onchange="toggleAssign(this, @i)">@foreach (var at in assignmentTypes) { <option value="@at" selected="@(s.AssignmentType == at)">@at</option> }</select></div>
+                                            <div class="col-md-3" id="au-@i" style="@(s.AssignmentType == "Employee" ? "" : "display:none;")"><input name="Steps[@i].AssignedToUserId" class="form-control ct-form-control" value="@s.AssignedToUserId" placeholder="User ID" /></div>
+                                            <div class="col-md-3" id="ar-@i" style="@(s.AssignmentType == "Role" ? "" : "display:none;")"><select name="Steps[@i].AssignedToRoleName" class="form-select ct-form-select"><option value="">--</option>@foreach (var r in new[] { "Gerant", "Manager", "Collaborateur", "Assistant", "Stagiaire" }) { <option value="@r" selected="@(s.AssignedToRoleName == r)">@r</option> }</select></div>
+                                            <div class="col-md-3" id="ad-@i" style="@(s.AssignmentType == "Department" ? "" : "display:none;")"><select name="Steps[@i].AssignedToDepartmentId" class="form-select ct-form-select"><option value="">--</option>@foreach (var d in departments) { <option value="@d.Id" selected="@(s.AssignedToDepartmentId == d.Id)">@d.Name</option> }</select></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="p-3 rounded-3" style="background:#fefbf3; border:1px solid #fef3c7;">
+                                        <div class="ct-form-label mb-2"><i class="bi bi-sliders text-warning me-1"></i> Règles</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[@i].IsRequired" type="checkbox" class="form-check-input" value="true" @(s.IsRequired ? "checked" : "") /><label class="form-check-label">Requis</label></div></div>
+                                            <div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[@i].IsBlocking" type="checkbox" class="form-check-input" value="true" @(s.IsBlocking ? "checked" : "") /><label class="form-check-label">Bloquant</label></div></div>
+                                            <div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[@i].AutoCreateTask" type="checkbox" class="form-check-input" value="true" @(s.AutoCreateTask ? "checked" : "") /><label class="form-check-label">Tâche</label></div></div>
+                                            <div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[@i].AutoNotify" type="checkbox" class="form-check-input" value="true" @(s.AutoNotify ? "checked" : "") /><label class="form-check-label">Notif</label></div></div>
+                                            <div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[@i].IsClientStep" type="checkbox" class="form-check-input" value="true" @(s.IsClientStep ? "checked" : "") /><label class="form-check-label">Client</label></div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6"><label class="ct-form-label">Statut entrée</label><input name="Steps[@i].DeclarationStatusOnEntry" class="form-control ct-form-control" value="@s.DeclarationStatusOnEntry" /></div>
+                                <div class="col-md-6"><label class="ct-form-label">Statut complétion</label><input name="Steps[@i].DeclarationStatusOnComplete" class="form-control ct-form-control" value="@s.DeclarationStatusOnComplete" /></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end">
+        <a asp-action="TemplateDetails" asp-route-id="@templateId" class="btn btn-outline-secondary" style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:600;">Annuler</a>
+        <button type="submit" class="btn btn-mc-primary" style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:700;"><i class="bi bi-check-circle-fill me-2"></i>Mettre à jour</button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    let stepIndex = @(Model.Steps?.Count ?? 0);
+    const stepTypesArr = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stepTypes));
+    const assignTypesArr = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(assignmentTypes));
+    const deptOpts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(departments.Select(d => new { d.Id, d.Name })));
+    const roleOpts = ['Gerant','Manager','Collaborateur','Assistant','Stagiaire'];
+
+    function addStep() {
+        var c = document.getElementById('stepsContainer');
+        var i = stepIndex;
+        var h = '<div class="ct-step-card mb-3" data-index="' + i + '" id="step-' + i + '">';
+        h += '<div class="step-accent" style="background:#94a3b8;"></div>';
+        h += '<div class="ct-step-header" onclick="toggleStep(' + i + ')">';
+        h += '<div class="d-flex align-items-center gap-2"><div class="ct-step-num" style="background:#f1f5f9; color:#475569;">' + (i+1) + '</div><div class="fw-bold" style="font-size:0.85rem;">Nouvelle étape</div></div>';
+        h += '<button type="button" class="btn btn-sm btn-outline-danger" style="border-radius:6px;" onclick="event.stopPropagation(); removeStep(' + i + ')"><i class="bi bi-trash3"></i></button>';
+        h += '</div>';
+        h += '<div class="ct-step-body" id="body-' + i + '"><div class="row g-3">';
+        h += '<div class="col-md-4"><input name="Steps[' + i + '].Name" class="form-control ct-form-control" placeholder="Nom" required /></div>';
+        h += '<div class="col-md-3"><select name="Steps[' + i + '].StepType" class="form-select ct-form-select">' + stepTypesArr.map(function(t){return '<option>'+t+'</option>';}).join('') + '</select></div>';
+        h += '<div class="col-md-2"><input name="Steps[' + i + '].StepOrder" type="number" class="form-control ct-form-control" value="' + i + '" /></div>';
+        h += '<div class="col-md-3"><select name="Steps[' + i + '].AssignmentType" class="form-select ct-form-select">' + assignTypesArr.map(function(t){return '<option>'+t+'</option>';}).join('') + '</select></div>';
+        h += '<div class="col-md-3"><input name="Steps[' + i + '].SLAHours" type="number" class="form-control ct-form-control" placeholder="SLA" /></div>';
+        h += '<div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[' + i + '].IsRequired" type="checkbox" class="form-check-input" checked value="true" /><label class="form-check-label">Requis</label></div></div>';
+        h += '<div class="col-md-2"><div class="form-check form-switch ct-form-check"><input name="Steps[' + i + '].IsBlocking" type="checkbox" class="form-check-input" checked value="true" /><label class="form-check-label">Bloquant</label></div></div>';
+        h += '</div></div></div>';
+        c.insertAdjacentHTML('beforeend', h);
+        stepIndex++;
+    }
+
+    function removeStep(idx) { var el = document.getElementById("step-" + idx); if (el) el.remove(); }
+    function toggleStep(idx) { var b = document.getElementById("body-" + idx); if (b) b.style.display = b.style.display === "none" ? "" : "none"; }
+    function toggleAssign(sel, idx) {
+        ['au','ar','ad'].forEach(function(p) { var e = document.getElementById(p + '-' + idx); if(e) e.style.display='none'; });
+        if (sel.value==='Employee') { var e=document.getElementById('au-'+idx); if(e) e.style.display=''; }
+        if (sel.value==='Role') { var e=document.getElementById('ar-'+idx); if(e) e.style.display=''; }
+        if (sel.value==='Department') { var e=document.getElementById('ad-'+idx); if(e) e.style.display=''; }
+    }
+</script>
+}

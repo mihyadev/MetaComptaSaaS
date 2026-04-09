@@ -1,0 +1,82 @@
+@model IEnumerable<MetaCompta.Application.DTOs.SettingsDto>
+@{
+    ViewData["Title"] = "Configuration générale";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-gear me-2"></i>Configuration générale</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item active">Paramètres</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Quick Nav -->
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <a href="@Url.Action("Index", "Parametres")" class="mc-card d-block text-decoration-none p-3 border-primary border-2">
+            <div class="text-center"><i class="bi bi-gear text-primary fs-4 d-block"></i><span class="small fw-semibold text-dark">Configuration</span></div>
+        </a>
+    </div>
+    <div class="col-md-2">
+        <a href="@Url.Action("Templates", "Parametres")" class="mc-card d-block text-decoration-none p-3">
+            <div class="text-center"><i class="bi bi-file-earmark-ruled text-success fs-4 d-block"></i><span class="small fw-semibold text-dark">Templates</span></div>
+        </a>
+    </div>
+    <div class="col-md-2">
+        <a href="@Url.Action("Notifications", "Parametres")" class="mc-card d-block text-decoration-none p-3">
+            <div class="text-center"><i class="bi bi-bell text-warning fs-4 d-block"></i><span class="small fw-semibold text-dark">Notifications</span></div>
+        </a>
+    </div>
+    <div class="col-md-2">
+        <a href="@Url.Action("Integrations", "Parametres")" class="mc-card d-block text-decoration-none p-3">
+            <div class="text-center"><i class="bi bi-plug text-info fs-4 d-block"></i><span class="small fw-semibold text-dark">Intégrations</span></div>
+        </a>
+    </div>
+    <div class="col-md-2">
+        <a href="@Url.Action("Periodes", "Parametres")" class="mc-card d-block text-decoration-none p-3">
+            <div class="text-center"><i class="bi bi-calendar-range text-danger fs-4 d-block"></i><span class="small fw-semibold text-dark">Périodes</span></div>
+        </a>
+    </div>
+</div>
+
+<!-- Settings -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-sliders me-2"></i>Paramètres du cabinet</div>
+    <div class="card-body">
+        @if (Model != null && Model.Any())
+        {
+            @foreach (var setting in Model)
+            {
+                <form method="post" action="@Url.Action("UpdateSetting", "Parametres")" class="row g-3 align-items-end mb-3 pb-3 border-bottom">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="cle" value="@setting.Cle" />
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">@setting.Cle</label>
+                        <div class="text-muted small">@setting.Description</div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Catégorie : <span class="badge bg-light text-dark">@setting.Categorie</span></label>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" name="valeur" class="form-control" value="@setting.Valeur" />
+                    </div>
+                    <div class="col-md-1">
+                        <button type="submit" class="btn btn-sm btn-mc-primary w-100"><i class="bi bi-check"></i></button>
+                    </div>
+                </form>
+            }
+        }
+        else
+        {
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-gear fs-1 d-block mb-2"></i>
+                Aucun paramètre configuré.
+            </div>
+        }
+    </div>
+</div>

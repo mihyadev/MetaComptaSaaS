@@ -1,0 +1,185 @@
+﻿@model DashboardCommercialDto
+@{
+    ViewData["Title"] = "Gestion Commerciale";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-briefcase text-primary me-2"></i>Gestion Commerciale</h4>
+        <p class="text-muted mb-0">Tableau de bord — Vue d'ensemble</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="DevisCreate" class="btn btn-primary rounded-pill px-3"><i class="bi bi-plus-circle me-1"></i> Nouveau Devis</a>
+        <a asp-action="ContratCreate" class="btn btn-success rounded-pill px-3"><i class="bi bi-file-earmark-check me-1"></i> Nouveau Contrat</a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted small mb-1">Devis</p>
+                        <h3 class="fw-bold mb-0">@Model.TotalDevis</h3>
+                        <small class="text-warning"><i class="bi bi-clock"></i> @Model.DevisEnAttente en attente</small>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                        <i class="bi bi-file-earmark-text text-primary fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted small mb-1">Contrats</p>
+                        <h3 class="fw-bold mb-0">@Model.TotalContrats</h3>
+                        <small class="text-success"><i class="bi bi-check-circle"></i> @Model.ContratsActifs actifs</small>
+                    </div>
+                    <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i class="bi bi-file-earmark-check text-success fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted small mb-1">Factures</p>
+                        <h3 class="fw-bold mb-0">@Model.TotalFactures</h3>
+                        <small class="text-danger"><i class="bi bi-exclamation-triangle"></i> @Model.FacturesEnRetard en retard</small>
+                    </div>
+                    <div class="bg-info bg-opacity-10 rounded-circle p-3">
+                        <i class="bi bi-receipt text-info fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted small mb-1">CA du mois</p>
+                        <h3 class="fw-bold mb-0">@Model.ChiffreAffairesMois.ToString("N2") MAD</h3>
+                        <small class="text-danger"><i class="bi bi-arrow-down-right"></i> @Model.MontantImpaye.ToString("N2") impayé</small>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 rounded-circle p-3">
+                        <i class="bi bi-cash-stack text-warning fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Taux de conversion -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center py-4">
+                <h5 class="text-muted mb-2">Taux de Conversion</h5>
+                <h2 class="fw-bold text-primary">@Model.TauxConversion %</h2>
+                <small class="text-muted">Devis → Contrat signé</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <h6 class="fw-semibold">Raccourcis</h6>
+                </div>
+                <div class="row g-2">
+                    <div class="col"><a asp-action="DevisCreate" class="btn btn-outline-primary w-100 rounded-pill"><i class="bi bi-plus-circle me-1"></i> Nouveau Devis</a></div>
+                    <div class="col"><a asp-action="ContratCreate" class="btn btn-outline-success w-100 rounded-pill"><i class="bi bi-plus-circle me-1"></i> Nouveau Contrat</a></div>
+                </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-md-3"><a asp-action="Devis" class="btn btn-outline-primary w-100 rounded-pill"><i class="bi bi-file-earmark-text me-1"></i> Devis</a></div>
+                    <div class="col-md-3"><a asp-action="BonsCommande" class="btn btn-outline-info w-100 rounded-pill"><i class="bi bi-cart-check me-1"></i> Bons Commande</a></div>
+                    <div class="col-md-3"><a asp-action="Contrats" class="btn btn-outline-success w-100 rounded-pill"><i class="bi bi-file-earmark-check me-1"></i> Contrats</a></div>
+                    <div class="col-md-3"><a asp-action="Factures" class="btn btn-outline-warning w-100 rounded-pill"><i class="bi bi-receipt me-1"></i> Factures</a></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Derniers Devis -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-file-earmark-text me-2"></i>Derniers Devis</h6>
+                <a asp-action="Devis" class="btn btn-sm btn-link">Voir tout →</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th class="ps-3">Référence</th><th>Client</th><th>Montant</th><th>Statut</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in Model.DerniersDevis)
+                            {
+                                <tr class="cursor-pointer" onclick="location.href='@Url.Action("DevisDetails", new { id = d.Id })'">
+                                    <td class="ps-3"><code>@d.Reference</code></td>
+                                    <td>@d.ClientName</td>
+                                    <td class="fw-semibold">@d.MontantTTC.ToString("N2")</td>
+                                    <td><span class="badge bg-@(d.Statut == RefCodes.StatutDevis.Approuve ? "success" : d.Statut == RefCodes.StatutDevis.Soumis ? "warning" : d.Statut == RefCodes.StatutDevis.Rejete ? "danger" : "secondary") rounded-pill">@d.Statut</span></td>
+                                </tr>
+                            }
+                            @if (!Model.DerniersDevis.Any())
+                            {
+                                <tr><td colspan="4" class="text-center text-muted py-4">Aucun devis</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dernières Factures -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-receipt me-2"></i>Dernières Factures</h6>
+                <a asp-action="Factures" class="btn btn-sm btn-link">Voir tout →</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th class="ps-3">Référence</th><th>Client</th><th>Montant</th><th>Statut</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in Model.DernieresFactures)
+                            {
+                                <tr class="cursor-pointer" onclick="location.href='@Url.Action("FactureDetails", new { id = f.Id })'">
+                                    <td class="ps-3"><code>@f.Reference</code></td>
+                                    <td>@f.ClientName</td>
+                                    <td class="fw-semibold">@f.MontantTTC.ToString("N2")</td>
+                                    <td><span class="badge bg-@(f.Statut == RefCodes.StatutFacture.Payee ? "success" : f.Statut == RefCodes.StatutFacture.EnRetard ? "danger" : f.Statut == RefCodes.StatutFacture.Envoyee ? "info" : "secondary") rounded-pill">@f.Statut</span></td>
+                                </tr>
+                            }
+                            @if (!Model.DernieresFactures.Any())
+                            {
+                                <tr><td colspan="4" class="text-center text-muted py-4">Aucune facture</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

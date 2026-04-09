@@ -1,0 +1,80 @@
+@{
+    ViewData["Title"] = "Dashboard Administrateur";
+}
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm rounded-4 p-3" style="border-left:4px solid #dc2626;">
+            <div class="text-muted small">Cabinets Actifs</div>
+            <div class="fw-bold fs-2">12</div>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> +2 ce mois</small>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm rounded-4 p-3" style="border-left:4px solid #f59e0b;">
+            <div class="text-muted small">Abonnements</div>
+            <div class="fw-bold fs-2">12</div>
+            <small class="text-muted">3 Starter, 6 Pro, 3 Enterprise</small>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm rounded-4 p-3" style="border-left:4px solid #10b981;">
+            <div class="text-muted small">Utilisateurs Totaux</div>
+            <div class="fw-bold fs-2">87</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm rounded-4 p-3" style="border-left:4px solid #2563eb;">
+            <div class="text-muted small">Revenus MRR</div>
+            <div class="fw-bold fs-2">24,500 <small class="fs-6">MAD</small></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h6 class="fw-bold"><i class="bi bi-building me-2 text-danger"></i>Cabinets Récents</h6>
+            </div>
+            <div class="card-body px-4">
+                <table class="table table-hover table-sm">
+                    <thead><tr><th>Cabinet</th><th>Plan</th><th>Clients</th><th>Utilisateurs</th><th>Statut</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td class="fw-medium">Cabinet Demo</td>
+                            <td><span class="badge bg-primary">Professional</span></td>
+                            <td>25</td><td>5</td>
+                            <td><span class="badge bg-success">Actif</span></td>
+                        </tr>
+                        <tr>
+                            <td class="fw-medium">Fiduciaire Atlas</td>
+                            <td><span class="badge bg-warning text-dark">Starter</span></td>
+                            <td>8</td><td>2</td>
+                            <td><span class="badge bg-success">Actif</span></td>
+                        </tr>
+                        <tr>
+                            <td class="fw-medium">Compta Pro Maroc</td>
+                            <td><span class="badge bg-danger">Enterprise</span></td>
+                            <td>120</td><td>15</td>
+                            <td><span class="badge bg-success">Actif</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-4 px-4">
+                <h6 class="fw-bold"><i class="bi bi-activity me-2 text-danger"></i>Activité Système</h6>
+            </div>
+            <div class="card-body px-4">
+                <div class="border-bottom py-2"><small class="text-muted">10:30</small> — Nouveau cabinet inscrit</div>
+                <div class="border-bottom py-2"><small class="text-muted">09:15</small> — Mise à jour taux TVA</div>
+                <div class="border-bottom py-2"><small class="text-muted">08:00</small> — Backup quotidien OK</div>
+                <div class="py-2"><small class="text-muted">Hier</small> — Renouvellement abonnement #5</div>
+            </div>
+        </div>
+    </div>
+</div>

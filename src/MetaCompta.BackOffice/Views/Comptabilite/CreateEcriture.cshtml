@@ -1,0 +1,83 @@
+﻿@model MetaCompta.Application.DTOs.EcritureCreateDto
+@{
+    ViewData["Title"] = "Nouvelle écriture comptable";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-plus-circle me-2"></i>Nouvelle écriture comptable</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Ecritures", "Comptabilite")">Écritures</a></li>
+                <li class="breadcrumb-item active">Nouvelle</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="@Url.Action("Ecritures", "Comptabilite")" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Retour
+    </a>
+</div>
+
+@if (client != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
+        <i class="bi bi-building fs-5"></i>
+        <div><strong>@client.RaisonSociale</strong> <span class="text-muted ms-2">@client.FormeJuridique</span></div>
+    </div>
+}
+
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-pencil me-2"></i>Informations de l'écriture</div>
+    <div class="card-body">
+        <form method="post" asp-action="CreateEcriture">
+            @Html.AntiForgeryToken()
+            @if (client != null)
+            {
+                <input type="hidden" name="ClientId" value="@client.Id" />
+            }
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Journal <span class="text-danger">*</span></label>
+                    <select asp-for="Journal" class="form-select">
+                        <option value="">— Sélectionner —</option>
+                        <option value="AC">Achats (AC)</option>
+                        <option value="VT">Ventes (VT)</option>
+                        <option value="BQ">Banque (BQ)</option>
+                        <option value="CS">Caisse (CS)</option>
+                        <option value="OD">Opérations Diverses (OD)</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Date <span class="text-danger">*</span></label>
+                    <input asp-for="DateEcriture" type="date" class="form-control" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Libellé <span class="text-danger">*</span></label>
+                    <input asp-for="Libelle" class="form-control" placeholder="Libellé de l'écriture" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">N° Pièce</label>
+                    <input asp-for="NumeroPiece" class="form-control" placeholder="Numéro de la pièce" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Référence</label>
+                    <input asp-for="Reference" class="form-control" placeholder="Référence externe" />
+                </div>
+            </div>
+
+            <hr class="my-4" />
+            <h6><i class="bi bi-list-ol me-1"></i>Lignes de l'écriture</h6>
+            <div class="alert alert-info small">
+                <i class="bi bi-info-circle me-1"></i>
+                Les lignes d'écriture seront ajoutées après la création. Le total Débit doit être égal au total Crédit.
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Créer l'écriture</button>
+                <a href="@Url.Action("Ecritures", "Comptabilite")" class="btn btn-outline-secondary ms-2">Annuler</a>
+            </div>
+        </form>
+    </div>
+</div>
