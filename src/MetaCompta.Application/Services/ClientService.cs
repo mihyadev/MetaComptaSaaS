@@ -13,11 +13,13 @@ public class ClientService : IClientService
 {
     private readonly MetaComptaDbContext _db;
     private readonly IMapper _mapper;
+    private readonly IContractAccessService _contractAccess;
 
-    public ClientService(MetaComptaDbContext db, IMapper mapper)
+    public ClientService(MetaComptaDbContext db, IMapper mapper, IContractAccessService contractAccess)
     {
         _db = db;
         _mapper = mapper;
+        _contractAccess = contractAccess;
     }
 
     public async Task<ApiResponse<PagedResult<ClientDto>>> GetAllAsync(int cabinetId, int page = 1, int pageSize = 20, string? search = null, string? statut = null)
@@ -165,26 +167,23 @@ public class ClientService : IClientService
     /// </summary>
     public async Task<List<string>> GetActiveServicesAsync(int clientId, int cabinetId)
     {
-        var today = DateTime.UtcNow;
+        var today = ContractAccessService.BusinessToday();
         return await _db.ServiceContrats
             .Where(s => s.ClientId == clientId && s.Client!.CabinetId == cabinetId
-                && s.Actif && s.DateDebut <= today && (s.DateFin == null || s.DateFin >= today))
+                && s.Actif && s.DateDebut.Date <= today && (s.DateFin == null || s.DateFin.Value.Date >= today))
             .Select(s => s.TypeService)
             .Distinct()
             .ToListAsync();
     }
 
     /// <summary>
-    /// Returns true if the client has at least one contract with status Valide or Actif.
-    /// Used to gate declaration creation/editing.
+    /// Returns true if the client has Manage-mode access (Valide/Actif + date window).
     /// </summary>
-    public async Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
-    {
-        var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
-        return await _db.Set<ContratCommercial>()
-            .AnyAsync(c => c.ClientId == clientId && c.CabinetId == cabinetId
-                && activeStatuses.Contains(c.Statut) && !c.IsDeleted);
-    }
+    public Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
+        => _contractAccess.HasManageAccessAsync(clientId, cabinetId);
+
+    public Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId)
+        => _contractAccess.GetContractAccessContextAsync(clientId, cabinetId);
 
     /// <summary>Returns all service contracts for a client, optionally filtered by exercise year</summary>
     public async Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(int clientId, int cabinetId, int? exerciceFiscal = null)
@@ -290,7 +289,7 @@ public class ClientService : IClientService
         var exercice = request.ExerciceFiscal;
 
         // Filter services eligible for declaration generation
-        var declarationTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TVA", "IS", "IR", "CNSS" };
+        var declarationTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TVA", "IS", "IR", "CNSS", "BILAN", "LIASSEFISCALE", "ETATSSYNTHESE", "CPC", "AMORTISSEMENTS" };
         var services = client.ServiceContrats
             .Where(s => s.Actif && declarationTypes.Contains(s.TypeService)
                 && (s.ExerciceFiscal == null || s.ExerciceFiscal == exercice)

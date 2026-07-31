@@ -4,6 +4,7 @@
     ViewData["Title"] = "Workflow Builder";
     var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
     var departments = ViewBag.Departments as List<DepartmentDto> ?? new List<DepartmentDto>();
+    var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new List<CabinetEmployeeDto>();
     var allTemplates = ViewBag.AllTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
     var editTemplate = ViewBag.EditTemplate as WorkflowTemplateDto;
     var editId = ViewBag.EditTemplateId as int?;
@@ -54,62 +55,45 @@
 }
 
 <style>
-    .builder-card { border:0; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,0.05); }
-    .step-card { background:#fff; border:1px solid #e2e8f0; border-radius:16px; margin-bottom:1rem; transition:all .25s ease; position:relative; overflow:hidden; }
-    .step-card:hover { box-shadow:0 4px 20px rgba(99,102,241,0.12); border-color:#a5b4fc; transform:translateY(-1px); }
-    .step-card.collapsed-step .step-body { display:none; }
-    .step-card.collapsed-step .step-header { border-bottom:0; }
-    .step-card.collapsed-step .chevron-icon { transform:rotate(-90deg); }
-    .step-num { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.82rem; color:#fff; background:linear-gradient(135deg,#6366f1,#8b5cf6); flex-shrink:0; box-shadow:0 2px 8px rgba(99,102,241,0.3); }
-    .step-header { display:flex; align-items:center; gap:0.7rem; cursor:pointer; padding:0.9rem 1.1rem; background:linear-gradient(135deg,#fafbff,#f5f3ff); border-bottom:1px solid #ede9fe; transition:background .2s; }
-    .step-header:hover { background:linear-gradient(135deg,#f5f3ff,#ede9fe); }
-    .step-header h6 { margin:0; font-size:0.9rem; font-weight:700; color:#1e1b4b; }
-    .step-type-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; font-weight:700; background:#ede9fe; color:#4f46e5; border:1px solid #c7d2fe; }
-    .assign-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; background:#f0fdf4; color:#16a34a; font-weight:600; border:1px solid #bbf7d0; }
-    .sla-badge { font-size:0.68rem; padding:3px 10px; border-radius:20px; background:#fff7ed; color:#ea580c; font-weight:600; border:1px solid #fed7aa; }
-    .chevron-icon { transition:transform .25s ease; font-size:0.9rem; color:#94a3b8; }
-    .step-body { padding:1.1rem; background:#fff; }
-    .field-section { background:linear-gradient(135deg,#fafbff,#f8fafc); border:1px solid #eef2ff; border-radius:12px; padding:0.75rem 1rem; margin-bottom:0.65rem; transition:border-color .2s; }
-    .field-section:hover { border-color:#c7d2fe; }
-    .field-section-title { font-size:0.72rem; font-weight:800; color:#6366f1; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.55rem; display:flex; align-items:center; gap:0.4rem; padding-bottom:0.4rem; border-bottom:1px solid #eef2ff; }
-    .field-section-title i { font-size:0.82rem; }
-    .form-label-sm { font-size:0.74rem; font-weight:600; color:#475569; margin-bottom:0.2rem; display:block; }
-    .form-control-sm, .form-select-sm { font-size:0.8rem; border-radius:10px; border:1px solid #e2e8f0; transition:border-color .2s, box-shadow .2s; }
-    .form-control-sm:focus, .form-select-sm:focus { border-color:#818cf8; box-shadow:0 0 0 3px rgba(99,102,241,0.1); }
-    .tpl-mini { display:flex; align-items:center; gap:0.5rem; padding:0.55rem 0.8rem; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:0.45rem; cursor:pointer; transition:all .2s; font-size:0.8rem; text-decoration:none; }
-    .tpl-mini:hover { background:#f8fafc; border-color:#c7d2fe; transform:translateX(2px); }
-    .tpl-mini.active { background:rgba(99,102,241,0.06); border-color:#818cf8; box-shadow:0 0 0 2px rgba(99,102,241,0.08); }
-    .tpl-mini .tpl-type { font-size:0.65rem; padding:2px 7px; border-radius:10px; font-weight:700; }
-    .chk-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:0.45rem; }
-    .chk-item { display:flex; align-items:center; gap:0.4rem; padding:0.45rem 0.65rem; background:#fff; border:1px solid #e2e8f0; border-radius:10px; font-size:0.74rem; font-weight:600; color:#475569; transition:all .2s; cursor:pointer; }
-    .chk-item:hover { border-color:#a5b4fc; background:#f5f3ff; }
-    .chk-item input:checked ~ span { color:#4f46e5; font-weight:700; }
-    .chk-item .form-check-input { width:1rem; height:1rem; margin:0; }
-    .chk-item .form-check-input:checked { background-color:#6366f1; border-color:#6366f1; }
-    .btn-add-step { border:2px dashed #c7d2fe; border-radius:14px; padding:1rem; text-align:center; color:#6366f1; font-weight:700; font-size:0.85rem; background:transparent; cursor:pointer; transition:all .25s; width:100%; display:flex; align-items:center; justify-content:center; gap:0.5rem; }
-    .btn-add-step:hover { background:linear-gradient(135deg,#f5f3ff,#eef2ff); border-color:#818cf8; transform:translateY(-2px); box-shadow:0 4px 12px rgba(99,102,241,0.1); }
-    .section-title { font-size:0.8rem; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:0.45rem; margin-bottom:0.6rem; }
-    .section-title i { font-size:0.9rem; color:#6366f1; }
-    .field-section details summary { list-style:none; cursor:pointer; }
-    .field-section details summary::-webkit-details-marker { display:none; }
-    .field-section details[open] summary .toggle-hint { display:none; }
-    .toggle-hint { font-size:0.65rem; font-weight:400; color:#94a3b8; text-transform:none; letter-spacing:0; }
-    .btn-delete-step { width:26px; height:26px; border-radius:8px; border:1px solid #fecaca; background:#fff; color:#ef4444; display:flex; align-items:center; justify-content:center; font-size:0.72rem; transition:all .2s; cursor:pointer; }
-    .btn-delete-step:hover { background:#fef2f2; border-color:#f87171; box-shadow:0 2px 6px rgba(239,68,68,0.15); }
-    .cron-builder { background:#fff; border:1px solid #e0e7ff; border-radius:12px; padding:0.85rem 1rem; }
-    .cron-freq-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.85rem; border:1px solid #e2e8f0; border-radius:10px; cursor:pointer; font-size:0.76rem; font-weight:600; color:#475569; background:#fff; transition:all .2s; }
-    .cron-freq-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
-    .cron-freq-btn.active { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:#6366f1; box-shadow:0 2px 8px rgba(99,102,241,0.25); }
-    .cron-day-btn { width:36px; height:36px; border-radius:10px; border:1px solid #e2e8f0; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.74rem; font-weight:700; color:#475569; background:#fff; transition:all .2s; }
-    .cron-day-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
-    .cron-day-btn.active { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:#6366f1; box-shadow:0 2px 6px rgba(99,102,241,0.2); }
-    .cron-month-btn { display:inline-flex; align-items:center; padding:0.3rem 0.65rem; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:#475569; background:#fff; transition:all .2s; }
-    .cron-month-btn:hover { border-color:#a5b4fc; background:#f5f3ff; }
-    .cron-month-btn.active { background:#6366f1; color:#fff; border-color:#6366f1; }
-    .cron-preview { background:linear-gradient(135deg,#f0fdf4,#ecfdf5); border:1px solid #bbf7d0; border-radius:10px; padding:0.5rem 0.85rem; margin-top:0.6rem; display:flex; align-items:center; gap:0.5rem; }
-    .cron-preview-icon { width:28px; height:28px; border-radius:8px; background:#16a34a; color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.8rem; flex-shrink:0; }
-    .cron-preview-text { font-size:0.78rem; font-weight:600; color:#166534; }
-    .cron-preview-cron { font-size:0.68rem; color:#64748b; font-family:monospace; }
+    .builder-card { border: 0; border-radius: 16px; box-shadow: var(--monday-shadow); }
+    .step-card { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; margin-bottom: 1rem; position: relative; overflow: hidden; }
+    .step-card.collapsed-step .step-body { display: none; }
+    .step-card.collapsed-step .step-header { border-bottom: 0; }
+    .step-card.collapsed-step .chevron-icon { transform: rotate(-90deg); }
+    .step-num { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.82rem; color: #fff; background: var(--monday-blue); flex-shrink: 0; }
+    .step-header { display: flex; align-items: center; gap: 0.7rem; cursor: pointer; padding: 0.9rem 1.1rem; background: var(--monday-bg); border-bottom: 1px solid var(--monday-border); }
+    .step-header h6 { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--monday-text); }
+    .step-type-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); color: var(--monday-blue); border: 1px solid var(--monday-border); }
+    .assign-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-green) 12%, var(--monday-surface)); color: var(--monday-green); font-weight: 600; border: 1px solid var(--monday-border); }
+    .sla-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-orange) 12%, var(--monday-surface)); color: var(--monday-orange); font-weight: 600; border: 1px solid var(--monday-border); }
+    .chevron-icon { transition: transform .25s ease; font-size: 0.9rem; color: var(--monday-muted); }
+    .step-body { padding: 1.1rem; background: var(--monday-surface); }
+    .field-section { background: var(--monday-bg); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.65rem; }
+    .field-section-title { font-size: 0.72rem; font-weight: 800; color: var(--monday-blue); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.55rem; display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--monday-border); }
+    .form-label-sm { font-size: 0.74rem; font-weight: 600; color: var(--monday-muted); margin-bottom: 0.2rem; display: block; }
+    .tpl-mini { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.8rem; border: 1px solid var(--monday-border); border-radius: 12px; margin-bottom: 0.45rem; cursor: pointer; font-size: 0.8rem; text-decoration: none; }
+    .tpl-mini.active { background: color-mix(in srgb, var(--monday-blue) 8%, var(--monday-surface)); border-color: var(--monday-blue); }
+    .tpl-mini .tpl-type { font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+    .chk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem; }
+    .chk-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.65rem; background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 10px; font-size: 0.74rem; font-weight: 600; color: var(--monday-text); cursor: pointer; }
+    .chk-item input:checked ~ span { color: var(--monday-blue); font-weight: 700; }
+    .chk-item .form-check-input { width: 1rem; height: 1rem; margin: 0; }
+    .btn-add-step { border: 2px dashed var(--monday-border); border-radius: 14px; padding: 1rem; text-align: center; color: var(--monday-blue); font-weight: 700; font-size: 0.85rem; background: transparent; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .section-title { font-size: 0.8rem; font-weight: 800; color: var(--monday-text); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.6rem; }
+    .section-title i { font-size: 0.9rem; color: var(--monday-blue); }
+    .field-section details summary { list-style: none; cursor: pointer; }
+    .field-section details summary::-webkit-details-marker { display: none; }
+    .field-section details[open] summary .toggle-hint { display: none; }
+    .toggle-hint { font-size: 0.65rem; font-weight: 400; color: var(--monday-muted); text-transform: none; letter-spacing: 0; }
+    .btn-delete-step { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--monday-border); background: var(--monday-surface); color: var(--monday-red); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; }
+    .cron-builder { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.85rem 1rem; }
+    .cron-freq-btn, .cron-day-btn, .cron-month-btn { border: 1px solid var(--monday-border); border-radius: 10px; cursor: pointer; font-size: 0.76rem; font-weight: 600; color: var(--monday-text); background: var(--monday-surface); }
+    .cron-freq-btn.active, .cron-day-btn.active, .cron-month-btn.active { background: var(--monday-blue); color: #fff; border-color: var(--monday-blue); }
+    .cron-day-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.74rem; }
+    .cron-preview { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+    .cron-preview-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--monday-green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+    .cron-preview-text { font-size: 0.78rem; font-weight: 600; color: var(--monday-text); }
+    .cron-preview-cron { font-size: 0.68rem; color: var(--monday-muted); font-family: monospace; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -119,7 +103,7 @@
     </div>
     <div class="d-flex gap-2">
         <a href="@Url.Action("Templates", "Workflow")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-list me-1"></i>Modèles</a>
-        @if (!isEditMode)
+        @if (!isEditMode && ((ViewBag.CanWorkflowCreate as bool? ?? false) || (ViewBag.CanSystemAdmin as bool? ?? false)))
         {
             <form asp-action="SeedAllDefaultTemplates" asp-controller="Workflow" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
@@ -151,7 +135,10 @@
                     <div class="text-center text-muted py-3" style="font-size:0.8rem;"><i class="bi bi-inbox d-block mb-1" style="font-size:1.3rem;"></i>Aucun modèle</div>
                 }
                 <hr class="my-2"/>
-                <a href="@Url.Action("Builder", "Workflow")" class="btn btn-sm btn-primary w-100 rounded-pill"><i class="bi bi-plus me-1"></i>Nouveau</a>
+                @if (ViewBag.CanWorkflowCreate as bool? ?? false)
+                {
+                    <a href="@Url.Action("Builder", "Workflow")" class="btn btn-sm btn-primary w-100 rounded-pill"><i class="bi bi-plus me-1"></i>Nouveau</a>
+                }
             </div>
         </div>
     </div>
@@ -256,9 +243,28 @@
                                                     @foreach (var at in assignmentTypes) { <option value="@at" selected="@(step.AssignmentType == at)">@(assignLabels.ContainsKey(at) ? assignLabels[at] : at)</option> }
                                                 </select>
                                             </div>
-                                            <div class="col-md-4 assign-employee-field @(step.AssignmentType != "Employee" ? "d-none" : "")">
-                                                <label class="form-label-sm">Employé</label>
-                                                <select name="Steps[@i].AssignedToUserId" class="form-select form-select-sm"><option value="">Automatique</option></select>
+                                            <div class="col-md-8 assign-employee-field @(step.AssignmentType != "Employee" ? "d-none" : "")">
+                                                <label class="form-label-sm">Employés</label>
+                                                <select name="Steps[@i].AssignedToUserIds" class="form-select form-select-sm employee-multi" multiple data-placeholder="Rechercher par prénom ou nom...">
+                                                    @foreach (var emp in employees)
+                                                    {
+                                                        var isSelected = (step.AssignedToUserIds != null && step.AssignedToUserIds.Contains(emp.Id))
+                                                            || (!string.IsNullOrEmpty(step.AssignedToUserId) && step.AssignedToUserId == emp.Id);
+                                                        var label = emp.NomComplet + (string.IsNullOrEmpty(emp.Role) ? "" : $" — {emp.Role}");
+                                                        if (isSelected)
+                                                        {
+                                                            <option value="@emp.Id" data-first="@emp.FirstName" data-last="@emp.LastName" data-role="@emp.Role" selected>@label</option>
+                                                        }
+                                                        else
+                                                        {
+                                                            <option value="@emp.Id" data-first="@emp.FirstName" data-last="@emp.LastName" data-role="@emp.Role">@label</option>
+                                                        }
+                                                    }
+                                                </select>
+                                                @if (!employees.Any())
+                                                {
+                                                    <div class="form-text text-warning">Aucun employé cabinet chargé. Vérifiez Cabinet → Employés.</div>
+                                                }
                                             </div>
                                             <div class="col-md-4 assign-role-field @(step.AssignmentType != "Role" ? "d-none" : "")">
                                                 <label class="form-label-sm">Rôle</label>
@@ -450,7 +456,7 @@
             </div>
 
             <div class="d-flex justify-content-end gap-2">
-                @if (isEditMode)
+                @if (isEditMode && (ViewBag.CanWorkflowDelete as bool? ?? false))
                 {
                     <form asp-action="DeleteTemplate" asp-controller="Workflow" method="post" class="d-inline" onsubmit="return confirm('Supprimer ce modèle ?')">
                         @Html.AntiForgeryToken()
@@ -458,7 +464,10 @@
                         <button type="submit" class="btn btn-outline-danger rounded-pill px-4"><i class="bi bi-trash me-1"></i>Supprimer</button>
                     </form>
                 }
-                <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>@(isEditMode ? "Mettre à jour" : "Créer le workflow")</button>
+                @if (isEditMode ? (ViewBag.CanWorkflowEdit as bool? ?? false) : (ViewBag.CanWorkflowCreate as bool? ?? false))
+                {
+                    <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>@(isEditMode ? "Mettre à jour" : "Créer le workflow")</button>
+                }
             </div>
         </form>
     </div>
@@ -523,9 +532,11 @@
                             <option value="AutoSystem">Automatique</option>
                         </select>
                     </div>
-                    <div class="col-md-4 assign-employee-field">
-                        <label class="form-label-sm">Employé</label>
-                        <select name="Steps[__IDX__].AssignedToUserId" class="form-select form-select-sm"><option value="">Automatique</option></select>
+                    <div class="col-md-8 assign-employee-field">
+                        <label class="form-label-sm">Employés</label>
+                        <select name="Steps[__IDX__].AssignedToUserIds" class="form-select form-select-sm employee-multi" multiple data-placeholder="Rechercher par prénom ou nom...">
+                            __EMPLOYEE_OPTIONS__
+                        </select>
                     </div>
                     <div class="col-md-4 assign-role-field d-none">
                         <label class="form-label-sm">Rôle</label>
@@ -536,7 +547,10 @@
                     </div>
                     <div class="col-md-4 assign-dept-field d-none">
                         <label class="form-label-sm">Département</label>
-                        <select name="Steps[__IDX__].AssignedToDepartmentId" class="form-select form-select-sm"><option value="">--</option></select>
+                        <select name="Steps[__IDX__].AssignedToDepartmentId" class="form-select form-select-sm">
+                            <option value="">--</option>
+                            __DEPT_OPTIONS__
+                        </select>
                     </div>
                 </div>
             </div>
@@ -728,7 +742,68 @@
 </template>
 
 @section Scripts {
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<style>
+    .employee-multi + .select2-container { width: 100% !important; }
+    .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
+</style>
 <script>
+    const employeeOptionsHtml = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        string.Concat(employees.Select(e =>
+        {
+            var label = System.Net.WebUtility.HtmlEncode(e.NomComplet) + (string.IsNullOrEmpty(e.Role) ? "" : $" — {System.Net.WebUtility.HtmlEncode(e.Role)}");
+            return $"<option value=\"{e.Id}\" data-first=\"{System.Net.WebUtility.HtmlEncode(e.FirstName)}\" data-last=\"{System.Net.WebUtility.HtmlEncode(e.LastName)}\" data-role=\"{System.Net.WebUtility.HtmlEncode(e.Role ?? "")}\">{label}</option>";
+        }))));
+    const deptOptionsHtml = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        string.Concat(departments.Select(d => $"<option value=\"{d.Id}\">{System.Net.WebUtility.HtmlEncode(d.Name)}</option>"))));
+
+    function normalizeSearch(s) {
+        return (s || '').toString().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function destroyEmployeeSelect2(root) {
+        $(root || document).find('select.employee-multi').each(function () {
+            if ($(this).hasClass('select2-hidden-accessible')) {
+                $(this).select2('destroy');
+            }
+        });
+    }
+
+    function initEmployeeSelect2(root) {
+        $(root || document).find('select.employee-multi').each(function () {
+            const $el = $(this);
+            if ($el.hasClass('select2-hidden-accessible')) return;
+            $el.select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: $el.data('placeholder') || 'Rechercher par prénom ou nom...',
+                allowClear: true,
+                closeOnSelect: false,
+                language: {
+                    noResults: function () { return 'Aucun employé trouvé'; },
+                    searching: function () { return 'Recherche…'; },
+                    removeAllItems: function () { return 'Tout retirer'; }
+                },
+                matcher: function (params, data) {
+                    if ($.trim(params.term) === '') return data;
+                    if (typeof data.text === 'undefined') return null;
+                    const term = normalizeSearch(params.term);
+                    const $opt = $(data.element);
+                    const hay = normalizeSearch([
+                        data.text,
+                        $opt.attr('data-first'),
+                        $opt.attr('data-last'),
+                        $opt.attr('data-role')
+                    ].join(' '));
+                    return hay.indexOf(term) > -1 ? data : null;
+                }
+            });
+        });
+    }
+
     // === Toggle step expand/collapse ===
     function toggleStep(header) {
         header.closest('.step-card').classList.toggle('collapsed-step');
@@ -740,23 +815,28 @@
         const idx = container.querySelectorAll('.step-card').length;
         const tpl = document.getElementById('stepTemplate').content.cloneNode(true);
         const card = tpl.querySelector('.step-card');
-        const html = card.outerHTML.replace(/__IDX__/g, idx).replace(/__NUM__/g, idx + 1);
+        let html = card.outerHTML.replace(/__IDX__/g, idx).replace(/__NUM__/g, idx + 1);
+        html = html.replace(/__EMPLOYEE_OPTIONS__/g, employeeOptionsHtml).replace(/__DEPT_OPTIONS__/g, deptOptionsHtml);
         container.insertAdjacentHTML('beforeend', html);
         const newCard = container.lastElementChild;
         newCard.classList.remove('collapsed-step');
+        initEmployeeSelect2(newCard);
         updateStepCount();
     }
 
     // === Remove step ===
     function removeStep(btn) {
         if (!confirm('Supprimer cette étape ?')) return;
-        btn.closest('.step-card').remove();
+        const card = btn.closest('.step-card');
+        destroyEmployeeSelect2(card);
+        card.remove();
         reindexSteps();
         updateStepCount();
     }
 
     // === Reindex all steps ===
     function reindexSteps() {
+        destroyEmployeeSelect2(document.getElementById('stepsContainer'));
         document.querySelectorAll('#stepsContainer .step-card').forEach((card, i) => {
             card.dataset.index = i;
             card.querySelector('.step-num').textContent = i + 1;
@@ -766,6 +846,7 @@
             const orderInput = card.querySelector('.step-order-input');
             if (orderInput) orderInput.value = i;
         });
+        initEmployeeSelect2(document.getElementById('stepsContainer'));
     }
 
     // === Update step count badge ===
@@ -788,6 +869,10 @@
         if (val === 'AutoSystem') {
             if (schedSection) schedSection.classList.remove('d-none');
             if (schedCheckbox) schedCheckbox.checked = true;
+        }
+
+        if (val === 'Employee') {
+            initEmployeeSelect2(card);
         }
     }
 
@@ -968,6 +1053,7 @@
         document.querySelectorAll('.assign-select').forEach(sel => {
             toggleAssignFields(sel);
         });
+        initEmployeeSelect2(document.getElementById('stepsContainer'));
 
         // Parse existing cron expressions
         document.querySelectorAll('.cron-builder').forEach(builder => {

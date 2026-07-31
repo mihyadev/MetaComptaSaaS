@@ -1,0 +1,269 @@
+@using MetaCompta.Application.DTOs
+@{
+    ViewData["Title"] = "Messagerie";
+    var messages = ViewBag.Messages as List<MessageDto> ?? new List<MessageDto>();
+    var unreadCount = messages.Count(m => !m.IsReadByRecipient && m.SenderRole == "Cabinet");
+    var totalCount = messages.Count;
+
+    var threads = messages
+        .GroupBy(m => m.DeclarationId ?? 0)
+        .Select(g => new {
+            DeclId = g.Key,
+            Messages = g.OrderBy(m => m.CreatedAt).ToList(),
+            Last = g.OrderByDescending(m => m.CreatedAt).First(),
+            Unread = g.Count(m => !m.IsReadByRecipient && m.SenderRole == "Cabinet"),
+            Count = g.Count()
+        })
+        .OrderByDescending(t => t.Unread > 0)
+        .ThenByDescending(t => t.Last.CreatedAt)
+        .ToList();
+}
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-chat-square-text text-primary me-2"></i>Messagerie</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0" style="font-size:.8rem;"><li class="breadcrumb-item"><a href="/Home" class="text-decoration-none">Accueil</a></li><li class="breadcrumb-item active">Messagerie</li></ol></nav>
+    </div>
+    <div class="d-flex gap-2">
+        @if (unreadCount > 0) { <span class="badge bg-danger rounded-pill px-3 py-2" style="font-size:.78rem;"><i class="bi bi-envelope-fill me-1"></i>@unreadCount non lu(s)</span> }
+        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2" style="font-size:.78rem;">@totalCount message(s)</span>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Conversations</div><div class="fs-3 fw-bold">@threads.Count</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-chat-square-text fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-danger border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Non lus</div><div class="fs-3 fw-bold text-danger">@unreadCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-envelope-exclamation fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Total messages</div><div class="fs-3 fw-bold text-info">@totalCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-chat-dots fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Déclarations liées</div><div class="fs-3 fw-bold text-success">@threads.Count(t => t.DeclId > 0)</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-file-earmark-text fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (threads.Any())
+{
+    <div class="row g-3">
+        <!-- LEFT: Conversation List -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm" style="position:sticky; top:1rem;">
+                <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
+                    <span><i class="bi bi-inbox text-primary me-2"></i>Conversations</span>
+                    @if (unreadCount > 0) { <span class="badge bg-danger rounded-pill">@unreadCount</span> }
+                </div>
+                <div class="card-body p-2">
+                    <!-- Search -->
+                    <div class="px-2 pb-2">
+                        <div class="position-relative">
+                            <i class="bi bi-search position-absolute text-muted" style="left:.75rem; top:50%; transform:translateY(-50%); font-size:.85rem;"></i>
+                            <input type="text" id="threadSearch" class="form-control form-control-sm rounded-pill" placeholder="Rechercher..." style="padding-left:2.2rem; font-size:.82rem;" />
+                        </div>
+                    </div>
+
+                    <!-- Thread Items -->
+                    <div style="max-height:480px; overflow-y:auto; scrollbar-width:thin;">
+                        @foreach (var t in threads)
+                        {
+                            var hasU = t.Unread > 0;
+                            var initials = string.Concat(t.Last.SenderName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpper(w[0])));
+                            var isCab = t.Last.SenderRole == "Cabinet";
+                            var timeStr = t.Last.CreatedAt.Date == DateTime.Today ? t.Last.CreatedAt.ToString("HH:mm")
+                                : t.Last.CreatedAt.Date == DateTime.Today.AddDays(-1) ? "Hier"
+                                : t.Last.CreatedAt.ToString("dd/MM");
+                            var preview = (t.Last.Contenu ?? "").Length > 55 ? (t.Last.Contenu ?? "").Substring(0, 55) + "..." : (t.Last.Contenu ?? "");
+
+                            <div class="list-group-item list-group-item-action rounded-3 p-2 mb-1 @(hasU ? "fw-bold" : "")" data-thread="@t.DeclId"
+                                 data-search="@(t.Last.SenderName?.ToLower()) @(t.Last.Sujet?.ToLower()) @t.DeclId">
+                                <div class="d-flex align-items-start gap-2">
+                                    <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold text-white flex-shrink-0" style="width:38px;height:38px;background:@(isCab ? "linear-gradient(135deg,#06b6d4,#0891b2)" : "linear-gradient(135deg,#0d6efd,#6f42c1)");">
+                                        @initials
+                                    </div>
+                                    <div class="flex-grow-1 min-width-0" style="overflow:hidden;">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="fw-semibold small @(hasU ? "fw-bold" : "")" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@t.Last.SenderName</span>
+                                            <span class="small flex-shrink-0 @(hasU ? "fw-bold text-primary" : "text-muted")" style="font-size:.68rem;">@timeStr</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 mt-1">
+                                            @if (t.DeclId > 0)
+                                            {
+                                                <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary" style="font-size:.58rem; padding:2px 6px;">Décl #@t.DeclId</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge rounded-pill bg-secondary bg-opacity-10 text-secondary" style="font-size:.58rem; padding:2px 6px;">Général</span>
+                                            }
+                                            @if (t.Count > 1) { <span class="badge rounded-pill bg-success bg-opacity-10 text-success" style="font-size:.58rem; padding:2px 6px;">@t.Count</span> }
+                                            @if (hasU) { <span class="badge bg-danger rounded-pill" style="font-size:.55rem; padding:2px 6px;">@t.Unread</span> }
+                                        </div>
+                                        <div class="small mt-1 text-muted" style="font-size:.76rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@preview</div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Chat Area -->
+        <div class="col-lg-8">
+            <!-- Empty state -->
+            <div class="card shadow-sm d-flex align-items-center justify-content-center" id="chatEmpty" style="min-height:560px;">
+                <div class="text-center p-4">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary mb-3" style="width:72px;height:72px;">
+                        <i class="bi bi-chat-square-text" style="font-size:1.8rem;"></i>
+                    </div>
+                    <h6 class="fw-bold">Sélectionnez une conversation</h6>
+                    <p class="small mb-0 text-muted" style="max-width:280px;">Cliquez sur une conversation pour lire les messages.</p>
+                </div>
+            </div>
+
+            <!-- Chat panels -->
+            @foreach (var t in threads)
+            {
+                var msgs = t.Messages;
+                <div class="card shadow-sm chat-panel d-none" data-panel="@t.DeclId" style="min-height:560px; display:flex; flex-direction:column;">
+                    <!-- Chat header -->
+                    <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="fw-bold">
+                                @if (t.DeclId > 0) { <i class="bi bi-file-earmark-text text-primary me-1"></i><span>Déclaration #@t.DeclId</span> }
+                                else { <i class="bi bi-chat-dots text-secondary me-1"></i><span>Général</span> }
+                            </span>
+                            <span class="ms-2 small text-muted">@msgs.Count message(s)</span>
+                            @if (t.Unread > 0) { <span class="badge bg-danger rounded-pill ms-1" style="font-size:.6rem;">@t.Unread non lu(s)</span> }
+                        </div>
+                        @if (t.DeclId > 0) {
+                            <a href="/Declarations/Details/@t.DeclId" class="btn btn-primary btn-sm"><i class="bi bi-arrow-up-right me-1"></i>Déclaration</a>
+                        }
+                    </div>
+
+                    <!-- Messages -->
+                    <div class="card-body d-flex flex-column gap-3 p-3 overflow-auto" style="flex:1;">
+                        @{
+                            DateTime? prevDate = null;
+                        }
+                        @foreach (var msg in msgs)
+                        {
+                            var isCab = msg.SenderRole == "Cabinet";
+
+                            // Date separator
+                            if (prevDate == null || msg.CreatedAt.Date != prevDate)
+                            {
+                                prevDate = msg.CreatedAt.Date;
+                                var lbl = msg.CreatedAt.Date == DateTime.Today ? "Aujourd'hui"
+                                    : msg.CreatedAt.Date == DateTime.Today.AddDays(-1) ? "Hier"
+                                    : msg.CreatedAt.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"));
+                                <div class="text-center text-muted small border-top border-bottom py-1 my-2"><span>@lbl</span></div>
+                            }
+
+                            <div class="d-flex @(isCab ? "" : "justify-content-end")">
+                                <div class="@(isCab ? "bg-light border" : "bg-primary text-white") rounded-3 p-3 @(isCab ? "me-5" : "ms-5")" style="max-width:80%;">
+                                    <div class="d-flex align-items-center gap-1 mb-1" style="font-size:.72rem; font-weight:600;">
+                                        <i class="bi @(isCab ? "bi-building" : "bi-person")"></i>
+                                        <span class="@(isCab ? "text-info" : "text-white-50")">@(isCab ? msg.SenderName : "Vous")</span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(msg.Sujet))
+                                    {
+                                        <div class="@(isCab ? "fw-semibold" : "")" style="font-size:.78rem; font-weight:600; margin-bottom:4px;">@msg.Sujet</div>
+                                    }
+                                    <div>@msg.Contenu</div>
+                                    <div class="text-end small mt-1 @(isCab ? "text-muted" : "text-white-50")">
+                                        @msg.CreatedAt.ToString("HH:mm")
+                                        @if (!msg.IsReadByRecipient && isCab) { <span class="badge bg-danger rounded-pill ms-1" style="font-size:.5rem; padding:1px 5px;">Non lu</span> }
+                                        @if (msg.IsReadByRecipient && !isCab) { <i class="bi bi-check2-all text-white-50 ms-1"></i> }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Reply bar -->
+                    @if (t.DeclId > 0)
+                    {
+                        <div class="border-top p-3 text-center">
+                            <a href="/Declarations/Details/@t.DeclId#messages" class="btn btn-primary btn-sm px-4">
+                                <i class="bi bi-reply me-1"></i>Répondre
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm text-center py-5">
+        <div class="card-body">
+            <div class="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary mb-3" style="width:80px;height:80px;">
+                <i class="bi bi-chat-square-text" style="font-size:2.2rem;"></i>
+            </div>
+            <h5 class="fw-bold mb-2">Boîte de réception vide</h5>
+            <p class="small mb-3 text-muted" style="max-width:360px; margin:0 auto;">Vos échanges avec le cabinet apparaîtront ici, organisés par déclaration.</p>
+            <a href="/Declarations" class="btn btn-primary"><i class="bi bi-file-earmark-text me-2"></i>Mes déclarations</a>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+$(function(){
+    var $threads = $('[data-thread]');
+    var $panels = $('.chat-panel');
+    var $empty = $('#chatEmpty');
+
+    $threads.on('click', function(){
+        var id = $(this).data('thread');
+        $threads.removeClass('active border-primary');
+        $(this).addClass('active border-primary').removeClass('fw-bold');
+        $empty.addClass('d-none');
+        $panels.addClass('d-none').css('display','none');
+        var $p = $panels.filter('[data-panel="'+id+'"]');
+        $p.removeClass('d-none').css('display','flex');
+        var $ml = $p.find('.card-body.overflow-auto');
+        if ($ml[0]) $ml.scrollTop($ml[0].scrollHeight);
+    });
+
+    // Auto-select first with badge or first
+    var $first = $threads.find('.badge.bg-danger').closest('[data-thread]').first();
+    if (!$first.length) $first = $threads.first();
+    if ($first.length) $first.trigger('click');
+
+    // Search
+    $('#threadSearch').on('input', function(){
+        var q = $(this).val().toLowerCase();
+        $threads.each(function(){
+            $(this).toggle(!q || ($(this).data('search')||'').toString().indexOf(q) !== -1);
+        });
+    });
+});
+</script>
+}
+

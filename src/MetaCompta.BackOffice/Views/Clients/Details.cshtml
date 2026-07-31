@@ -7,6 +7,8 @@
     var refStatuts = ViewData["Ref_STATUT_CLIENT"] as List<ReferenceDataDto> ?? new();
     var refTva = ViewData["Ref_TYPE_TVA"] as List<ReferenceDataDto> ?? new();
     var contratsValides = ViewBag.ContratsValides as List<ContratCommercialDto> ?? new();
+    var allContrats = ViewBag.AllContrats as List<ContratCommercialDto> ?? new();
+    var clientUsers = ViewBag.ClientUsers as List<ClientUserDto> ?? new();
     var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new();
     var wfInstances = ViewBag.WorkflowInstances as List<WorkflowInstanceDto> ?? new();
     var wfPendingSteps = ViewBag.WorkflowPendingSteps as List<WorkflowStepInstanceDto> ?? new();
@@ -23,8 +25,11 @@
         <h4 class="fw-bold mb-0"><i class="bi bi-building text-primary me-2"></i>@Model.RaisonSociale</h4>
     </div>
     <div class="btn-group">
-        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i
-                class="bi bi-pencil me-1"></i> Modifier</a>
+        @if (ViewBag.CanClientEdit as bool? ?? false)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i
+                    class="bi bi-pencil me-1"></i> Modifier</a>
+        }
         <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i>
             Retour</a>
     </div>
@@ -32,37 +37,37 @@
 
 <div class="row g-3 mb-4">
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-primary);">
+        <div class="stat-card" style="border-left:4px solid var(--primary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Employes</div>
                     <div class="stat-value">@Model.EmployeeCount</div>
                 </div>
-                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:var(--mc-primary);"><i
+                <div class="stat-icon" style="background:rgba(14,165,233,0.1);color:var(--primary);"><i
                         class="bi bi-people"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-secondary);">
+        <div class="stat-card" style="border-left:4px solid var(--secondary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Declarations</div>
                     <div class="stat-value">@Model.DeclarationCount</div>
                 </div>
-                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:var(--mc-secondary);"><i
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1);color:var(--secondary);"><i
                         class="bi bi-file-earmark-text"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-accent);">
+        <div class="stat-card" style="border-left:4px solid var(--warning);">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Services Actifs</div>
                     <div class="stat-value">@(services.Count(s => s.Actif))</div>
                 </div>
-                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--mc-accent);"><i
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--warning);"><i
                         class="bi bi-briefcase"></i></div>
             </div>
         </div>
@@ -102,6 +107,18 @@
                 <span class="badge bg-success bg-opacity-10 text-success ms-1 rounded-pill"
                     style="font-size:0.62rem;">@wfInstances.Count(i => i.Status == "InProgress") en cours</span>
             }
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabUsers">
+            <i class="bi bi-people-fill me-1" style="color:#0891b2;"></i>Utilisateurs Extranet
+            <span class="badge bg-info bg-opacity-10 text-info ms-1 rounded-pill" style="font-size:0.62rem;">@clientUsers.Count</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link rounded-pill" data-bs-toggle="pill" href="#tabContrats">
+            <i class="bi bi-file-earmark-text-fill me-1" style="color:#d97706;"></i>Contrats
+            <span class="badge bg-warning bg-opacity-10 text-warning ms-1 rounded-pill" style="font-size:0.62rem;">@allContrats.Count</span>
         </a>
     </li>
 </ul>
@@ -240,12 +257,15 @@
                                 service actif</strong>.
                         </span>
                         <div class="d-flex gap-1">
-                            @foreach (var contrat in contratsValides)
+                            @if (ViewBag.CanCommercialEdit as bool? ?? false)
                             {
-                                <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 btn-sync-services"
-                                    data-contrat-id="@contrat.Id" data-contrat-ref="@contrat.Reference">
-                                    <i class="bi bi-arrow-repeat me-1"></i> Sync @contrat.Reference
-                                </button>
+                                @foreach (var contrat in contratsValides)
+                                {
+                                    <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 btn-sync-services"
+                                        data-contrat-id="@contrat.Id" data-contrat-ref="@contrat.Reference">
+                                        <i class="bi bi-arrow-repeat me-1"></i> Sync @contrat.Reference
+                                    </button>
+                                }
                             }
                         </div>
                     </div>
@@ -511,6 +531,214 @@
                 </div>
             </div>
         }
+    </div>
+
+    <!-- ═══════════ UTILISATEURS EXTRANET ═══════════ -->
+    <div class="tab-pane fade" id="tabUsers">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-info me-2"></i>Utilisateurs Extranet</h6>
+                    @if (ViewBag.CanUserManage as bool? ?? false)
+                    {
+                        <button class="btn btn-sm btn-primary rounded-pill px-3" type="button" data-bs-toggle="collapse" data-bs-target="#formNewUser" style="font-size:0.78rem;">
+                            <i class="bi bi-plus-lg me-1"></i>Ajouter un utilisateur
+                        </button>
+                    }
+                </div>
+
+                @if (ViewBag.CanUserManage as bool? ?? false)
+                {
+                <!-- Create user form (collapsed) -->
+                <div class="collapse mb-3" id="formNewUser">
+                    <div class="card card-body border-info border-opacity-25 rounded-3" style="background:#f0f9ff;">
+                        <form asp-action="CreateClientUser" asp-controller="Clients" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="clientId" value="@Model.Id" />
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted">Pr&#233;nom</label>
+                                    <input type="text" name="firstName" class="form-control form-control-sm rounded-pill" required placeholder="Pr&#233;nom" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted">Nom</label>
+                                    <input type="text" name="lastName" class="form-control form-control-sm rounded-pill" required placeholder="Nom" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted">Email</label>
+                                    <input type="email" name="email" class="form-control form-control-sm rounded-pill" required placeholder="email@example.com" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted">T&#233;l&#233;phone</label>
+                                    <input type="text" name="telephone" class="form-control form-control-sm rounded-pill" placeholder="+212..." />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted">Mot de passe</label>
+                                    <input type="password" name="password" class="form-control form-control-sm rounded-pill" required minlength="8" placeholder="Min. 8 caract&#232;res" />
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-sm btn-success rounded-pill px-3"><i class="bi bi-check-lg me-1"></i>Cr&#233;er</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                }
+
+                @if (clientUsers.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Utilisateur</th>
+                                    <th>Email</th>
+                                    <th>T&#233;l&#233;phone</th>
+                                    <th>Statut</th>
+                                    <th>Cr&#233;&#233; le</th>
+                                    <th>Derni&#232;re connexion</th>
+                                    <th class="text-end pe-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var u in clientUsers)
+                                {
+                                    <tr>
+                                        <td class="ps-3">
+                                            <div class="d-flex align-items-center">
+                                                <div class="rounded-circle d-flex align-items-center justify-content-center me-2"
+                                                     style="width:32px;height:32px;background:@(u.IsActive ? "#dbeafe" : "#fee2e2");color:@(u.IsActive ? "#2563eb" : "#dc2626");font-size:0.75rem;font-weight:700;">
+                                                    @u.FirstName[0]@u.LastName[0]
+                                                </div>
+                                                <span class="fw-semibold">@u.FullName</span>
+                                            </div>
+                                        </td>
+                                        <td>@u.Email</td>
+                                        <td>@(u.Telephone ?? "-")</td>
+                                        <td>
+                                            @if (u.IsActive)
+                                            {
+                                                <span class="badge bg-success-subtle text-success rounded-pill">Actif</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger rounded-pill">Inactif</span>
+                                            }
+                                        </td>
+                                        <td>@u.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                        <td>@(u.LastLoginAt.HasValue ? u.LastLoginAt.Value.ToString("dd/MM/yyyy HH:mm") : "Jamais")</td>
+                                        <td class="text-end pe-3">
+                                            @if (ViewBag.CanUserManage as bool? ?? false)
+                                            {
+                                                <form asp-action="ToggleClientUser" asp-controller="Clients" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="clientId" value="@Model.Id" />
+                                                    <input type="hidden" name="userId" value="@u.Id" />
+                                                    @if (u.IsActive)
+                                                    {
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-2" style="font-size:0.7rem;"
+                                                                onclick="return confirm('D&#233;sactiver cet utilisateur ?')">
+                                                            <i class="bi bi-person-x me-1"></i>D&#233;sactiver
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="submit" class="btn btn-sm btn-outline-success rounded-pill px-2" style="font-size:0.7rem;"
+                                                                onclick="return confirm('R&#233;activer cet utilisateur ?')">
+                                                            <i class="bi bi-person-check me-1"></i>Activer
+                                                        </button>
+                                                    }
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4" style="font-size:0.85rem;">
+                        <i class="bi bi-people d-block mb-2" style="font-size:2rem;"></i>
+                        Aucun utilisateur Extranet pour ce client.<br/>
+                        <small>Ajoutez un utilisateur pour lui permettre d'acc&#233;der &#224; l'Extranet.</small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ CONTRATS ═══════════ -->
+    <div class="tab-pane fade" id="tabContrats">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-text-fill text-warning me-2"></i>Contrats Commerciaux</h6>
+                    @if (ViewBag.CanCommercialCreate as bool? ?? false)
+                    {
+                        <a href="@Url.Action("ContratCreate", "Commercial")" class="btn btn-sm btn-warning rounded-pill px-3" style="font-size:0.78rem;">
+                            <i class="bi bi-plus-lg me-1"></i>Nouveau contrat
+                        </a>
+                    }
+                </div>
+                @if (allContrats.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">R&#233;f&#233;rence</th>
+                                    <th>Date d&#233;but</th>
+                                    <th>Date fin</th>
+                                    <th>Statut</th>
+                                    <th>Montant HT</th>
+                                    <th class="text-end pe-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ct in allContrats)
+                                {
+                                    var ctBadge = ct.Statut switch
+                                    {
+                                        "Brouillon" => "bg-secondary-subtle text-secondary",
+                                        "Signe" => "bg-info-subtle text-info",
+                                        "Valide" or "Actif" => "bg-success-subtle text-success",
+                                        "Suspendu" => "bg-warning-subtle text-warning",
+                                        "Termine" => "bg-dark-subtle text-dark",
+                                        _ => "bg-light text-dark"
+                                    };
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">@ct.Reference</td>
+                                        <td>@(ct.DateDebutContrat.HasValue ? ct.DateDebutContrat.Value.ToString("dd/MM/yyyy") : "-")</td>
+                                        <td>@(ct.DateFinContrat.HasValue ? ct.DateFinContrat.Value.ToString("dd/MM/yyyy") : "-")</td>
+                                        <td><span class="badge @ctBadge rounded-pill">@ct.Statut</span></td>
+                                        <td>@ct.MontantHT.ToString("N2") MAD</td>
+                                        <td class="text-end pe-3">
+                                            <a href="@Url.Action("ContratDetails", "Commercial", new { id = ct.Id })"
+                                               class="btn btn-sm btn-outline-primary rounded-pill px-2" style="font-size:0.7rem;">
+                                                <i class="bi bi-eye me-1"></i>D&#233;tails
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4" style="font-size:0.85rem;">
+                        <i class="bi bi-file-earmark-text d-block mb-2" style="font-size:2rem;"></i>
+                        Aucun contrat pour ce client.<br/>
+                        @if (ViewBag.CanCommercialCreate as bool? ?? false)
+                        {
+                            <small><a href="@Url.Action("ContratCreate", "Commercial")">Cr&#233;er un contrat</a> pour activer les services fiduciaires.</small>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
     </div>
 </div>
 

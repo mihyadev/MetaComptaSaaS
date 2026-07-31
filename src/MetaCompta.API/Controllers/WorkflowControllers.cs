@@ -149,10 +149,18 @@ public class WorkflowController : ControllerBase
 
     // ── Step Operations ──────────────────────────────────────────
 
+    /// <summary>
+    /// Advance current step. Auth: any BackOffice user; service enforces assignee-only (or SYSTEM).
+    /// Assignees without workflow.advance claim can still advance their own step.
+    /// </summary>
     [HttpPost("instances/{id}/advance")]
-    [Authorize(Policy = ClaimDefinitions.WorkflowAdvance)]
     public async Task<IActionResult> AdvanceStep(int id, [FromBody] AdvanceStepDto dto)
         => Ok(await _workflow.AdvanceStepAsync(id, dto, CabinetId, UserId));
+
+    /// <summary>Claim current step exclusively (Prendre / Ouvrir). Manager may forceOverride with reason.</summary>
+    [HttpPost("instances/{id}/claim")]
+    public async Task<IActionResult> ClaimStep(int id, [FromBody] ClaimStepRequest? request = null)
+        => Ok(await _workflow.ClaimStepAsync(id, CabinetId, UserId, request?.ForceOverride ?? false, request?.Reason));
 
     [HttpPost("steps/{stepInstanceId}/reassign")]
     [Authorize(Policy = ClaimDefinitions.WorkflowReassign)]
@@ -193,3 +201,209 @@ public class WorkflowController : ControllerBase
     public async Task<IActionResult> GetHistory(int id)
         => Ok(await _workflow.GetHistoryAsync(id, CabinetId));
 }
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║               CLIENT WORKFLOW CONTROLLER (Extranet)                     ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+[ApiController]
+[Route("api/client-workflow")]
+[Authorize(Policy = "ExtranetAccess")]
+public class ClientWorkflowController : ControllerBase
+{
+    private readonly IWorkflowService _workflow;
+    public ClientWorkflowController(IWorkflowService workflow) => _workflow = workflow;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+    private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+    [HttpPost("instances/{id}/approve")]
+    public async Task<IActionResult> ApproveStep(int id, [FromBody] AdvanceStepDto dto)
+    {
+        // Security: verify instance belongs to this client before approving
+        if (ClientId > 0)
+        {
+            var inst = await _workflow.GetInstanceByIdAsync(id, CabinetId);
+            if (inst.Success && inst.Data != null && inst.Data.ClientId != ClientId)
+                return NotFound(ApiResponse<WorkflowStepInstanceDto>.Fail("Instance introuvable."));
+        }
+        var result = await _workflow.AdvanceStepAsync(id, dto, CabinetId, UserId);
+        if (!result.Success)
+            return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("instances/{id}/current-step")]
+    public async Task<IActionResult> GetCurrentStep(int id)
+    {
+        // Security: verify instance belongs to this client
+        if (ClientId > 0)
+        {
+            var inst = await _workflow.GetInstanceByIdAsync(id, CabinetId);
+            if (inst.Success && inst.Data != null && inst.Data.ClientId != ClientId)
+                return NotFound(ApiResponse<WorkflowStepInstanceDto>.Fail("Instance introuvable."));
+        }
+        return Ok(await _workflow.GetCurrentStepAsync(id, CabinetId));
+    }
+
+    [HttpGet("instances/{id}")]
+    public async Task<IActionResult> GetInstance(int id)
+    {
+        var result = await _workflow.GetInstanceByIdAsync(id, CabinetId);
+        // Security: verify instance belongs to this client
+        if (ClientId > 0 && result.Success && result.Data != null && result.Data.ClientId != ClientId)
+            return NotFound(ApiResponse<WorkflowInstanceDto>.Fail("Instance introuvable."));
+        return Ok(result);
+    }
+
+    [HttpGet("instances")]
+    public async Task<IActionResult> GetInstances([FromQuery] int? declarationId = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        => Ok(await _workflow.GetInstancesAsync(CabinetId, ClientId > 0 ? ClientId : null, "Active", declarationId, page, pageSize));
+
+    [HttpGet("my-tasks")]
+    public async Task<IActionResult> GetMyTasks()
+        => Ok(await _workflow.GetMyPendingStepsAsync(CabinetId, UserId, ClientId > 0 ? ClientId : null));
+
+    [HttpGet("my-tasks/count")]
+    public async Task<IActionResult> GetMyTasksCount()
+    {
+        var result = await _workflow.GetMyPendingStepsAsync(CabinetId, UserId, ClientId > 0 ? ClientId : null);
+        var count = result?.Data?.Count ?? 0;
+        return Ok(ApiResponse<int>.Ok(count));
+    }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║           CLIENT DECLARATIONS CONTROLLER (Extranet)                     ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+[ApiController]
+[Route("api/client-declarations")]
+[Authorize(Policy = "ExtranetAccess")]
+public class ClientDeclarationsController : ControllerBase
+{
+    private readonly IDeclarationService _service;
+    public ClientDeclarationsController(IDeclarationService service) => _service = service;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll([FromQuery] string? type = null, [FromQuery] string? statut = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        // Security: always enforce ClientId from JWT — client cannot browse other clients
+        if (ClientId == 0) return Forbid();
+        return Ok(await _service.GetAllAsync(CabinetId, ClientId, type, statut, page, pageSize));
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> Get(int id)
+    {
+        var result = await _service.GetByIdAsync(id, CabinetId);
+        // Security: verify declaration belongs to this client
+        if (ClientId > 0 && result.Success && result.Data != null && result.Data.ClientId != ClientId)
+            return NotFound(ApiResponse<DeclarationDto>.Fail("Déclaration introuvable."));
+        return Ok(result);
+    }
+
+    // --- Type-specific financial data for Extranet clients ---
+
+    [HttpGet("{id}/tva")]
+    public async Task<IActionResult> GetTVA(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<DeclarationTVADto>.Fail("Introuvable."));
+        return Ok(await _service.GetTVADataAsync(id, CabinetId));
+    }
+
+    [HttpGet("{id}/is")]
+    public async Task<IActionResult> GetIS(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<DeclarationISDto>.Fail("Introuvable."));
+        return Ok(await _service.GetISDataAsync(id, CabinetId));
+    }
+
+    [HttpGet("{id}/ir")]
+    public async Task<IActionResult> GetIR(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<DeclarationIRDto>.Fail("Introuvable."));
+        return Ok(await _service.GetIRDataAsync(id, CabinetId));
+    }
+
+    [HttpGet("{id}/cnss")]
+    public async Task<IActionResult> GetCNSS(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<DeclarationCNSSDto>.Fail("Introuvable."));
+        return Ok(await _service.GetCNSSDataAsync(id, CabinetId));
+    }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║                     MESSAGES CONTROLLER                                 ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class MessagesController : ControllerBase
+{
+    private readonly IMessageService _service;
+    public MessagesController(IMessageService service) => _service = service;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+    private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+    private string UserName => User.FindFirst(ClaimTypes.Name)?.Value ?? User.Identity?.Name ?? "";
+    private bool IsClientUser => ClientId > 0;
+
+    [HttpGet("declaration/{declarationId}")]
+    public async Task<IActionResult> GetByDeclaration(int declarationId)
+        => Ok(await _service.GetByDeclarationAsync(declarationId, CabinetId, IsClientUser ? ClientId : null));
+
+    [HttpGet("client/{clientId}")]
+    public async Task<IActionResult> GetByClient(int clientId)
+    {
+        // Security: client users can only access their own messages
+        if (IsClientUser) clientId = ClientId;
+        return Ok(await _service.GetByClientAsync(clientId, CabinetId));
+    }
+
+    [HttpGet("conversations")]
+    public async Task<IActionResult> GetConversations()
+        => Ok(await _service.GetConversationsAsync(CabinetId, UserId, IsClientUser ? ClientId : null));
+
+    [HttpPost]
+    public async Task<IActionResult> Send([FromBody] SendMessageDto dto)
+    {
+        var isClient = User.IsInRole("Client");
+        var role = isClient ? "Client" : "Cabinet";
+        // Security: client users can only send messages for their own client
+        if (IsClientUser && dto.ClientId.HasValue && dto.ClientId.Value != ClientId)
+            return BadRequest(ApiResponse<MessageDto>.Fail("Accès non autorisé."));
+        if (IsClientUser) dto.ClientId = ClientId;
+        return Ok(await _service.SendAsync(dto, CabinetId, UserId, UserName, role));
+    }
+
+    [HttpPut("{id}/read")]
+    public async Task<IActionResult> MarkAsRead(int id)
+        => Ok(await _service.MarkAsReadAsync(id, UserId));
+
+    [HttpGet("unread-count")]
+    public async Task<IActionResult> GetUnreadCount([FromQuery] int? clientId = null)
+    {
+        // Security: client users can only see their own unread count
+        if (IsClientUser) clientId = ClientId;
+        return Ok(await _service.GetUnreadCountAsync(CabinetId, UserId, clientId));
+    }
+}
+
+public record ClaimStepRequest(bool ForceOverride = false, string? Reason = null);

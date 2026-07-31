@@ -277,7 +277,7 @@
                     <div class="card-body px-4 pb-4 pt-3">
                         <div class="text-center py-3">
                             <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
-                                 style="width:90px;height:90px;background:linear-gradient(135deg, var(--mc-primary), #4f46e5);box-shadow:0 8px 24px rgba(37,99,235,0.25);">
+                                 style="width:90px;height:90px;background:linear-gradient(135deg, var(--primary), #4f46e5);box-shadow:0 8px 24px rgba(37,99,235,0.25);">
                                 <i class="bi bi-person-fill text-white" style="font-size:2.2rem;"></i>
                             </div>
                             <h5 class="mt-3 mb-1 fw-bold" id="previewName">&#8212;</h5>
@@ -424,12 +424,15 @@
             <i class="bi bi-arrow-left me-2"></i>Pr&eacute;c&eacute;dent
         </button>
         <div>
-            <button type="button" class="btn btn-mc-primary rounded-pill px-4 py-2" id="btnNext" onclick="wizardNav(1)">
+            <button type="button" class="btn btn-primary rounded-pill px-4 py-2" id="btnNext" onclick="wizardNav(1)">
                 Suivant<i class="bi bi-arrow-right ms-2"></i>
             </button>
-            <button type="submit" class="btn btn-mc-success rounded-pill px-4 py-2 d-none" id="btnSubmit">
-                <i class="bi bi-check-lg me-2"></i>Cr&eacute;er l'employ&eacute;
-            </button>
+            @if (ViewBag.CanCabinetEmployeeCreate as bool? ?? false)
+            {
+                <button type="submit" class="btn btn-mc-success rounded-pill px-4 py-2 d-none" id="btnSubmit">
+                    <i class="bi bi-check-lg me-2"></i>Cr&eacute;er l'employ&eacute;
+                </button>
+            }
         </div>
     </div>
 </form>
@@ -438,25 +441,24 @@
 <style>
     .wizard-step-circle {
         width: 48px; height: 48px; border-radius: 50%;
-        background: var(--mc-border); display: flex; align-items: center; justify-content: center;
-        font-size: 1.15rem; color: var(--mc-text-secondary); transition: all .3s ease;
+        background: var(--monday-bg); display: flex; align-items: center; justify-content: center;
+        font-size: 1.15rem; color: var(--monday-muted); transition: all .3s ease;
+        border: 2px solid var(--monday-border);
     }
     .wizard-step.active .wizard-step-circle {
-        background: linear-gradient(135deg, var(--mc-primary), #4f46e5);
-        color: #fff; box-shadow: 0 4px 16px rgba(37,99,235,0.3);
+        background: var(--monday-blue); color: #fff; border-color: var(--monday-blue);
     }
     .wizard-step.done .wizard-step-circle {
-        background: linear-gradient(135deg, #059669, #10b981);
-        color: #fff; box-shadow: 0 4px 12px rgba(5,150,105,0.25);
+        background: var(--monday-green); color: #fff; border-color: var(--monday-green);
     }
     .wizard-step-label {
-        font-size: .75rem; font-weight: 600; color: var(--mc-text-secondary);
+        font-size: .75rem; font-weight: 600; color: var(--monday-muted);
         margin-top: .4rem; text-align: center; transition: color .3s;
     }
-    .wizard-step.active .wizard-step-label { color: var(--mc-primary); }
-    .wizard-step.done .wizard-step-label { color: #059669; }
+    .wizard-step.active .wizard-step-label { color: var(--monday-blue); }
+    .wizard-step.done .wizard-step-label { color: var(--monday-green); }
     .wizard-step { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
-    .wizard-connector { flex: 1; height: 3px; background: var(--mc-border); margin: 0 .75rem; border-radius: 2px; position: relative; top: -8px; }
+    .wizard-connector { flex: 1; height: 3px; background: var(--monday-border); margin: 0 .75rem; border-radius: 2px; position: relative; top: -8px; }
 </style>
 <script>
 let step=0; const total=3;
@@ -469,7 +471,7 @@ function wizardNav(d) {
     ss[step].classList.add('active'); ss[step].classList.remove('done');
     document.getElementById('btnPrev').disabled = step === 0;
     document.getElementById('btnNext').classList.toggle('d-none', step === total-1);
-    document.getElementById('btnSubmit').classList.toggle('d-none', step !== total-1);
+    document.getElementById('btnSubmit')?.classList.toggle('d-none', step !== total-1);
     updatePreview();
 }
 function updatePreview() {
@@ -498,3 +500,4 @@ document.getElementById('roleSelect')?.addEventListener('change', function(){
 document.querySelectorAll('.wizard-step').forEach((s,i) => s.addEventListener('click', () => { while(step>i) wizardNav(-1); while(step<i) wizardNav(1); }));
 </script>
 }
+

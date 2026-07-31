@@ -1,0 +1,154 @@
+﻿@using MetaCompta.Application.DTOs
+@model RubriqueCreateDto
+@{
+    ViewData["Title"] = "Nouvelle Rubrique";
+    var canPayrollEdit = ViewBag.CanPayrollEdit as bool? ?? false;
+}
+
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+            <li class="breadcrumb-item"><a href="/Payroll"><i class="bi bi-cash-stack me-1"></i>Paie</a></li>
+            <li class="breadcrumb-item"><a href="@Url.Action("Rubriques","Payroll")">Rubriques</a></li>
+            <li class="breadcrumb-item active">Cr&#233;ation</li>
+        </ol>
+    </nav>
+    <h4 class="fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Rubrique de Paie</h4>
+    <p class="text-muted mb-0">Ajoutez un nouvel &#233;l&#233;ment de calcul au bulletin de paie.</p>
+</div>
+
+<form asp-action="CreateRubrique" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0 px-4">
+            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-info-circle me-1"></i> Informations G&#233;n&#233;rales</h6>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label asp-for="Code" class="form-label fw-semibold">Code <span class="text-danger">*</span></label>
+                    <input asp-for="Code" class="form-control rounded-pill" placeholder="ex: RUB_100" />
+                    <span asp-validation-for="Code" class="text-danger small"></span>
+                </div>
+                <div class="col-md-5">
+                    <label asp-for="Libelle" class="form-label fw-semibold">Libell&#233; <span class="text-danger">*</span></label>
+                    <input asp-for="Libelle" class="form-control rounded-pill" placeholder="ex: Salaire de base" />
+                    <span asp-validation-for="Libelle" class="text-danger small"></span>
+                </div>
+                <div class="col-md-2">
+                    <label asp-for="Type" class="form-label fw-semibold">Type <span class="text-danger">*</span></label>
+                    <select asp-for="Type" class="form-select rounded-pill">
+                        <option value="">-- Choisir --</option>
+                        <option value="Gain">Gain</option>
+                        <option value="Retenue">Retenue</option>
+                        <option value="Cotisation">Cotisation</option>
+                        <option value="Impot">Imp&#244;t</option>
+                        <option value="Calcule">Calcul&#233;</option>
+                        <option value="Info">Information</option>
+                    </select>
+                    <span asp-validation-for="Type" class="text-danger small"></span>
+                </div>
+                <div class="col-md-2">
+                    <label asp-for="Section" class="form-label fw-semibold">Section <span class="text-danger">*</span></label>
+                    <select asp-for="Section" class="form-select rounded-pill">
+                        <option value="">-- Choisir --</option>
+                        <option value="Salaire">Salaire</option>
+                        <option value="Prime">Primes</option>
+                        <option value="Avantage">Avantages</option>
+                        <option value="Cotisation">Cotisations</option>
+                        <option value="Impot">Imp&#244;t</option>
+                        <option value="Net">Net</option>
+                        <option value="Patronal">Charges Patronales</option>
+                    </select>
+                    <span asp-validation-for="Section" class="text-danger small"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0 px-4">
+            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-calculator me-1"></i> Formules de Calcul</h6>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="FormuleBase" class="form-label fw-semibold">Formule Base</label>
+                    <input asp-for="FormuleBase" class="form-control rounded-pill font-monospace" placeholder="ex: SALAIRE_BASE" />
+                    <small class="text-muted">R&#233;f&#233;rence &#224; une constante ou autre rubrique</small>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="FormuleTaux" class="form-label fw-semibold">Formule Taux</label>
+                    <input asp-for="FormuleTaux" class="form-control rounded-pill font-monospace" placeholder="ex: TAUX_CNSS_SAL / 100" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="FormuleMontant" class="form-label fw-semibold">Formule Montant</label>
+                    <input asp-for="FormuleMontant" class="form-control rounded-pill font-monospace" placeholder="ex: BASE * TAUX" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="FormuleGain" class="form-label fw-semibold">Formule Gain</label>
+                    <input asp-for="FormuleGain" class="form-control rounded-pill font-monospace" placeholder="Pour les rubriques de type Gain" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="FormuleRetenue" class="form-label fw-semibold">Formule Retenue</label>
+                    <input asp-for="FormuleRetenue" class="form-control rounded-pill font-monospace" placeholder="Pour les rubriques de type Retenue" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="DependsDe" class="form-label fw-semibold">D&#233;pend de (codes, s&#233;par&#233;s par virgule)</label>
+                    <input asp-for="DependsDe" class="form-control rounded-pill font-monospace" placeholder="ex: SAL_BASE,PRIME_ANC" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0 px-4">
+            <h6 class="fw-bold text-primary mb-0"><i class="bi bi-gear me-1"></i> Param&#232;tres</h6>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label asp-for="OrdreExecution" class="form-label fw-semibold">Ordre d'ex&#233;cution</label>
+                    <input asp-for="OrdreExecution" type="number" class="form-control rounded-pill" value="100" />
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="OrdreAffichage" class="form-label fw-semibold">Ordre d'affichage</label>
+                    <input asp-for="OrdreAffichage" type="number" class="form-control rounded-pill" value="100" />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Description" class="form-label fw-semibold">Description</label>
+                    <input asp-for="Description" class="form-control rounded-pill" placeholder="Description optionnelle" />
+                </div>
+                <div class="col-md-12">
+                    <div class="d-flex gap-4 mt-2">
+                        <div class="form-check form-switch">
+                            <input asp-for="Actif" class="form-check-input" type="checkbox" checked />
+                            <label asp-for="Actif" class="form-check-label">Active</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input asp-for="AfficherSurBulletin" class="form-check-input" type="checkbox" checked />
+                            <label asp-for="AfficherSurBulletin" class="form-check-label">Afficher sur le bulletin</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input asp-for="Obligatoire" class="form-check-input" type="checkbox" />
+                            <label asp-for="Obligatoire" class="form-check-label">Obligatoire</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+        @if (canPayrollEdit)
+        {
+            <button type="submit" class="btn btn-primary rounded-pill px-4">
+                <i class="bi bi-check-lg me-1"></i> Cr&#233;er la rubrique
+            </button>
+        }
+        <a asp-action="Rubriques" class="btn btn-outline-secondary rounded-pill px-4">
+            <i class="bi bi-arrow-left me-1"></i> Annuler
+        </a>
+    </div>
+</form>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AutoMapper;
 using MetaCompta.Application.DTOs;
 using MetaCompta.Domain.Common;
@@ -67,6 +68,20 @@ public class MappingProfile : Profile
             .ForMember(d => d.AMOPatronal, opt => opt.MapFrom(s => s.CotisationPatronaleAMO))
             .ForMember(d => d.TotalChargesPatronales, opt => opt.MapFrom(s => s.CotisationPatronaleCNSS + s.CotisationPatronaleAMO + s.FormationProfessionnelle));
 
+        // Payroll Engine Mappings
+        CreateMap<Rubrique, RubriqueDto>();
+        CreateMap<RubriqueCreateDto, Rubrique>();
+        CreateMap<ConstanteGlobale, ConstanteGlobaleDto>();
+        CreateMap<VariableEmploye, VariableEmployeDto>();
+        CreateMap<VariableEmployeCreateDto, VariableEmploye>();
+        CreateMap<BulletinLigne, BulletinLigneDto>();
+        CreateMap<CumulEmploye, CumulEmployeDto>();
+        CreateMap<AffectationRubrique, AffectationRubriqueDto>()
+            .ForMember(d => d.RubriqueLibelle, opt => opt.MapFrom(s => s.Rubrique != null ? s.Rubrique.Libelle : ""))
+            .ForMember(d => d.RubriqueType, opt => opt.MapFrom(s => s.Rubrique != null ? s.Rubrique.Type : ""))
+            .ForMember(d => d.RubriqueSection, opt => opt.MapFrom(s => s.Rubrique != null ? s.Rubrique.Section : ""));
+        CreateMap<AffectationRubriqueCreateDto, AffectationRubrique>();
+
         // Document
         CreateMap<Document, DocumentDto>()
             .ForMember(d => d.ClientName, opt => opt.MapFrom(s => s.Client != null ? s.Client.RaisonSociale : null))
@@ -82,9 +97,9 @@ public class MappingProfile : Profile
             .ForMember(d => d.AssignedByUserName, opt => opt.MapFrom(s => s.AssignedByUser != null ? s.AssignedByUser.FullName : null))
             .ForMember(d => d.CommentCount, opt => opt.MapFrom(s => s.Comments.Count));
 
-        // ═══════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         //  DOCUMENTS COMMERCIAUX
-        // ═══════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         // Ligne Document Commercial
         CreateMap<LigneDocumentCommercial, LigneDocumentCommercialDto>()
@@ -107,10 +122,27 @@ public class MappingProfile : Profile
         // Contrat Commercial
         CreateMap<ContratCommercial, ContratCommercialDto>()
             .ForMember(d => d.ClientName, opt => opt.MapFrom(s => s.Client != null ? s.Client.RaisonSociale : null))
+            .ForMember(d => d.ClientICE, opt => opt.MapFrom(s => s.Client != null ? s.Client.ICE : null))
+            .ForMember(d => d.ClientIF, opt => opt.MapFrom(s => s.Client != null ? s.Client.IF : null))
+            .ForMember(d => d.ClientRC, opt => opt.MapFrom(s => s.Client != null ? s.Client.RC : null))
+            .ForMember(d => d.ClientNumeroCNSS, opt => opt.MapFrom(s => s.Client != null ? s.Client.NumeroCNSS : null))
+            .ForMember(d => d.ClientVille, opt => opt.MapFrom(s => s.Client != null ? s.Client.VilleSiegeSocial : null))
             .ForMember(d => d.BonCommandeReference, opt => opt.MapFrom(s => s.BonCommande != null ? s.BonCommande.Reference : null))
             .ForMember(d => d.DevisReference, opt => opt.MapFrom(s => s.Devis != null ? s.Devis.Reference : null))
             .ForMember(d => d.NombreFactures, opt => opt.MapFrom(s => s.Factures.Count))
-            .ForMember(d => d.TotalFacture, opt => opt.MapFrom(s => s.Factures.Sum(f => f.MontantTTC)));
+            .ForMember(d => d.TotalFacture, opt => opt.MapFrom(s => s.Factures.Sum(f => f.MontantTTC)))
+            .ForMember(d => d.ResponsableNom, opt => opt.MapFrom(s => s.Responsable != null ? (s.Responsable.FirstName + " " + s.Responsable.LastName).Trim() : null))
+            .ForMember(d => d.Membres, opt => opt.MapFrom(s => s.Membres))
+            .ForMember(d => d.ServicesActives, opt => opt.MapFrom(s =>
+                string.IsNullOrWhiteSpace(s.ServicesActivesJson)
+                    ? new List<ContratServiceActiveLine>()
+                    : JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(s.ServicesActivesJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<ContratServiceActiveLine>()));
+
+        CreateMap<ContratMembre, ContratMembreDto>()
+            .ForMember(d => d.UserName, opt => opt.MapFrom(s => s.User != null ? (s.User.FirstName + " " + s.User.LastName).Trim() : null))
+            .ForMember(d => d.Departement, opt => opt.MapFrom(s => s.User != null ? s.User.Departement : null))
+            .ForMember(d => d.Poste, opt => opt.MapFrom(s => s.User != null ? s.User.Poste : null));
 
         // Facture
         CreateMap<Facture, FactureDto>()

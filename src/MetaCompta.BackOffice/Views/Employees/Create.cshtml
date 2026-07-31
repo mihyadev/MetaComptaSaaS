@@ -360,9 +360,12 @@
             <button type="button" class="btn btn-primary rounded-pill px-4" id="nextBtn">
                 Suivant <i class="bi bi-arrow-right ms-1"></i>
             </button>
-            <button type="submit" class="btn btn-success rounded-pill px-4" id="submitBtn" style="display:none;">
-                <i class="bi bi-check-lg me-1"></i> Créer l'Employé
-            </button>
+            @if (ViewBag.CanEmployeeCreate as bool? ?? false)
+            {
+                <button type="submit" class="btn btn-success rounded-pill px-4" id="submitBtn" style="display:none;">
+                    <i class="bi bi-check-lg me-1"></i> Créer l'Employé
+                </button>
+            }
         </div>
     </div>
 </form>
@@ -372,25 +375,23 @@
         .wizard-step { text-align: center; flex: 0 0 auto; cursor: pointer; }
         .wizard-step-circle {
             width: 44px; height: 44px; border-radius: 50%;
-            background: #e9ecef; color: #6c757d;
+            background: var(--monday-bg); color: var(--monday-muted);
             display: flex; align-items: center; justify-content: center;
             margin: 0 auto 6px; font-size: 1.1rem;
-            transition: all 0.3s ease; border: 2px solid transparent;
+            transition: all 0.3s ease; border: 2px solid var(--monday-border);
         }
         .wizard-step.active .wizard-step-circle {
-            background: linear-gradient(135deg, #2563eb, #7c3aed);
-            color: #fff; border-color: rgba(37, 99, 235, 0.3);
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+            background: var(--monday-blue); color: #fff; border-color: var(--monday-blue);
         }
-        .wizard-step.completed .wizard-step-circle { background: #059669; color: #fff; }
-        .wizard-step-label { font-size: 0.75rem; color: #6c757d; font-weight: 600; }
-        .wizard-step.active .wizard-step-label { color: #2563eb; }
-        .wizard-step.completed .wizard-step-label { color: #059669; }
+        .wizard-step.completed .wizard-step-circle { background: var(--monday-green); color: #fff; border-color: var(--monday-green); }
+        .wizard-step-label { font-size: 0.75rem; color: var(--monday-muted); font-weight: 600; }
+        .wizard-step.active .wizard-step-label { color: var(--monday-blue); }
+        .wizard-step.completed .wizard-step-label { color: var(--monday-green); }
         .wizard-connector {
-            flex: 1; height: 2px; background: #e9ecef;
+            flex: 1; height: 2px; background: var(--monday-border);
             margin: 0 8px; margin-bottom: 22px; transition: background 0.3s ease;
         }
-        .wizard-connector.active { background: linear-gradient(90deg, #059669, #2563eb); }
+        .wizard-connector.active { background: var(--monday-blue); }
         .step-panel { transition: opacity 0.3s ease; }
     </style>
     <script>

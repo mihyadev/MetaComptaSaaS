@@ -1,4 +1,4 @@
-using MetaCompta.BackOffice.Services;
+﻿using MetaCompta.BackOffice.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +36,8 @@ builder.Services.AddScoped<IEtatFiscalFacade, EtatFiscalFacade>();
 builder.Services.AddScoped<IDepartmentFacade, DepartmentFacade>();
 builder.Services.AddScoped<IWorkflowFacade, WorkflowFacade>();
 builder.Services.AddScoped<ICommercialFacade, CommercialFacade>();
+builder.Services.AddScoped<IMessageFacade, MessageFacade>();
+builder.Services.AddSingleton<BulletinPdfService>();
 
 var app = builder.Build();
 

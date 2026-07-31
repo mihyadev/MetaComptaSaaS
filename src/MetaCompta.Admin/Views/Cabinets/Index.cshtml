@@ -1,9 +1,33 @@
-@{ ViewData["Title"] = "Gestion des Cabinets"; }
+﻿@using System.Text.Json
+@{
+    ViewData["Title"] = "Gestion des Cabinets";
+    var result = ViewBag.CabinetsResult as ApiResponse<AdminPagedResult>;
+    var items = result?.Data?.Items ?? new List<JsonElement>();
+    var total = result?.Data?.TotalCount ?? 0;
+    int pageNum = (int)(ViewBag.Page ?? 1);
+    var search = ViewBag.Search as string ?? "";
+}
+
+@if (TempData["Success"] != null) {
+<div class="alert alert-success alert-dismissible fade show" role="alert">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+@if (TempData["Error"] != null) {
+<div class="alert alert-danger alert-dismissible fade show" role="alert">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="fw-bold mb-0">Gestion des Cabinets</h5>
-    <button class="btn btn-danger rounded-pill px-3"><i class="bi bi-plus me-1"></i>Nouveau Cabinet</button>
+    <h5 class="fw-bold mb-0">Gestion des Cabinets <span class="badge bg-secondary fs-6">@total</span></h5>
+    <a href="/Cabinets/Create" class="btn btn-danger rounded-pill px-3"><i class="bi bi-plus me-1"></i>Nouveau Cabinet</a>
 </div>
+
+<!-- Search -->
+<form method="get" class="mb-3">
+    <div class="input-group" style="max-width:400px;">
+        <input type="text" name="search" class="form-control" placeholder="Rechercher par nom ou ICE..." value="@search" />
+        <button class="btn btn-outline-danger" type="submit"><i class="bi bi-search"></i></button>
+        @if (!string.IsNullOrEmpty(search)) { <a href="/Cabinets" class="btn btn-outline-secondary"><i class="bi bi-x"></i></a> }
+    </div>
+</form>
 
 <div class="card border-0 shadow-sm rounded-4">
     <div class="card-body p-0">
@@ -11,23 +35,56 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-4">Cabinet</th><th>Plan</th><th>Clients</th><th>Utilisateurs</th><th>Expire le</th><th>Statut</th><th class="text-end pe-4">Actions</th>
+                        <th class="ps-4">ID</th><th>Cabinet</th><th>Email</th><th>ICE</th><th>Ville</th><th>Utilisateurs</th><th>Statut</th><th class="text-end pe-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
+                    @if (items.Count == 0) {
+                    <tr><td colspan="8" class="text-center text-muted py-4"><i class="bi bi-building fs-1 d-block mb-2"></i>Aucun cabinet enregistr&eacute;. Cliquez sur &laquo; Nouveau Cabinet &raquo; pour commencer.</td></tr>
+                    }
+                    @foreach (var item in items)
+                    {
+                        var id = item.GetProperty("id").GetInt32();
+                        var name = item.GetProperty("name").GetString() ?? "";
+                        var email = item.GetProperty("email").GetString() ?? "";
+                        var ice = item.TryGetProperty("ice", out var iceEl) ? iceEl.GetString() ?? "-" : "-";
+                        var isActive = item.TryGetProperty("isActive", out var actEl) && actEl.GetBoolean();
+                        var userCount = item.TryGetProperty("userCount", out var ucEl) ? ucEl.GetInt32() : 0;
                     <tr>
-                        <td class="ps-4 fw-medium">Cabinet Demo</td>
-                        <td><span class="badge bg-primary">Professional</span></td>
-                        <td>25/50</td><td>5/10</td>
-                        <td>31/12/2026</td>
-                        <td><span class="badge bg-success">Actif</span></td>
+                        <td class="ps-4 text-muted">#@id</td>
+                        <td class="fw-medium">@name</td>
+                        <td><code>@email</code></td>
+                        <td class="text-muted small">@ice</td>
+                        <td>-</td>
+                        <td><span class="badge bg-info">@userCount</span></td>
+                        <td>
+                            @if (isActive) { <span class="badge bg-success">Actif</span> } else { <span class="badge bg-secondary">Inactif</span> }
+                        </td>
                         <td class="text-end pe-4">
-                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                            <button class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>
+                            <a href="/Cabinets/Edit/@id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                            <form method="post" action="/Cabinets/ToggleActive/@id" class="d-inline">
+                                <button class="btn btn-sm btn-outline-warning" title="Activer/D&eacute;sactiver"><i class="bi bi-toggle-on"></i></button>
+                            </form>
+                            <form method="post" action="/Cabinets/Delete/@id" class="d-inline" onsubmit="return confirm('Supprimer ce cabinet ?');">
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
                         </td>
                     </tr>
+                    }
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<!-- Pagination -->
+@if (total > 20) {
+<nav class="mt-3">
+    <ul class="pagination justify-content-center">
+        @{ var totalPages = (int)Math.Ceiling(total / 20.0); }
+        @for (int p = 1; p <= totalPages; p++) {
+        <li class="page-item @(p == pageNum ? "active" : "")"><a class="page-link" href="/Cabinets?page=@p&search=@Uri.EscapeDataString(search)">@p</a></li>
+        }
+    </ul>
+</nav>
+}

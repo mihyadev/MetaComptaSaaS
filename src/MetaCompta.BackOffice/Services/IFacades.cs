@@ -1,4 +1,4 @@
-﻿using MetaCompta.Application.DTOs;
+using MetaCompta.Application.DTOs;
 
 namespace MetaCompta.BackOffice.Services;
 
@@ -25,14 +25,21 @@ public interface IClientFacade
     Task<List<ClientDto>> GetAllForDropdownAsync();
     /// <summary>Get active service type codes for a client (e.g. ["TVA","IS","Paie"]).</summary>
     Task<List<string>> GetActiveServicesAsync(int clientId);
-    /// <summary>Returns true if the client has at least one Valide/Actif contract.</summary>
+    /// <summary>Returns true if the client has Manage-mode access (Valide/Actif + dates).</summary>
     Task<bool> HasActiveContractAsync(int clientId);
+    /// <summary>Manage vs Consult context for the selected client dossier.</summary>
+    Task<ContractAccessContextDto> GetContractAccessAsync(int clientId);
     /// <summary>Get all service contracts for a client</summary>
     Task<List<ServiceContratDto>> GetServiceContratsAsync(int clientId, int? exerciceFiscal = null);
     /// <summary>Initialize services for a new exercise year</summary>
     Task<ApiResponse<List<ServiceContratDto>>?> InitializeServicesForExerciceAsync(int clientId, int exerciceFiscal);
     /// <summary>Auto-generate declarations from active service contracts</summary>
     Task<ApiResponse<GenerateDeclarationsResultDto>?> GenerateDeclarationsAsync(int clientId, GenerateDeclarationsRequestDto request);
+    // ── Client Users (Extranet) ──────────────────────────────────
+    Task<List<ClientUserDto>> GetClientUsersAsync(int clientId);
+    Task<ApiResponse<ClientUserDto>?> CreateClientUserAsync(int clientId, ClientUserCreateDto dto);
+    Task<ApiResponse<ClientUserDto>?> UpdateClientUserAsync(int clientId, string userId, ClientUserUpdateDto dto);
+    Task<ApiResponse<bool>?> ToggleClientUserActiveAsync(int clientId, string userId);
 }
 
 /// <summary>
@@ -61,7 +68,7 @@ public interface IDeclarationFacade
     Task<ApiResponse<DeclarationDto>?> CreateTVAAsync(int clientId);
     Task<DeclarationTVADto?> GetTVADataAsync(int declarationId);
     Task<ApiResponse<DeclarationTVADto>?> SaveTVADataAsync(int declarationId, DeclarationTVADto dto);
-    Task<ApiResponse<DeclarationTVADto>?> SaveTVAAjustementsAsync(int declarationId, decimal immobilisations, decimal creditPrecedent);
+    Task<ApiResponse<DeclarationTVADto>?> SaveTVAAjustementsAsync(int declarationId, decimal tvaFacturee, decimal tvaDeductible, decimal creditPrecedent);
     // TVA Lignes Factures
     Task<ApiResponse<TVALigneFactureDto>?> AddTVALigneAsync(int declarationId, TVALigneFactureDto ligne);
     Task<ApiResponse<bool>?> DeleteTVALigneAsync(int declarationId, int ligneId);
@@ -81,6 +88,7 @@ public interface IDeclarationFacade
     Task<DeclarationCNSSDto?> CalculateCNSSAsync(int declarationId);
     // Status
     Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut, string? comment = null);
+    Task<List<DeclarationHistoryDto>> GetStatusHistoryAsync(int declarationId);
 }
 
 /// <summary>
@@ -94,6 +102,37 @@ public interface IPayrollFacade
     Task<ApiResponse<PayrollPeriodDto>?> InitializeAsync(int clientId, int annee, int mois);
     Task<ApiResponse<PayrollPeriodDto>?> CalculateAllAsync(int periodId);
     Task<ApiResponse<bool>?> ValidateAsync(int periodId);
+
+    // Engine
+    Task<BulletinCompletDto?> GetBulletinAsync(int paySlipId);
+    Task<List<RubriqueDto>> GetRubriquesAsync(int? clientId = null);
+    Task<RubriqueDto?> GetRubriqueAsync(int id);
+    Task<ApiResponse<RubriqueDto>?> CreateRubriqueAsync(RubriqueCreateDto dto);
+    Task<ApiResponse<RubriqueDto>?> UpdateRubriqueAsync(int id, RubriqueCreateDto dto);
+    Task<ApiResponse<bool>?> ToggleRubriqueAsync(int id);
+    Task<ApiResponse<bool>?> DeleteRubriqueAsync(int id);
+    Task<List<ConstanteGlobaleDto>> GetConstantesAsync(string? categorie = null);
+    Task<ApiResponse<ConstanteGlobaleDto>?> CreateConstanteAsync(ConstanteGlobaleDto dto);
+    Task<ApiResponse<ConstanteGlobaleDto>?> UpdateConstanteAsync(int id, ConstanteGlobaleDto dto);
+    Task<ApiResponse<bool>?> DeleteConstanteAsync(int id);
+    Task<List<VariableEmployeDto>> GetVariablesEmployeAsync(int employeeId);
+    Task<ApiResponse<VariableEmployeDto>?> CreateVariableAsync(VariableEmployeCreateDto dto);
+    Task<ApiResponse<VariableEmployeDto>?> UpdateVariableAsync(int id, VariableEmployeCreateDto dto);
+    Task<ApiResponse<bool>?> DeleteVariableAsync(int id);
+    Task<List<CumulEmployeDto>> GetCumulsAsync(int employeeId, int annee);
+    Task<ApiResponse<bool>?> SeedRubriquesAsync();
+    Task<ApiResponse<bool>?> SeedConstantesAsync();
+    Task<ApiResponse<bool>?> SeedDemo2025Async(int clientId);
+    // Dynamic employee variables per period
+    Task<List<VariableEmployeDto>> GetVariablesForPeriodAsync(int employeeId, int annee, int mois);
+    Task<ApiResponse<bool>?> UpdateVariablesBulkAsync(int employeeId, int annee, int mois, List<VariableEmployeCreateDto> variables);
+
+    // Affectation Rubriques (ERP-style: assign rubriques to employees)
+    Task<List<AffectationRubriqueDto>> GetAffectationsAsync(int employeeId);
+    Task<List<RubriqueDto>> GetRubriquesDisponiblesAsync(int employeeId, int? clientId = null);
+    Task<ApiResponse<AffectationRubriqueDto>?> AddAffectationAsync(AffectationRubriqueCreateDto dto);
+    Task<ApiResponse<AffectationRubriqueDto>?> UpdateAffectationAsync(int id, AffectationRubriqueCreateDto dto);
+    Task<ApiResponse<bool>?> RemoveAffectationAsync(int id);
 }
 
 /// <summary>
@@ -112,8 +151,9 @@ public interface IDashboardFacade
 public interface IDocumentFacade
 {
     Task<PagedResult<DocumentDto>?> GetAllAsync(int? clientId = null, string? categorie = null, int page = 1, string? search = null);
+    Task<List<DocumentDto>?> GetByDeclarationIdAsync(int declarationId);
     Task<DocumentDto?> GetByIdAsync(int id);
-    Task<ApiResponse<DocumentDto>?> UploadAsync(Stream stream, string fileName, string contentType, long size, string titre, string categorie, int? clientId);
+    Task<ApiResponse<DocumentDto>?> UploadAsync(Stream stream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int? declarationId = null);
     Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut, string? motif = null);
     Task<ApiResponse<bool>?> ToggleShareAsync(int id);
 }
@@ -121,11 +161,13 @@ public interface IDocumentFacade
 /// <summary>Facade for Task management operations.</summary>
 public interface ITaskFacade
 {
-    Task<PagedResult<TaskItemDto>?> GetAllAsync(string? assignedTo = null, string? statut = null, int? clientId = null, int page = 1);
+    Task<PagedResult<TaskItemDto>?> GetAllAsync(string? assignedTo = null, string? statut = null, int? clientId = null, int page = 1, string? assignedToKind = null);
     Task<TaskItemDto?> GetByIdAsync(int id);
     Task<ApiResponse<TaskItemDto>?> CreateAsync(TaskItemDto dto);
     Task<ApiResponse<TaskItemDto>?> UpdateAsync(int id, TaskItemDto dto);
     Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut);
+    Task<ApiResponse<WorkflowStepInstanceDto>?> CompleteWorkflowStepAsync(int instanceId, string? notes = null);
+    Task<ApiResponse<TaskCommentDto>?> AddCommentAsync(int taskId, string contenu);
 }
 
 /// <summary>Facade for Comptabilité (Accounting) operations.</summary>
@@ -168,7 +210,7 @@ public interface ICabinetFacade
     Task<ApiResponse<CabinetDetailDto>?> UpdateCabinetAsync(CabinetEditDto dto);
 
     // Employees
-    Task<PagedResult<CabinetEmployeeDto>?> GetEmployeesAsync(string? departement = null, int page = 1, string? search = null);
+    Task<PagedResult<CabinetEmployeeDto>?> GetEmployeesAsync(string? departement = null, int page = 1, string? search = null, int pageSize = 20);
     Task<CabinetEmployeeDto?> GetEmployeeByIdAsync(string id);
     Task<ApiResponse<CabinetEmployeeDto>?> CreateEmployeeAsync(CabinetEmployeeCreateDto dto);
     Task<ApiResponse<CabinetEmployeeDto>?> UpdateEmployeeAsync(string id, CabinetEmployeeUpdateDto dto);
@@ -254,6 +296,7 @@ public interface IWorkflowFacade
 
     // Steps
     Task<ApiResponse<WorkflowStepInstanceDto>?> AdvanceStepAsync(int instanceId, AdvanceStepDto dto);
+    Task<ApiResponse<WorkflowStepInstanceDto>?> ClaimStepAsync(int instanceId, bool forceOverride = false, string? reason = null);
     Task<ApiResponse<bool>?> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto);
     Task<WorkflowStepInstanceDto?> GetCurrentStepAsync(int instanceId);
     Task<List<WorkflowStepInstanceDto>> GetMyPendingStepsAsync(int? clientId = null);
@@ -300,9 +343,11 @@ public interface ICommercialFacade
     Task<ContratCommercialDto?> GetContratByIdAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> CreateContratAsync(ContratCommercialCreateDto dto);
     Task<ApiResponse<ContratCommercialDto>?> UpdateContratAsync(int id, ContratCommercialCreateDto dto);
+    Task<ApiResponse<ContratCommercialDto>?> UpdateContratEquipeAsync(int id, ContratEquipeUpdateDto dto);
     Task<ApiResponse<ContratCommercialDto>?> SignerContratAsync(int id, ContratSignatureDto dto);
     Task<ApiResponse<ContratCommercialDto>?> ValiderContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> SuspendreContratAsync(int id);
+    Task<ApiResponse<ContratCommercialDto>?> ReactiverContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> TerminerContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> DupliquerContratAsync(int id);
     Task<ApiResponse<int>?> SyncServicesFromContratAsync(int contratId);
@@ -321,4 +366,13 @@ public interface ICommercialFacade
 
     // Dashboard
     Task<DashboardCommercialDto?> GetDashboardAsync();
+}
+
+/// <summary>Facade for Messages (cabinet-client communication).</summary>
+public interface IMessageFacade
+{
+    Task<List<MessageDto>?> GetByDeclarationAsync(int declarationId);
+    Task<List<MessageDto>?> GetConversationsAsync();
+    Task<ApiResponse<MessageDto>?> SendAsync(SendMessageDto dto);
+    Task<int> GetUnreadCountAsync(int? clientId = null);
 }

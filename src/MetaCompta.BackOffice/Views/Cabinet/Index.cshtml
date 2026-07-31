@@ -1,6 +1,9 @@
-﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.CabinetEmployeeDto>
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.CabinetEmployeeDto>
+
 @{
     ViewData["Title"] = "Employés du cabinet";
+    var canCreate = ViewBag.CanCreateEmployee as bool? ?? false;
+    var canEdit = ViewBag.CanEditEmployee as bool? ?? false;
 }
 
 <div class="page-header">
@@ -15,9 +18,12 @@
         </nav>
     </div>
     <div>
-        <a href="@Url.Action("CreateEmployee", "Cabinet")" class="btn btn-mc-primary">
+        @if (canCreate)
+        {
+        <a href="@Url.Action("CreateEmployee", "Cabinet")" class="btn btn-primary">
             <i class="bi bi-plus-lg me-1"></i>Nouvel employé
         </a>
+        }
     </div>
 </div>
 
@@ -56,12 +62,15 @@
         </a>
     </div>
     <div class="col-md-3">
+        @if (ViewBag.CanCabinetEdit as bool? ?? false)
+        {
         <a href="@Url.Action("EditCabinet", "Cabinet")" class="mc-card d-block text-decoration-none p-3">
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-building-gear text-info fs-4"></i>
                 <span class="fw-semibold text-dark">Info Cabinet</span>
             </div>
         </a>
+        }
     </div>
     <div class="col-md-3">
         <a href="@Url.Action("Profile", "Cabinet")" class="mc-card d-block text-decoration-none p-3">
@@ -97,7 +106,7 @@
                     placeholder="Nom, email..." />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i>
                     Filtrer</button>
             </div>
         </form>
@@ -147,6 +156,8 @@
                                             class="btn btn-outline-primary" title="Détails">
                                             <i class="bi bi-eye"></i>
                                         </a>
+                                        @if (canEdit)
+                                        {
                                         <a href="@Url.Action("EditEmployee", "Cabinet", new { id = emp.Id })"
                                             class="btn btn-outline-warning" title="Modifier">
                                             <i class="bi bi-pencil"></i>
@@ -159,6 +170,7 @@
                                                 <i class="bi @(emp.EstActif ? "bi-toggle-on" : "bi-toggle-off")"></i>
                                             </button>
                                         </form>
+                                        }
                                     </div>
                                 </td>
                             </tr>

@@ -1,0 +1,176 @@
+﻿@using MetaCompta.Application.DTOs
+@model List<RubriqueDto>
+@{
+    ViewData["Title"] = "Rubriques de Paie";
+    var canPayrollEdit = ViewBag.CanPayrollEdit as bool? ?? false;
+    var canSystemAdmin = ViewBag.CanSystemAdmin as bool? ?? false;
+    var typeLabels = new Dictionary<string, string> {
+        {"Gain","Gain"}, {"Retenue","Retenue"}, {"Cotisation","Cotisation"}, {"Impot","Imp" + "\u00f4" + "t"}, {"Calcule","Calcul" + "\u00e9"}, {"Info","Information"}
+    };
+    var sectionLabels = new Dictionary<string, string> {
+        {"Salaire","Salaire"}, {"Prime","Primes"}, {"Avantage","Avantages"}, {"Cotisation","Cotisations"}, {"Impot","Imp" + "\u00f4" + "t"}, {"Net","Net"}, {"Patronal","Charges Patronales"}
+    };
+    var typeBadges = new Dictionary<string, string> {
+        {"Gain","bg-success-subtle text-success"}, {"Retenue","bg-danger-subtle text-danger"}, {"Cotisation","bg-info-subtle text-info"}, {"Impot","bg-warning-subtle text-warning"}, {"Calcule","bg-primary-subtle text-primary"}, {"Info","bg-secondary-subtle text-secondary"}
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Payroll"><i class="bi bi-cash-stack me-1"></i>Paie</a></li>
+                <li class="breadcrumb-item active">Rubriques</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-1"><i class="bi bi-list-columns-reverse text-primary me-2"></i>Rubriques de Paie</h4>
+        <p class="text-muted mb-0">Configurez les &#233;l&#233;ments de calcul du bulletin &#8212; <strong>@Model.Count</strong> rubrique(s)</p>
+    </div>
+    <div class="d-flex gap-2">
+        @if (!Model.Any() && canSystemAdmin)
+        {
+            <form asp-action="SeedRubriques" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-success rounded-pill px-3" onclick="return confirm('Charger les rubriques par d\u00e9faut du syst\u00e8me marocain ?')">
+                    <i class="bi bi-database-add me-1"></i> Charger par d&#233;faut
+                </button>
+            </form>
+        }
+        @if (canPayrollEdit)
+        {
+            <a asp-action="CreateRubrique" class="btn btn-primary rounded-pill px-3">
+                <i class="bi bi-plus-circle me-1"></i> Nouvelle Rubrique
+            </a>
+        }
+    </div>
+</div>
+
+@* KPI Cards *@
+<div class="row g-3 mb-4">
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-primary fw-bold fs-4">@Model.Count</div>
+            <small class="text-muted">Total</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-success fw-bold fs-4">@Model.Count(r => r.Type == "Gain")</div>
+            <small class="text-muted">Gains</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-danger fw-bold fs-4">@Model.Count(r => r.Type == "Retenue")</div>
+            <small class="text-muted">Retenues</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-info fw-bold fs-4">@Model.Count(r => r.Type == "Cotisation")</div>
+            <small class="text-muted">Cotisations</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-warning fw-bold fs-4">@Model.Count(r => r.Type == "Impot")</div>
+            <small class="text-muted">Imp&#244;ts</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-secondary fw-bold fs-4">@Model.Count(r => r.Actif)</div>
+            <small class="text-muted">Actives</small>
+        </div>
+    </div>
+</div>
+
+@* Table *@
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 mc-table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Code</th>
+                        <th>Libell&#233;</th>
+                        <th class="text-center">Type</th>
+                        <th>Section</th>
+                        <th class="text-center">Ordre</th>
+                        <th class="text-center">Bulletin</th>
+                        <th class="text-center">Statut</th>
+                        <th class="text-center" style="width:180px">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Any())
+                    {
+                        @foreach (var r in Model.OrderBy(x => x.OrdreExecution))
+                        {
+                            var badge = typeBadges.GetValueOrDefault(r.Type, "bg-secondary-subtle text-secondary");
+                            <tr>
+                                <td class="ps-4"><code class="fw-bold">@r.Code</code></td>
+                                <td>
+                                    @r.Libelle
+                                    @if (r.Systeme) { <span class="badge bg-dark-subtle text-dark ms-1" style="font-size:0.65rem">Syst&#232;me</span> }
+                                </td>
+                                <td class="text-center"><span class="badge @badge rounded-pill">@typeLabels.GetValueOrDefault(r.Type, r.Type)</span></td>
+                                <td>@sectionLabels.GetValueOrDefault(r.Section, r.Section)</td>
+                                <td class="text-center"><span class="badge bg-light text-dark">@r.OrdreExecution</span></td>
+                                <td class="text-center">
+                                    @if (r.AfficherSurBulletin) { <i class="bi bi-check-circle-fill text-success"></i> } else { <i class="bi bi-dash-circle text-muted"></i> }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(r.Actif ? "bg-success-subtle text-success" : "bg-secondary-subtle text-secondary") rounded-pill">
+                                        @(r.Actif ? "Active" : "Inactive")
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        @if (canPayrollEdit)
+                                        {
+                                            <a asp-action="EditRubrique" asp-route-id="@r.Id" class="btn btn-outline-primary btn-sm rounded-pill" title="Modifier">
+                                                <i class="bi bi-pencil me-1"></i>Modifier
+                                            </a>
+                                            <form asp-action="ToggleRubrique" asp-route-id="@r.Id" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill" title="@(r.Actif ? "D\u00e9sactiver" : "Activer")">
+                                                    <i class="bi @(r.Actif ? "bi-toggle-on" : "bi-toggle-off")"></i>
+                                                </button>
+                                            </form>
+                                            @if (!r.Systeme)
+                                            {
+                                                <form asp-action="DeleteRubrique" asp-route-id="@r.Id" method="post" class="d-inline" onsubmit="return confirm('Supprimer la rubrique @r.Code ?')">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill" title="Supprimer">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            }
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-list-columns-reverse display-4 d-block mb-2 opacity-25"></i>
+                            <p class="mb-2">Aucune rubrique de paie configur&#233;e.</p>
+                            @if (canSystemAdmin)
+                            {
+                                <form asp-action="SeedRubriques" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-success rounded-pill px-4" onclick="return confirm('Charger les rubriques marocaines par d\u00e9faut ?')">
+                                        <i class="bi bi-database-add me-1"></i> Charger les rubriques par d&#233;faut
+                                    </button>
+                                </form>
+                            }
+                        </td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

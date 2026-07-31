@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -38,6 +39,7 @@ public class ComptabiliteController : BaseController
         ViewBag.ClientId = clientId;
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> Ecritures(int? clientId = null, string? journal = null, int page = 1, string? search = null)
     {
         clientId ??= SelectedClientId;
@@ -49,6 +51,7 @@ public class ComptabiliteController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCreate)]
     public async Task<IActionResult> CreateEcriture()
     {
         await LoadClientAsync(SelectedClientId);
@@ -57,6 +60,7 @@ public class ComptabiliteController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCreate)]
     public async Task<IActionResult> CreateEcriture(EcritureCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -75,6 +79,7 @@ public class ComptabiliteController : BaseController
         return View(dto);
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> Journaux(int? clientId = null)
     {
         clientId ??= SelectedClientId;
@@ -83,6 +88,7 @@ public class ComptabiliteController : BaseController
         return View(journaux);
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> GrandLivre(int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
         clientId ??= SelectedClientId;
@@ -94,6 +100,7 @@ public class ComptabiliteController : BaseController
         return View(data);
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> Balance(int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
         clientId ??= SelectedClientId;
@@ -105,6 +112,7 @@ public class ComptabiliteController : BaseController
         return View(data);
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> BalanceAgee(int? clientId = null)
     {
         clientId ??= SelectedClientId;
@@ -114,6 +122,7 @@ public class ComptabiliteController : BaseController
         return View(data);
     }
 
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
     public async Task<IActionResult> Rapprochements(int? clientId = null)
     {
         clientId ??= SelectedClientId;
@@ -124,6 +133,7 @@ public class ComptabiliteController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCreate)]
     public async Task<IActionResult> CreateRapprochement(int clientId, string compteBancaire, string periode)
     {
         var result = await _compta.CreateRapprochementAsync(clientId, compteBancaire, periode);

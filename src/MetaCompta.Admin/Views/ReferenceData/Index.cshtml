@@ -1,37 +1,78 @@
-@{ ViewData["Title"] = "Données de Référence"; }
+﻿@using MetaCompta.Admin.Controllers
+@{
+    ViewData["Title"] = "Donn&eacute;es de R&eacute;f&eacute;rence";
+    var allData = ViewBag.AllData as Dictionary<string, List<RefDataItem>>;
+    var categoryLabels = new Dictionary<string, (string Label, string Icon)> {
+        {"TVA_RATE", ("Taux TVA", "bi-percent")},
+        {"CNSS_RATE", ("Taux CNSS", "bi-shield-check")},
+        {"AMO_RATE", ("Taux AMO", "bi-heart-pulse")},
+        {"BAREME_IR", ("Bar&egrave;me IR", "bi-bar-chart-steps")},
+        {"TAUX_IS", ("Taux IS", "bi-building")},
+        {"DEDUCTIONS_IR", ("D&eacute;ductions IR", "bi-dash-circle")},
+        {"CATEGORIE_DOCUMENT", ("Cat&eacute;gories Documents", "bi-folder")},
+        {"FORME_JURIDIQUE", ("Formes Juridiques", "bi-diagram-3")},
+        {"TYPE_CONTRAT", ("Types Contrat", "bi-file-earmark")},
+        {"SECTEUR_ACTIVITE", ("Secteurs Activit&eacute;", "bi-grid")}
+    };
+}
+
+@if (TempData["Success"] != null) {
+<div class="alert alert-success alert-dismissible fade show" role="alert">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+@if (TempData["Error"] != null) {
+<div class="alert alert-danger alert-dismissible fade show" role="alert">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="fw-bold mb-0">Données de Référence</h5>
-    <button class="btn btn-danger rounded-pill px-3"><i class="bi bi-plus me-1"></i>Nouvelle Entrée</button>
+    <h5 class="fw-bold mb-0">Donn&eacute;es de R&eacute;f&eacute;rence</h5>
+    <a href="/ReferenceData/Create" class="btn btn-danger rounded-pill px-3"><i class="bi bi-plus me-1"></i>Nouvelle Entr&eacute;e</a>
 </div>
 
-<div class="row g-4">
-    @foreach (var cat in new[] {
-        ("Taux TVA", "bi-percent", "4 entrées"),
-        ("Taux CNSS", "bi-shield-check", "2 entrées"),
-        ("Taux AMO", "bi-heart-pulse", "2 entrées"),
-        ("Barème IR", "bi-bar-chart-steps", "6 tranches"),
-        ("Taux IS", "bi-building", "4 taux"),
-        ("Déductions IR", "bi-dash-circle", "3 déductions"),
-        ("Catégories Documents", "bi-folder", "6 catégories"),
-        ("Formes Juridiques", "bi-diagram-3", "9 formes"),
-        ("Types Contrat", "bi-file-earmark", "3 types")
-    })
+@if (allData == null || allData.Count == 0) {
+<div class="alert alert-info">Aucune donn&eacute;e de r&eacute;f&eacute;rence trouv&eacute;e.</div>
+} else {
+<div class="accordion" id="refAccordion">
+    @{ var idx = 0; }
+    @foreach (var kvp in allData)
     {
-        <div class="col-xl-4 col-md-6">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <div class="rounded-circle d-flex align-items-center justify-content-center"
-                         style="width:48px;height:48px;background:rgba(220,38,38,0.1);color:#dc2626;">
-                        <i class="bi @cat.Item2 fs-5"></i>
-                    </div>
-                    <div class="flex-grow-1">
-                        <div class="fw-bold">@cat.Item1</div>
-                        <small class="text-muted">@cat.Item3</small>
-                    </div>
-                    <a href="#" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-pencil"></i></a>
+        var catKey = kvp.Key;
+        var items = kvp.Value;
+        var labelInfo = categoryLabels.ContainsKey(catKey) ? categoryLabels[catKey] : (Label: catKey, Icon: "bi-tag");
+        idx++;
+        <div class="accordion-item border-0 shadow-sm rounded-4 mb-3">
+            <h2 class="accordion-header">
+                <button class="accordion-button @(idx > 1 ? "collapsed" : "")" type="button" data-bs-toggle="collapse" data-bs-target="#cat-@idx">
+                    <i class="bi @labelInfo.Item2 me-2 text-danger"></i>
+                    <strong>@Html.Raw(labelInfo.Item1)</strong>
+                    <span class="badge bg-secondary ms-2">@items.Count</span>
+                </button>
+            </h2>
+            <div id="cat-@idx" class="accordion-collapse collapse @(idx == 1 ? "show" : "")" data-bs-parent="#refAccordion">
+                <div class="accordion-body p-0">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead class="table-light"><tr><th class="ps-3">Code</th><th>Libell&eacute;</th><th>Valeur</th><th>Num&eacute;rique</th><th>Ordre</th><th class="text-end pe-3">Actions</th></tr></thead>
+                        <tbody>
+                        @foreach (var item in items.OrderBy(i => i.SortOrder))
+                        {
+                            <tr>
+                                <td class="ps-3"><code>@item.Code</code></td>
+                                <td>@item.Label</td>
+                                <td class="text-muted small">@(item.Value ?? "-")</td>
+                                <td>@(item.NumericValue?.ToString("N2") ?? "-")</td>
+                                <td>@item.SortOrder</td>
+                                <td class="text-end pe-3">
+                                    <a href="/ReferenceData/Edit/@item.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    <form method="post" action="/ReferenceData/Delete/@item.Id" class="d-inline" onsubmit="return confirm('Supprimer cette entr&eacute;e ?');">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     }
 </div>
+}

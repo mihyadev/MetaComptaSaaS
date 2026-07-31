@@ -58,6 +58,7 @@ public static class RefCodes
 
     public static class StatutDeclaration
     {
+        // Legacy codes (kept for existing declarations + aliases)
         public const string Brouillon = "Brouillon";
         public const string ACompleter = "ACompleter";
         public const string EnCours = "EnCours";
@@ -69,6 +70,68 @@ public static class RefCodes
         public const string Payee = "Payee";
         public const string Refusee = "Refusee";
         public const string Rejetee = "Rejetee";
+
+        // TVA end-to-end lifecycle (plan alignment)
+        public const string ACreer = "ACreer";
+        public const string CreeeParSysteme = "CreeeParSysteme";
+        public const string DocumentsDemandes = "DocumentsDemandes";
+        public const string DocumentsRecus = "DocumentsRecus";
+        public const string ControleEnCours = "ControleEnCours";
+        public const string EnAttenteCorrection = "EnAttenteCorrection";
+        public const string CalculTVA = "CalculTVA";
+        public const string EnRevueSuperviseur = "EnRevueSuperviseur";
+        public const string ACorriger = "ACorriger";
+        public const string EnvoyeeSimplTva = "EnvoyeeSimplTva";
+        public const string Deposee = "Deposee";
+        public const string APayer = "APayer";
+        public const string Rapprochee = "Rapprochee";
+        public const string Archivee = "Archivee";
+        public const string Cloturee = "Cloturee";
+
+        /// <summary>French UI labels for badges (canonical + legacy).</summary>
+        public static string Label(string? statut) => statut switch
+        {
+            ACreer => "À créer",
+            CreeeParSysteme => "Créée par le système",
+            Brouillon => "Brouillon",
+            DocumentsDemandes => "Documents demandés",
+            ACompleter => "À compléter",
+            DocumentsRecus => "Documents reçus",
+            ControleEnCours => "Contrôle en cours",
+            EnCours => "En cours",
+            EnPreparation => "En préparation",
+            Completee => "Complétée",
+            EnAttenteCorrection => "En attente correction",
+            CalculTVA => "Calcul TVA",
+            EnRevueSuperviseur => "En revue superviseur",
+            EnRevision => "En révision",
+            ACorriger => "À corriger",
+            Refusee => "Refusée",
+            Validee => "Validée",
+            EnvoyeeSimplTva => "Envoyée à SIMPL-TVA",
+            Soumise => "Soumise",
+            Rejetee => "Rejetée",
+            Deposee => "Déposée",
+            APayer => "À payer",
+            Payee => "Payée",
+            Rapprochee => "Rapprochée",
+            Archivee => "Archivée",
+            Cloturee => "Clôturée",
+            _ => statut ?? ""
+        };
+
+        /// <summary>CSS badge class for Index/Details.</summary>
+        public static string BadgeClass(string? statut) => statut switch
+        {
+            ACreer or CreeeParSysteme or Brouillon => "badge-brouillon",
+            DocumentsDemandes or ACompleter or EnAttenteCorrection or ACorriger or Refusee => "badge-acompleter",
+            DocumentsRecus or ControleEnCours or EnCours or EnPreparation or Completee or CalculTVA => "badge-completee",
+            EnRevueSuperviseur or EnRevision => "badge-enrevision",
+            Validee or Deposee or Rapprochee or Archivee => "badge-validee",
+            EnvoyeeSimplTva or Soumise or Payee or APayer or Cloturee => "badge-soumise",
+            Rejetee => "badge-refusee",
+            _ => "badge-brouillon"
+        };
     }
 
     // ════════════════════════════════════════════════════════════

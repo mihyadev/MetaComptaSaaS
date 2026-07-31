@@ -22,7 +22,10 @@ public enum WorkflowStepType
     ValidationInterne = 5,
     ValidationClient = 6,
     DepotSoumission = 7,
-    ClotureArchivage = 8
+    ClotureArchivage = 8,
+    Relance = 9,
+    Paiement = 10,
+    Rapprochement = 11
 }
 
 /// <summary>
@@ -253,9 +256,15 @@ public class WorkflowStepTemplate : TenantEntity
     /// <summary>How this step gets assigned.</summary>
     public AssignmentType AssignmentType { get; set; } = AssignmentType.Employee;
 
-    /// <summary>Specific employee (when AssignmentType = Employee).</summary>
+    /// <summary>Specific employee (when AssignmentType = Employee) — primary assignee.</summary>
     public string? AssignedToUserId { get; set; }
     public virtual ApplicationUser? AssignedToUser { get; set; }
+
+    /// <summary>
+    /// Optional multi-assignee list (comma-separated user IDs) when AssignmentType = Employee.
+    /// Primary remains AssignedToUserId (first in list).
+    /// </summary>
+    public string? AssignedToUserIds { get; set; }
 
     /// <summary>Role name (when AssignmentType = Role). E.g. "Manager", "Assistant".</summary>
     public string? AssignedToRoleName { get; set; }

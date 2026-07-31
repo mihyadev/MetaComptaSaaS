@@ -1,0 +1,100 @@
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Modifier le Cabinet";
+    var cab = ViewBag.Cabinet as JsonElement?;
+    var id = cab?.GetProperty("id").GetInt32() ?? 0;
+    var name = cab?.GetProperty("name").GetString() ?? "";
+    var email = cab?.GetProperty("email").GetString() ?? "";
+    var ice = cab?.TryGetProperty("ice", out var iceEl) == true ? iceEl.GetString() ?? "" : "";
+    var ifVal = cab?.TryGetProperty("if", out var ifEl) == true ? ifEl.GetString() ?? "" : "";
+    var rc = cab?.TryGetProperty("rc", out var rcEl) == true ? rcEl.GetString() ?? "" : "";
+    var city = cab?.TryGetProperty("city", out var cityEl) == true ? cityEl.GetString() ?? "" : "";
+    var phone = cab?.TryGetProperty("phone", out var phoneEl) == true ? phoneEl.GetString() ?? "" : "";
+    var address = cab?.TryGetProperty("address", out var addrEl) == true ? addrEl.GetString() ?? "" : "";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Cabinets">Cabinets</a></li>
+                <li class="breadcrumb-item active">Modifier</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-pencil text-danger me-2"></i>Modifier le Cabinet</h4>
+    </div>
+    <a href="/Cabinets" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+</div>
+
+@if (TempData["Error"] != null) {
+<div class="alert alert-danger alert-dismissible fade show rounded-3" role="alert">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<form method="post" action="/Cabinets/Edit/@id">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-transparent border-0 pt-4 px-4">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-building me-2 text-danger"></i>Informations du Cabinet</h6>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nom du Cabinet <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-building"></i></span>
+                                <input type="text" name="Name" class="form-control border-start-0" value="@name" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope"></i></span>
+                                <input type="email" name="Email" class="form-control border-start-0" value="@email" required />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">ICE</label>
+                            <input type="text" name="ICE" class="form-control" value="@ice" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">IF</label>
+                            <input type="text" name="IF" class="form-control" value="@ifVal" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">RC</label>
+                            <input type="text" name="RC" class="form-control" value="@rc" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ville</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo-alt"></i></span>
+                                <input type="text" name="City" class="form-control border-start-0" value="@city" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Téléphone</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-telephone"></i></span>
+                                <input type="text" name="Phone" class="form-control border-start-0" value="@phone" />
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Adresse</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-pin-map"></i></span>
+                                <input type="text" name="Address" class="form-control border-start-0" value="@address" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="/Cabinets" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+                <button type="submit" class="btn btn-danger rounded-pill px-4"><i class="bi bi-check-circle me-2"></i>Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+</form>

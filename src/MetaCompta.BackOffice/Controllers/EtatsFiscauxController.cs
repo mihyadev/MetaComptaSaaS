@@ -1,5 +1,6 @@
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -24,6 +25,7 @@ public class EtatsFiscauxController : BaseController
         _clients = clients;
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, int? exercice = null, int page = 1, string? search = null)
     {
         clientId ??= SelectedClientId;
@@ -37,6 +39,7 @@ public class EtatsFiscauxController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Details(int id)
     {
         await LoadReferenceDataToViewBagAsync("TYPE_ETAT_FISCAL", "STATUT_ETAT");
@@ -47,6 +50,7 @@ public class EtatsFiscauxController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ReportExport)]
     public async Task<IActionResult> Generate(int clientId, string type, int exercice)
     {
         var result = await _etats.GenerateAsync(clientId, type, exercice);
@@ -61,6 +65,7 @@ public class EtatsFiscauxController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationValidate)]
     public async Task<IActionResult> Validate(int id)
     {
         var result = await _etats.ValidateAsync(id);
@@ -71,36 +76,42 @@ public class EtatsFiscauxController : BaseController
         return RedirectToAction("Details", new { id });
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Etat9421(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;
         return await TypedIndex("Etat9421", clientId, exercice, page);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> LiasseFiscale(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;
         return await TypedIndex("LiasseFiscale", clientId, exercice, page);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Bilan(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;
         return await TypedIndex("Bilan", clientId, exercice, page);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> CPC(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;
         return await TypedIndex("CPC", clientId, exercice, page);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Amortissements(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;
         return await TypedIndex("Amortissements", clientId, exercice, page);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> EtatsSynthese(int? clientId = null, int? exercice = null, int page = 1)
     {
         clientId ??= SelectedClientId;

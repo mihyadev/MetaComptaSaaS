@@ -111,6 +111,8 @@ public class Message : TenantEntity
 {
     public int? ClientId { get; set; }
     public virtual Client? Client { get; set; }
+    public int? DeclarationId { get; set; }
+    public virtual Declaration? Declaration { get; set; }
     public string SenderId { get; set; } = string.Empty;
     public string SenderName { get; set; } = string.Empty;
     public string Sujet { get; set; } = string.Empty;
@@ -120,4 +122,5 @@ public class Message : TenantEntity
     public int? ParentMessageId { get; set; }
     public virtual Message? ParentMessage { get; set; }
     public string? PiecesJointesJson { get; set; }
+    public string SenderRole { get; set; } = "Cabinet"; // Cabinet or Client
 }

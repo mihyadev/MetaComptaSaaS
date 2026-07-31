@@ -1,11 +1,8 @@
 ﻿@model ConvertBonCommandeEnContratDto
-@using System.Text.Json
 @{
     ViewData["Title"] = "Convertir en Contrat Commercial";
     var bonCommande = ViewBag.BonCommande as BonCommandeDto;
-    var clientServices = ViewBag.ClientServices as List<object> ?? new();
-    var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    var clientServicesJson = JsonSerializer.Serialize(clientServices, jsonOptions);
+    var typeServiceItems = (ViewData["Ref_TYPE_SERVICE"] as List<ReferenceDataDto>) ?? new();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -34,27 +31,7 @@
                         </div>
                     </div>
 
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label asp-for="ModeleFacturation" class="form-label">Modèle de facturation <span class="text-danger">*</span></label>
-                            <select asp-for="ModeleFacturation" class="form-select rounded-3" required>
-                                <option value="">-- Sélectionner --</option>
-                                <option value="@RefCodes.ModeleFacturation.Forfait">Forfait</option>
-                                <option value="Regie">Régie</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="FrequenceFacturation" class="form-label">Fréquence de facturation</label>
-                            <select asp-for="FrequenceFacturation" class="form-select rounded-3">
-                                <option value="">-- Sélectionner --</option>
-                                <option value="@RefCodes.Frequence.Mensuelle">Mensuelle</option>
-                                <option value="Trimestrielle">Trimestrielle</option>
-                                <option value="Semestrielle">Semestrielle</option>
-                                <option value="@RefCodes.Frequence.Annuelle">Annuelle</option>
-                                <option value="Ponctuelle">Ponctuelle</option>
-                            </select>
-                        </div>
-                    </div>
+
 
                     <div class="mb-3">
                         <label class="form-label">Clauses spécifiques</label>
@@ -66,37 +43,11 @@
                         <textarea asp-for="Notes" class="form-control rounded-3" rows="2" placeholder="Notes supplémentaires..."></textarea>
                     </div>
 
-                    <!-- Lignes du BC avec liaison service -->
-                    <div class="border rounded-3 p-3 mb-4">
-                        <h6 class="fw-semibold mb-3"><i class="bi bi-list-ul me-2"></i>Lignes du bon de commande — Liaison service déclaratif</h6>
-                        <p class="text-muted small mb-3">Vous pouvez optionnellement associer chaque ligne à un service déclaratif du client.</p>
-                        @if (bonCommande?.Lignes?.Any() == true)
-                        {
-                            @for (int i = 0; i < bonCommande.Lignes.Count; i++)
-                            {
-                                var l = bonCommande.Lignes.OrderBy(x => x.Ordre).ToList()[i];
-                                <div class="border rounded-3 p-2 mb-2 bg-light bg-opacity-50">
-                                    <div class="row g-2 align-items-center">
-                                        <input type="hidden" name="LigneServiceOverrides[@i].LigneId" value="@l.Id" />
-                                        <div class="col-md-1 text-center"><span class="badge bg-secondary rounded-pill">@l.Ordre</span></div>
-                                        <div class="col-md-4"><span class="fw-semibold small">@l.Description</span></div>
-                                        <div class="col-md-2"><span class="text-muted small">@l.TypeLigne</span></div>
-                                        <div class="col-md-2 text-end"><span class="small">@l.MontantHT.ToString("N2") HT</span></div>
-                                        <div class="col-md-3">
-                                            <select name="LigneServiceOverrides[@i].ServiceContratId"
-                                                    class="form-select form-select-sm rounded-3 service-select"
-                                                    data-selected="@l.ServiceContratId">
-                                                <option value="">— Aucun service</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }
-                        else
-                        {
-                            <p class="text-muted text-center mb-0">Aucune ligne dans ce bon de commande.</p>
-                        }
+                    <!-- Services inclus -->
+                    <div class="border-0 mb-4">
+                        <h6 class="fw-semibold mb-3 text-info"><i class="bi bi-check2-circle me-2"></i>Services inclus dans le contrat</h6>
+                        @{ var bcVD = new ViewDataDictionary(ViewData); bcVD["typeServiceItems"] = typeServiceItems; bcVD["checkedServices"] = new List<ContratServiceActiveLine>(); bcVD["prefix"] = "bc"; }
+                        @await Html.PartialAsync("_ServicesPicker", null, bcVD)
                     </div>
 
                     <div class="d-flex gap-2 justify-content-end border-top pt-3">
@@ -109,16 +60,3 @@
     </div>
 </div>
 
-<script>
-    (function() {
-        const services = @Html.Raw(clientServicesJson);
-        const noServiceOption = services.length === 0
-            ? '<option value="">— Aucun service déclaratif configuré</option>'
-            : '<option value="">— Aucun service</option>';
-        document.querySelectorAll('.service-select').forEach(sel => {
-            const prev = sel.dataset.selected || '';
-            sel.innerHTML = noServiceOption +
-                services.map(s => `<option value="${s.id}" ${s.id == prev ? 'selected' : ''}>${s.label}</option>`).join('');
-        });
-    })();
-</script>

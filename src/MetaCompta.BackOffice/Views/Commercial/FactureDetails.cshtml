@@ -3,6 +3,10 @@
     ViewData["Title"] = $"Facture {Model.Reference}";
     var resteDu = Model.MontantTTC - Model.MontantPaye;
     var pctPaye = Model.MontantTTC > 0 ? (Model.MontantPaye / Model.MontantTTC * 100) : 0;
+    var canFactureSend = ViewBag.CanFactureSend as bool? ?? false;
+    var canFactureCancel = ViewBag.CanFactureCancel as bool? ?? false;
+    var canFacturePayments = ViewBag.CanFactureManagePayments as bool? ?? false;
+    var canFactureCreate = ViewBag.CanFactureCreate as bool? ?? false;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -11,18 +15,18 @@
         <p class="text-muted mb-0">@Model.ClientName — @(Model.ContratReference != null ? $"Contrat            {Model.ContratReference}" : "Facture manuelle")</p>
     </div>
     <div class="d-flex gap-2">
-        @if (Model.Statut == RefCodes.StatutFacture.Brouillon || Model.Statut == RefCodes.StatutFacture.Emise)
+        @if ((Model.Statut == RefCodes.StatutFacture.Brouillon || Model.Statut == RefCodes.StatutFacture.Emise) && canFactureSend)
         {
             <form asp-action="FactureEnvoyer" asp-route-id="@Model.Id" method="post" class="d-inline">
                 <button type="submit" class="btn btn-primary rounded-pill"><i class="bi bi-send me-1"></i>Envoyer</button>
             </form>
         }
-        @if (Model.Statut != RefCodes.StatutFacture.Payee && Model.Statut != "Annulee" && Model.Statut != "Avoir")
+        @if (Model.Statut != RefCodes.StatutFacture.Payee && Model.Statut != "Annulee" && Model.Statut != "Avoir" && canFacturePayments)
         {
             <button class="btn btn-success rounded-pill" data-bs-toggle="modal" data-bs-target="#paiementModal"><i
                     class="bi bi-cash me-1"></i>Enregistrer Paiement</button>
         }
-        @if (Model.Statut == RefCodes.StatutFacture.Brouillon || Model.Statut == RefCodes.StatutFacture.Emise)
+        @if ((Model.Statut == RefCodes.StatutFacture.Brouillon || Model.Statut == RefCodes.StatutFacture.Emise) && canFactureCancel)
         {
             <form asp-action="FactureAnnuler" asp-route-id="@Model.Id" method="post" class="d-inline"
                 onsubmit="return confirm('Annuler cette facture ?');">
@@ -30,10 +34,13 @@
                         class="bi bi-x-circle me-1"></i>Annuler</button>
             </form>
         }
-        <form asp-action="FactureDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
-            <button type="submit" class="btn btn-outline-info rounded-pill"><i
-                    class="bi bi-copy me-1"></i>Dupliquer</button>
-        </form>
+        @if (canFactureCreate)
+        {
+            <form asp-action="FactureDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
+                <button type="submit" class="btn btn-outline-info rounded-pill"><i
+                        class="bi bi-copy me-1"></i>Dupliquer</button>
+            </form>
+        }
         <a asp-action="Factures" class="btn btn-outline-secondary rounded-pill"><i
                 class="bi bi-arrow-left me-1"></i>Retour</a>
     </div>

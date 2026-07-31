@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -10,6 +11,7 @@ public class EmployeesController : BaseController
 {
     private readonly IEmployeeFacade _employees;
     private readonly IClientFacade _clients;
+    private readonly IPayrollFacade _payroll;
 
     private static readonly string[] EmpRefCategories = new[]
     {
@@ -20,11 +22,13 @@ public class EmployeesController : BaseController
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IEmployeeFacade employees,
-        IClientFacade clients)
+        IClientFacade clients,
+        IPayrollFacade payroll)
         : base(referenceData, contextAccessor)
     {
         _employees = employees;
         _clients = clients;
+        _payroll = payroll;
     }
 
     private async Task LoadClientsAsync()
@@ -39,6 +43,7 @@ public class EmployeesController : BaseController
         }
     }
 
+    [RequirePermission(ClaimDefinitions.EmployeeList, ClaimDefinitions.EmployeeListByClient)]
     public async Task<IActionResult> Index(int? clientId = null, int page = 1, string? search = null, string? typeContrat = null)
     {
         clientId ??= SelectedClientId;
@@ -52,6 +57,7 @@ public class EmployeesController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.EmployeeDetail)]
     public async Task<IActionResult> Details(int id)
     {
         var employee = await _employees.GetByIdAsync(id);
@@ -61,6 +67,7 @@ public class EmployeesController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.EmployeeCreate)]
     public async Task<IActionResult> Create(int? clientId = null)
     {
         clientId ??= SelectedClientId;
@@ -73,6 +80,7 @@ public class EmployeesController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.EmployeeCreate)]
     public async Task<IActionResult> Create(EmployeeCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -94,6 +102,7 @@ public class EmployeesController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.EmployeeEdit)]
     public async Task<IActionResult> Edit(int id)
     {
         var employee = await _employees.GetByIdAsync(id);
@@ -130,6 +139,7 @@ public class EmployeesController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.EmployeeEdit)]
     public async Task<IActionResult> Edit(int id, EmployeeCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -154,10 +164,56 @@ public class EmployeesController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.EmployeeDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var result = await _employees.DeleteAsync(id);
         SetApiResult(result, "Employé supprimé.", "Erreur lors de la suppression.");
         return RedirectToAction("Index");
+    }
+
+
+    // ================================================================
+    //  AFFECTATION RUBRIQUES (AJAX endpoints for Employee Details tab)
+    // ================================================================
+
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.PayrollDetail, ClaimDefinitions.EmployeeDetail)]
+    public async Task<IActionResult> GetAffectations(int employeeId)
+    {
+        var list = await _payroll.GetAffectationsAsync(employeeId);
+        return Json(list);
+    }
+
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.PayrollDetail, ClaimDefinitions.EmployeeDetail)]
+    public async Task<IActionResult> GetRubriquesDisponibles(int employeeId, int? clientId = null)
+    {
+        var list = await _payroll.GetRubriquesDisponiblesAsync(employeeId, clientId);
+        return Json(list);
+    }
+
+    [HttpPost]
+    [RequirePermission(ClaimDefinitions.PayrollEdit)]
+    public async Task<IActionResult> AddAffectation([FromBody] AffectationRubriqueCreateDto dto)
+    {
+        var result = await _payroll.AddAffectationAsync(dto);
+        return Json(result);
+    }
+
+    [HttpPut]
+    [RequirePermission(ClaimDefinitions.PayrollEdit)]
+    public async Task<IActionResult> UpdateAffectation(int id, [FromBody] AffectationRubriqueCreateDto dto)
+    {
+        var result = await _payroll.UpdateAffectationAsync(id, dto);
+        return Json(result);
+    }
+
+    [HttpDelete]
+    [RequirePermission(ClaimDefinitions.PayrollEdit)]
+    public async Task<IActionResult> RemoveAffectation(int id)
+    {
+        var result = await _payroll.RemoveAffectationAsync(id);
+        return Json(result);
     }
 }

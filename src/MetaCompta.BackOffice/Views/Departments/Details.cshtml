@@ -16,7 +16,10 @@
         <h4 class="fw-bold mb-0"><i class="bi bi-diagram-2-fill text-primary me-2"></i>@Model.Name</h4>
     </div>
     <div class="d-flex gap-2">
-        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill px-3"><i class="bi bi-pencil me-1"></i> Modifier</a>
+        @if (ViewBag.CanDepartmentEdit as bool? ?? false)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill px-3"><i class="bi bi-pencil me-1"></i> Modifier</a>
+        }
         <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
     </div>
 </div>
@@ -47,7 +50,10 @@
         <div class="mc-card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-people me-2"></i>Membres (@members.Count)</span>
-                <button class="btn btn-sm btn-mc-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#addMemberModal"><i class="bi bi-person-plus me-1"></i> Ajouter</button>
+                @if (ViewBag.CanDepartmentManageMembers as bool? ?? false)
+                {
+                    <button class="btn btn-sm btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#addMemberModal"><i class="bi bi-person-plus me-1"></i> Ajouter</button>
+                }
             </div>
             <div class="card-body p-0">
                 @if (members.Any())
@@ -67,12 +73,15 @@
                                         </td>
                                         <td style="font-size:0.8rem;">@m.JoinedAt.ToString("dd/MM/yyyy")</td>
                                         <td>
-                                            <form asp-action="RemoveMember" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="departmentId" value="@Model.Id" />
-                                                <input type="hidden" name="userId" value="@m.UserId" />
-                                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill" onclick="return confirm('Retirer ce membre ?')"><i class="bi bi-person-dash"></i></button>
-                                            </form>
+                                            @if (ViewBag.CanDepartmentManageMembers as bool? ?? false)
+                                            {
+                                                <form asp-action="RemoveMember" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="departmentId" value="@Model.Id" />
+                                                    <input type="hidden" name="userId" value="@m.UserId" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill" onclick="return confirm('Retirer ce membre ?')"><i class="bi bi-person-dash"></i></button>
+                                                </form>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -93,6 +102,8 @@
 </div>
 
 <!-- Add Member Modal -->
+@if (ViewBag.CanDepartmentManageMembers as bool? ?? false)
+{
 <div class="modal fade" id="addMemberModal" tabindex="-1">
     <div class="modal-dialog">
         <form asp-action="AddMember" method="post">
@@ -112,9 +123,11 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-mc-primary rounded-pill">Ajouter</button>
+                    <button type="submit" class="btn btn-primary rounded-pill">Ajouter</button>
                 </div>
             </div>
         </form>
     </div>
 </div>
+}
+

@@ -1,11 +1,11 @@
-@using MetaCompta.Application.DTOs
+﻿@using MetaCompta.Application.DTOs
 @using MetaCompta.Domain.Common
 @{
-    // ═════════════════════════════════════════════════════════════════
-    //  GENERIC WORKFLOW ACTION BAR — Step-aware, Role-aware, Adaptive
+    // --- GENERIC WORKFLOW ACTION BAR ---
+    //  Step-aware, Role-aware, Adaptive
     //  Shows ONLY the actions possible at the current workflow step
     //  Respects: AssignmentType, IsClientStep, StepType, permissions
-    // ═════════════════════════════════════════════════════════════════
+    // --- end header ---
 
     var declaration  = ViewBag.ActionBarDeclaration as DeclarationDto;
     var wfInstance   = ViewBag.ActionBarWorkflow as WorkflowInstanceDto;
@@ -31,75 +31,152 @@
     // — STEP-AWARE permission resolution —
     // Who can act on this step?
     var stepAssignment  = hasCurrentStep ? (wfStep.AssignmentType ?? "") : "";
-    var isMyStep        = hasCurrentStep && wfStep.AssignedToUserId == userId;
+    var isMyStep        = hasCurrentStep
+                          && !string.IsNullOrEmpty(wfStep!.AssignedToUserId)
+                          && string.Equals(wfStep.AssignedToUserId, userId, StringComparison.OrdinalIgnoreCase);
     var isClientStep    = hasCurrentStep && wfStep.IsClientStep;
     var stepType        = hasCurrentStep ? (wfStep.StepType ?? "") : "";
     var stepStatus      = hasCurrentStep ? (wfStep.Status ?? "") : "";
 
-    // Can the current user advance this step?
-    // Employee: must be assigned OR be a manager/gerant
-    // Client step: only if isClientPortal
-    // AutoSystem: never (handled by system)
+    // Can the current user act on this step? Assignee-only (+ Manager/Gérant override).
+    // Client step: only if isClientPortal. AutoSystem: never.
+    var isManagerOverride = userRole is "Gerant" or "Manager" or "Admin" or "SuperAdmin";
     var canActOnStep = false;
     if (wfActive && hasCurrentStep)
     {
         if (stepAssignment == "AutoSystem")
-            canActOnStep = false; // system auto-advances
+            canActOnStep = false;
         else if (isClientStep)
-            canActOnStep = isClientPortal; // only client on extranet
+            canActOnStep = isClientPortal;
         else if (isMyStep)
-            canActOnStep = true; // assigned employee
-        else if (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin")
-            canActOnStep = true; // managers can always act
+            canActOnStep = true;
+        else if (isManagerOverride)
+            canActOnStep = true;
     }
+    else if (!wfActive)
+    {
+        // No active WF -> legacy permission-based edit/status (unchanged)
+        canActOnStep = true;
+    }
+
+    // Unclaimed / held by other
+    var stepHeldByOther = hasCurrentStep && !string.IsNullOrEmpty(wfStep!.AssignedToUserId) && !isMyStep;
+    var canClaimStep = wfActive && hasCurrentStep && !isClientStep && stepAssignment != "AutoSystem"
+                       && !isMyStep && !stepHeldByOther && (stepStatus != "Completed" && stepStatus != "Skipped");
+    var canForceClaim = wfActive && hasCurrentStep && !isClientStep && stepAssignment != "AutoSystem"
+                       && !isMyStep && stepHeldByOther && isManagerOverride
+                       && (stepStatus != "Completed" && stepStatus != "Skipped");
 
     // — Declaration status buttons — also step-aware —
     // Edit: only in preparation/data-entry steps (Brouillon, ACompleter, EnCours)
-    var canEdit = statut == RefCodes.StatutDeclaration.Brouillon
+    var permEdit = ViewBag.CanEditDeclaration as bool? ?? false;
+    var permValidate = ViewBag.CanValidateDeclaration as bool? ?? false;
+    var permSubmit = ViewBag.CanSubmitDeclaration as bool? ?? false;
+    var permDelete = ViewBag.CanDeleteDeclaration as bool? ?? false;
+    var permWfAdvance = ViewBag.CanWorkflowAdvance as bool? ?? false;
+    var permWfCreate = ViewBag.CanWorkflowCreate as bool? ?? false;
+    var permWfCancel = ViewBag.CanWorkflowCancel as bool? ?? false;
+    var permWfValidate = ViewBag.CanWorkflowValidate as bool? ?? false;
+
+    var canEdit = permEdit && (statut == RefCodes.StatutDeclaration.Brouillon
                || statut == RefCodes.StatutDeclaration.ACompleter
                || statut == RefCodes.StatutDeclaration.EnCours
-               || statut == RefCodes.StatutDeclaration.EnPreparation;
+               || statut == RefCodes.StatutDeclaration.EnPreparation
+               || statut == RefCodes.StatutDeclaration.CreeeParSysteme
+               || statut == RefCodes.StatutDeclaration.DocumentsDemandes
+               || statut == RefCodes.StatutDeclaration.DocumentsRecus
+               || statut == RefCodes.StatutDeclaration.ControleEnCours
+               || statut == RefCodes.StatutDeclaration.EnAttenteCorrection
+               || statut == RefCodes.StatutDeclaration.CalculTVA
+               || statut == RefCodes.StatutDeclaration.ACorriger);
 
-    // Complete: only during Saisie step (data entry)
-    var canComplete = (statut == RefCodes.StatutDeclaration.Brouillon
+    // Complete legacy / docs -> contrôle
+    var canComplete = permEdit && (statut == RefCodes.StatutDeclaration.Brouillon
                     || statut == RefCodes.StatutDeclaration.ACompleter
-                    || statut == RefCodes.StatutDeclaration.EnPreparation)
+                    || statut == RefCodes.StatutDeclaration.EnPreparation
+                    || statut == RefCodes.StatutDeclaration.DocumentsRecus)
                     && (!hasWorkflow || !wfActive
                         || stepType == "Saisie"
-                        || stepType == "Collecte");
+                        || stepType == "Collecte"
+                        || stepType == "Controle");
 
-    // Validate: only during Controle/ValidationInterne steps
-    var canValidate = (statut == RefCodes.StatutDeclaration.Completee
-                    || statut == RefCodes.StatutDeclaration.EnRevision)
+    // Validate: revue superviseur
+    var canValidate = permValidate && (statut == RefCodes.StatutDeclaration.Completee
+                    || statut == RefCodes.StatutDeclaration.EnRevision
+                    || statut == RefCodes.StatutDeclaration.EnRevueSuperviseur
+                    || statut == RefCodes.StatutDeclaration.CalculTVA)
                     && (!hasWorkflow || !wfActive
                         || stepType == "Controle"
                         || stepType == "ValidationInterne");
 
-    // Submit: only during DepotSoumission step
-    var canSubmit = statut == RefCodes.StatutDeclaration.Validee
+    // Submit SIMPL stub
+    var canSubmit = permSubmit && (statut == RefCodes.StatutDeclaration.Validee
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva)
                   && (!hasWorkflow || !wfActive
                       || stepType == "DepotSoumission");
 
+    var canRequestDocs = permEdit && (statut == RefCodes.StatutDeclaration.CreeeParSysteme
+                    || statut == RefCodes.StatutDeclaration.Brouillon
+                    || statut == RefCodes.StatutDeclaration.DocumentsDemandes
+                    || statut == RefCodes.StatutDeclaration.ACompleter
+                    || statut == RefCodes.StatutDeclaration.EnAttenteCorrection);
+
+    var canMarkDocsReceived = permEdit && (statut == RefCodes.StatutDeclaration.DocumentsDemandes
+                    || statut == RefCodes.StatutDeclaration.ACompleter);
+
+    var canStartControle = permEdit && statut == RefCodes.StatutDeclaration.DocumentsRecus;
+    var canAskCorrection = permEdit && (statut == RefCodes.StatutDeclaration.ControleEnCours
+                    || statut == RefCodes.StatutDeclaration.CalculTVA);
+    var canRejectReview = permValidate && (statut == RefCodes.StatutDeclaration.EnRevueSuperviseur
+                    || statut == RefCodes.StatutDeclaration.EnRevision);
+    var canConfirmDeposit = permSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+    var canRejectSimpl = permSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+    var canMarkToPay = permEdit && statut == RefCodes.StatutDeclaration.Deposee;
+    var canConfirmPay = permSubmit && (statut == RefCodes.StatutDeclaration.APayer || statut == RefCodes.StatutDeclaration.Deposee);
+    var canReconcile = permEdit && (statut == RefCodes.StatutDeclaration.Payee || statut == RefCodes.StatutDeclaration.Deposee);
+    var canArchive = permEdit && statut == RefCodes.StatutDeclaration.Rapprochee;
+    var canClose = permEdit && statut == RefCodes.StatutDeclaration.Archivee;
+
     // Delete: never when submitted/validated/paid, and not during active workflow
-    var canDelete = !wfActive
+    var canDelete = permDelete && !wfActive
                   && statut != RefCodes.StatutDeclaration.Soumise
+                  && statut != RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                  && statut != RefCodes.StatutDeclaration.Deposee
                   && statut != RefCodes.StatutDeclaration.Validee
-                  && statut != RefCodes.StatutDeclaration.Payee;
+                  && statut != RefCodes.StatutDeclaration.Payee
+                  && statut != RefCodes.StatutDeclaration.Cloturee
+                  && statut != RefCodes.StatutDeclaration.Archivee
+                  && statut != RefCodes.StatutDeclaration.Rapprochee;
 
-    // Workflow control buttons
-    var canAdvanceWf = canActOnStep && stepStatus != "Completed" && stepStatus != "Skipped";
-    var canSkipWf    = canActOnStep && hasCurrentStep && !wfStep.IsRequired;
-    var canPauseWf   = wfActive && (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin");
-    var canResumeWf  = wfPaused && (userRole == "Gerant" || userRole == "Manager" || userRole == "Admin");
-    var canCancelWf  = (wfActive || wfPaused) && (userRole == "Gerant" || userRole == "Admin");
-    var canStartWf   = !hasWorkflow || wfCompleted;
+    // Workflow control buttons — prefer claim flags over role-name checks
+    var canManageWf = permWfAdvance || permWfValidate || permWfCancel
+        || userRole == "Gerant" || userRole == "Manager" || userRole == "Admin";
+    var canAdvanceWf = canActOnStep && (permWfAdvance || isMyStep) && stepStatus != "Completed" && stepStatus != "Skipped";
+    var canSkipWf    = canActOnStep && (permWfAdvance || isMyStep) && hasCurrentStep && !wfStep.IsRequired;
+    var canPauseWf   = wfActive && (permWfCancel || canManageWf);
+    var canResumeWf  = wfPaused && (permWfAdvance || canManageWf);
+    var canCancelWf  = (wfActive || wfPaused) && (permWfCancel || userRole == "Gerant" || userRole == "Admin");
+    var canStartWf   = permWfCreate && (!hasWorkflow || wfCompleted);
 
-    // Restrict status changes to users who can act on the step
+    // Restrict status changes AND edit to users who can act on the step
     if (wfActive && hasCurrentStep && !canActOnStep)
     {
+        canEdit = false;
         canComplete = false;
         canValidate = false;
         canSubmit = false;
+        canRequestDocs = false;
+        canMarkDocsReceived = false;
+        canStartControle = false;
+        canAskCorrection = false;
+        canRejectReview = false;
+        canConfirmDeposit = false;
+        canRejectSimpl = false;
+        canMarkToPay = false;
+        canConfirmPay = false;
+        canReconcile = false;
+        canArchive = false;
+        canClose = false;
     }
 
     // — Theme —
@@ -117,69 +194,59 @@
         "CNSS" => "bi-shield-check",
         _      => "bi-file-earmark-text"
     };
-    var statutLabel = statut switch {
-        "Brouillon"     => "Brouillon",
-        "ACompleter"    => "À Compléter",
-        "EnCours"       => "En Cours",
-        "EnPreparation" => "En Préparation",
-        "Completee"     => "Complétée",
-        "EnRevision"    => "En Révision",
-        "Validee"       => "Validée",
-        "Soumise"       => "Soumise",
-        "Payee"         => "Payée",
-        "Refusee"       => "Refusée",
-        "Deposee"       => "Déposée",
-        _               => statut
-    };
+    var statutLabel = RefCodes.StatutDeclaration.Label(statut);
     var statutColor = statut switch {
-        "Brouillon"     => "#94a3b8",
-        "ACompleter"    => "#f59e0b",
-        "EnCours"       => "#3b82f6",
+        "Brouillon" or "ACreer" or "CreeeParSysteme" or "Archivee" => "#94a3b8",
+        "ACompleter" or "DocumentsDemandes" or "EnAttenteCorrection" or "ACorriger" or "APayer" or "Refusee" => "#f59e0b",
+        "EnCours" or "DocumentsRecus" => "#3b82f6",
         "EnPreparation" => "#8b5cf6",
-        "Completee"     => "#2563eb",
-        "EnRevision"    => "#a855f7",
-        "Validee"       => "#059669",
-        "Soumise"       => "#166534",
-        "Payee"         => "#047857",
-        "Refusee"       => "#ef4444",
-        "Deposee"       => "#059669",
-        _               => "#64748b"
+        "Completee" or "ControleEnCours" or "CalculTVA" => "#2563eb",
+        "EnRevision" or "EnRevueSuperviseur" => "#a855f7",
+        "Validee" or "Deposee" or "Rapprochee" => "#059669",
+        "Soumise" or "EnvoyeeSimplTva" or "Payee" or "Cloturee" => "#166534",
+        "Rejetee" => "#ef4444",
+        _ => "#64748b"
     };
     var statutIcon = statut switch {
-        "Brouillon"     => "bi-pencil",
-        "ACompleter"    => "bi-exclamation-circle",
-        "EnCours"       => "bi-arrow-repeat",
-        "Completee"     => "bi-check",
-        "EnRevision"    => "bi-search",
-        "Validee"       => "bi-check-circle",
-        "Soumise"       => "bi-send-fill",
-        "Payee"         => "bi-cash-coin",
-        "Refusee"       => "bi-x-circle",
-        "Deposee"       => "bi-send-fill",
-        _               => "bi-circle"
+        "Brouillon" or "CreeeParSysteme" => "bi-pencil",
+        "ACompleter" or "DocumentsDemandes" => "bi-exclamation-circle",
+        "EnCours" or "ControleEnCours" => "bi-arrow-repeat",
+        "DocumentsRecus" => "bi-folder-check",
+        "Completee" or "CalculTVA" => "bi-check",
+        "EnRevision" or "EnRevueSuperviseur" => "bi-search",
+        "Validee" => "bi-check-circle",
+        "Soumise" or "EnvoyeeSimplTva" or "Deposee" => "bi-send-fill",
+        "Payee" or "APayer" => "bi-cash-coin",
+        "Refusee" or "Rejetee" or "ACorriger" => "bi-x-circle",
+        "Rapprochee" => "bi-link-45deg",
+        "Archivee" or "Cloturee" => "bi-archive",
+        _ => "bi-circle"
     };
 
     // Step type label for context
     var stepLabel = hasCurrentStep ? stepType switch {
         "Initialisation"    => "Initialisation",
-        "DemandePieces"     => "Demande de piéces",
+        "DemandePieces"     => "Demande de pièces",
+        "Relance"           => "Relance documents",
         "Collecte"          => "Collecte documents",
-        "Saisie"            => "Saisie comptable",
-        "Controle"          => "Contrœle qualité",
+        "Saisie"            => "Saisie / Calcul",
+        "Controle"          => "Contrôle qualité",
         "ValidationInterne" => "Validation interne",
         "ValidationClient"  => "Validation client",
-        "DepotSoumission"   => "Dépœt / Soumission",
-        "ClotureArchivage"  => "Clœture & archivage",
+        "DepotSoumission"   => "Dépôt / Soumission",
+        "Paiement"          => "Paiement",
+        "Rapprochement"     => "Rapprochement",
+        "ClotureArchivage"  => "Clôture & archivage",
         _                   => wfStep.StepName
     } : "";
 
     // Who is expected to act?
     var actorLabel = hasCurrentStep ? stepAssignment switch {
         "Employee"   => wfStep.AssignedToUserName ?? "Employé cabinet",
-        "Role"       => "Rœle: " + (wfStep.AssignedToUserName ?? "Manager"),
+        "Role"       => "Rôle: " + (wfStep.AssignedToUserName ?? "Manager"),
         "Department" => "Département",
         "Client"     => "Client (Extranet)",
-        "AutoSystem" => "Systéme automatique",
+        "AutoSystem" => "Système automatique",
         _            => ""
     } : "";
 }
@@ -235,9 +302,10 @@
                 <div style="display:flex;align-items:center;gap:0.25rem;padding:0.2rem 0.55rem;border-radius:14px;font-size:0.68rem;
                     @(isClientStep ? "background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);color:#92400e;" :
                       isMyStep ? "background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);color:#166534;" :
+                      stepHeldByOther ? "background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);color:#92400e;" :
                       "background:rgba(100,116,139,0.06);border:1px solid rgba(100,116,139,0.15);color:#475569;")">
-                    <i class="bi @(isClientStep ? "bi-person-badge" : isMyStep ? "bi-person-check-fill" : "bi-person")" style="font-size:0.6rem;"></i>
-                    <span style="font-weight:600;">@(isMyStep && !isClientStep ? "Vous" : actorLabel)</span>
+                    <i class="bi @(isClientStep ? "bi-person-badge" : isMyStep ? "bi-lock-fill" : stepHeldByOther ? "bi-lock-fill" : "bi-person")" style="font-size:0.6rem;"></i>
+                    <span style="font-weight:600;">@(isMyStep && !isClientStep ? "À votre charge" : stepHeldByOther ? ("Verrouillée — " + (wfStep.AssignedToUserName ?? actorLabel)) : actorLabel)</span>
                 </div>
             }
         }
@@ -265,78 +333,15 @@
         }
     </div>
 
+
     <!-- BOTTOM ROW: Action Buttons -->
     <div style="display:flex; align-items:center; gap:0.4rem; padding:0.5rem 1.25rem; flex-wrap:wrap;">
 
-        @* === DECLARATION STATUS ACTIONS (step-aware) === *@
-
-        @if (canEdit)
-        {
-            var editAction = type switch {
-                "TVA"  => "EditTVA",
-                "IS"   => "EditIS",
-                "IR"   => "EditIR",
-                "CNSS" => "EditCNSS",
-                _      => "Details"
-            };
-            <a href="@Url.Action(editAction, "Declarations", new { id = declId })"
-               class="wf-btn wf-btn-edit" title="Modifier la déclaration">
-                <i class="bi bi-pencil-square"></i> <span>Modifier</span>
-            </a>
+        @{
+            ViewBag.StepWorkClaimController = "Declarations";
+            ViewBag.StepWorkClaimRedirectId = declId;
         }
-
-        @if (canComplete)
-        {
-            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Completee" />
-                <button type="submit" class="wf-btn wf-btn-complete" title="Marquer comme complétée">
-                    <i class="bi bi-check2-circle"></i> <span>Compléter</span>
-                </button>
-            </form>
-        }
-
-        @if (canValidate)
-        {
-            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Validee" />
-                <button type="submit" class="wf-btn wf-btn-validate" title="Valider la déclaration">
-                    <i class="bi bi-shield-check"></i> <span>Valider</span>
-                </button>
-            </form>
-        }
-
-        @if (canSubmit)
-        {
-            <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.Soumise" />
-                <button type="submit" class="wf-btn wf-btn-submit" title="Soumettre la déclaration">
-                    <i class="bi bi-send-fill"></i> <span>Soumettre</span>
-                </button>
-            </form>
-        }
-
-        @* === SEPARATOR === *@
-        @if ((canEdit || canComplete || canValidate || canSubmit) && (canAdvanceWf || canStartWf))
-        {
-            <div style="width:1px;height:22px;background:#cbd5e1;margin:0 0.15rem;"></div>
-        }
-
-        @* === WORKFLOW STEP ACTIONS === *@
-
-        @if (canAdvanceWf && wfInstance != null)
-        {
-            <form asp-action="AdvanceWorkflowStep" asp-controller="Declarations" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="declarationId" value="@declId" />
-                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
-                <button type="submit" class="wf-btn wf-btn-advance" title="Compléter l'étape et avancer le workflow">
-                    <i class="bi bi-skip-forward-fill"></i> <span>Avancer Étape</span>
-                </button>
-            </form>
-        }
+        @await Html.PartialAsync("_StepWorkActions")
 
         @if (canSkipWf && wfInstance != null)
         {
@@ -417,7 +422,6 @@
             </form>
         }
 
-        @* === RIGHT SIDE === *@
         <div class="ms-auto d-flex gap-1">
             @if (hasWorkflow && wfInstance != null)
             {
@@ -453,40 +457,17 @@
         display: inline-flex; align-items: center; gap: 0.25rem;
         padding: 0.25rem 0.55rem; border-radius: 14px;
         font-size: 0.7rem; font-weight: 600;
-        border: 1px solid transparent; cursor: pointer;
-        text-decoration: none; transition: all 0.15s ease;
-        white-space: nowrap; line-height: 1.3;
+        border: 1px solid var(--monday-border); cursor: pointer;
+        text-decoration: none; white-space: nowrap; line-height: 1.3;
+        background: var(--monday-bg); color: var(--monday-text);
     }
-    .wf-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-    .wf-btn i { font-size: 0.65rem; }
-
-    .wf-btn-edit      { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
-    .wf-btn-edit:hover { background:#fde68a; color:#78350f; }
-    .wf-btn-complete   { background:#dbeafe; color:#1e40af; border-color:#93c5fd; }
-    .wf-btn-complete:hover { background:#bfdbfe; }
-    .wf-btn-validate   { background:#d1fae5; color:#065f46; border-color:#6ee7b7; }
-    .wf-btn-validate:hover { background:#a7f3d0; }
-    .wf-btn-submit     { background:#dcfce7; color:#166534; border-color:#86efac; }
-    .wf-btn-submit:hover { background:#bbf7d0; }
-    .wf-btn-advance    { background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border-color:#7c3aed; }
-    .wf-btn-advance:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.3); }
-    .wf-btn-skip       { background:#f0f0f0; color:#64748b; border-color:#cbd5e1; }
-    .wf-btn-skip:hover { background:#e2e8f0; }
-    .wf-btn-pause      { background:#fef9c3; color:#854d0e; border-color:#fde047; }
-    .wf-btn-pause:hover { background:#fef08a; }
-    .wf-btn-resume     { background:#d1fae5; color:#065f46; border-color:#34d399; }
-    .wf-btn-resume:hover { background:#a7f3d0; }
-    .wf-btn-cancel     { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
-    .wf-btn-cancel:hover { background:#fecaca; }
-    .wf-btn-start      { background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border-color:#7c3aed; }
-    .wf-btn-start:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); color:#fff; }
-    .wf-btn-info       { background:#ede9fe; color:#5b21b6; border-color:#c4b5fd; }
-    .wf-btn-info:hover { background:#ddd6fe; }
-    .wf-btn-secondary  { background:#f1f5f9; color:#475569; border-color:#cbd5e1; }
-    .wf-btn-secondary:hover { background:#e2e8f0; }
-    .wf-btn-danger     { background:#fff; color:#dc2626; border-color:#fecaca; }
-    .wf-btn-danger:hover { background:#fef2f2; }
-
+    .wf-btn-edit { background: color-mix(in srgb, var(--monday-orange) 15%, var(--monday-surface)); color: var(--monday-orange); }
+    .wf-btn-complete { background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); color: var(--monday-blue); }
+    .wf-btn-validate, .wf-btn-submit, .wf-btn-resume { background: color-mix(in srgb, var(--monday-green) 12%, var(--monday-surface)); color: var(--monday-green); }
+    .wf-btn-advance, .wf-btn-start { background: var(--monday-blue); color: #fff; border-color: var(--monday-blue); }
+    .wf-btn-cancel, .wf-btn-danger { background: color-mix(in srgb, var(--monday-red) 10%, var(--monday-surface)); color: var(--monday-red); }
+    .wf-btn-pause { background: color-mix(in srgb, var(--monday-orange) 12%, var(--monday-surface)); color: var(--monday-orange); }
+    .wf-btn-skip { background: color-mix(in srgb, var(--monday-orange) 10%, var(--monday-surface)); color: var(--monday-orange); }
     @@media (max-width: 768px) {
         .wf-btn span { display: none; }
         .wf-btn { padding: 0.25rem 0.4rem; }

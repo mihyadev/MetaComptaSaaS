@@ -1,5 +1,7 @@
 using MetaCompta.Application.DTOs;
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -28,6 +30,7 @@ public class DepartmentsController : BaseController
     // LIST
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.DepartmentView)]
     public async Task<IActionResult> Index()
     {
         try
@@ -46,6 +49,7 @@ public class DepartmentsController : BaseController
     // DETAILS
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.DepartmentView)]
     public async Task<IActionResult> Details(int id)
     {
         var dept = await _departments.GetByIdAsync(id);
@@ -64,6 +68,7 @@ public class DepartmentsController : BaseController
     // ═══════════════════════════════════════════════════════════
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.DepartmentCreate)]
     public async Task<IActionResult> Create()
     {
         await LoadEmployeeDropdown();
@@ -72,6 +77,7 @@ public class DepartmentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DepartmentCreate)]
     public async Task<IActionResult> Create(DepartmentCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -97,6 +103,7 @@ public class DepartmentsController : BaseController
     // ═══════════════════════════════════════════════════════════
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.DepartmentEdit)]
     public async Task<IActionResult> Edit(int id)
     {
         var dept = await _departments.GetByIdAsync(id);
@@ -116,6 +123,7 @@ public class DepartmentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DepartmentEdit)]
     public async Task<IActionResult> Edit(int id, DepartmentCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -144,6 +152,7 @@ public class DepartmentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DepartmentDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var result = await _departments.DeleteAsync(id);
@@ -157,6 +166,7 @@ public class DepartmentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DepartmentManageMembers)]
     public async Task<IActionResult> AddMember(int departmentId, string userId, bool isLead = false)
     {
         var result = await _departments.AddMemberAsync(departmentId, userId, isLead);
@@ -166,6 +176,7 @@ public class DepartmentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DepartmentManageMembers)]
     public async Task<IActionResult> RemoveMember(int departmentId, string userId)
     {
         var result = await _departments.RemoveMemberAsync(departmentId, userId);

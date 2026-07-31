@@ -1,260 +1,79 @@
 @{
-    ViewData["Title"] = "Espace de travail";
+    ViewData["Title"] = "Accueil";
     Layout = "_Layout";
     var userName = ViewBag.UserName as string ?? "Utilisateur";
-    var userRole = ViewBag.UserRole as string ?? "";
-    var cabinetName = ViewBag.CabinetName as string ?? "";
+    var cabinetName = ViewBag.CabinetName as string ?? "Cabinet";
     var hasClient = (bool)(ViewBag.HasClient ?? false);
     var selectedClientName = ViewBag.SelectedClientName as string ?? "";
-    var isAdmin = userRole == "Gerant" || userRole == "Admin" || userRole == "SuperAdmin";
+    var hour = DateTime.Now.Hour;
+    var greeting = hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
 }
 
-<style>
-    .workspace-container {
-        min-height: calc(100vh - 120px);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem 1rem;
-    }
-    .workspace-header {
-        text-align: center;
-        margin-bottom: 2.5rem;
-    }
-    .workspace-header h2 {
-        font-weight: 700;
-        color: var(--mc-text);
-        margin-bottom: 0.5rem;
-        font-size: 1.8rem;
-    }
-    .workspace-header p {
-        color: var(--mc-text-secondary);
-        font-size: 0.95rem;
-    }
-    .workspace-cards {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2.5rem;
-        max-width: 1060px;
-        width: 100%;
-    }
-    @@media (max-width: 768px) {
-        .workspace-cards { grid-template-columns: 1fr; gap: 1.5rem; }
-    }
-    .ws-card {
-        background: var(--mc-card-bg);
-        border: 2px solid var(--mc-border);
-        border-radius: 20px;
-        padding: 2.25rem 2rem;
-        text-decoration: none !important;
-        color: inherit !important;
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        min-height: 380px;
-    }
-    .ws-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 16px 48px rgba(0,0,0,0.1);
-    }
-    .ws-card-client { border-color: rgba(245,158,11,0.25); }
-    .ws-card-client:hover { border-color: #f59e0b; box-shadow: 0 16px 48px rgba(245,158,11,0.18); }
-    .ws-card-cabinet { border-color: rgba(37,99,235,0.2); cursor: pointer; }
-    .ws-card-cabinet:hover { border-color: #2563eb; box-shadow: 0 16px 48px rgba(37,99,235,0.15); }
-    .ws-card-icon {
-        width: 64px;
-        height: 64px;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.6rem;
-        margin-bottom: 1.25rem;
-    }
-    .ws-card-client .ws-card-icon {
-        background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(234,88,12,0.12));
-        color: #f59e0b;
-    }
-    .ws-card-cabinet .ws-card-icon {
-        background: linear-gradient(135deg, rgba(37,99,235,0.1), rgba(99,102,241,0.1));
-        color: #2563eb;
-    }
-    .ws-card h4 { font-weight: 700; font-size: 1.15rem; margin-bottom: 0.4rem; }
-    .ws-card p.ws-desc { color: var(--mc-text-secondary); font-size: 0.82rem; line-height: 1.5; margin-bottom: 1rem; }
-    .ws-card-features {
-        list-style: none; padding: 0; margin: 0 0 1rem;
-        font-size: 0.8rem; color: var(--mc-text-secondary);
-    }
-    .ws-card-features li { padding: 0.2rem 0; display: flex; align-items: center; gap: 0.35rem; }
-    .ws-card-features li i { font-size: 0.65rem; opacity: 0.7; }
-    .ws-card-client .ws-card-features li i { color: #f59e0b; }
-    .ws-card-cabinet .ws-card-features li i { color: #2563eb; }
-    .ws-card-action {
-        margin-top: auto;
-        display: flex; align-items: center; justify-content: space-between;
-        padding-top: 0.75rem; border-top: 1px solid var(--mc-border);
-        font-weight: 600; font-size: 0.88rem;
-    }
-    .ws-card-client .ws-card-action { color: #f59e0b; }
-    .ws-card-cabinet .ws-card-action { color: #2563eb; }
+<div class="text-center mb-4">
+    <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2 mb-2">@cabinetName</span>
+    <h1 class="h2 fw-bold mb-1">@greeting, @userName</h1>
+    <p class="text-body-secondary mb-0">Où souhaitez-vous travailler&nbsp;?</p>
+</div>
 
-    /* ---- Client search inside card ---- */
-    .ws-client-search-box {
-        position: relative;
-        margin-bottom: 0.75rem;
-    }
-    .ws-client-search-box input {
-        width: 100%;
-        padding: 0.55rem 0.75rem 0.55rem 2.2rem;
-        border: 1.5px solid rgba(245,158,11,0.25);
-        border-radius: 10px;
-        font-size: 0.84rem;
-        outline: none;
-        background: var(--mc-body-bg);
-        color: var(--mc-text);
-        transition: border-color 0.2s;
-    }
-    .ws-client-search-box input:focus {
-        border-color: #f59e0b;
-        box-shadow: 0 0 0 3px rgba(245,158,11,0.1);
-    }
-    .ws-client-search-box .search-icon {
-        position: absolute;
-        left: 0.7rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #f59e0b;
-        font-size: 0.85rem;
-    }
-    .ws-client-results {
-        max-height: 220px;
-        overflow-y: auto;
-        border: 1px solid var(--mc-border);
-        border-radius: 10px;
-        background: var(--mc-card-bg);
-        display: none;
-        margin-bottom: 0.5rem;
-    }
-    .ws-client-results.show { display: block; }
-    .ws-cr-item {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        padding: 0.55rem 0.75rem;
-        cursor: pointer;
-        transition: background 0.15s;
-        font-size: 0.82rem;
-        border-bottom: 1px solid rgba(0,0,0,0.04);
-    }
-    .ws-cr-item:last-child { border-bottom: none; }
-    .ws-cr-item:hover { background: rgba(245,158,11,0.06); }
-    .ws-cr-item .cr-avatar {
-        width: 32px; height: 32px; border-radius: 8px;
-        background: linear-gradient(135deg, #fef3c7, #fde68a);
-        display: flex; align-items: center; justify-content: center;
-        color: #b45309; font-weight: 700; font-size: 0.72rem; flex-shrink: 0;
-    }
-    .ws-cr-item .cr-info { flex: 1; min-width: 0; }
-    .ws-cr-item .cr-info .cr-name { font-weight: 600; color: var(--mc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ws-cr-item .cr-info .cr-ice { font-size: 0.72rem; color: var(--mc-text-secondary); }
-    .ws-cr-item.active { background: rgba(245,158,11,0.1); border-left: 3px solid #f59e0b; }
-    .ws-client-active-pill {
-        display: inline-flex; align-items: center; gap: 0.35rem;
-        font-size: 0.78rem; padding: 0.3rem 0.7rem;
-        border-radius: 20px; font-weight: 500;
-        background: rgba(34,197,94,0.08); color: #16a34a; border: 1px solid rgba(34,197,94,0.2);
-        margin-bottom: 0.75rem;
-    }
-    .ws-client-none-pill {
-        display: inline-flex; align-items: center; gap: 0.35rem;
-        font-size: 0.78rem; padding: 0.3rem 0.7rem;
-        border-radius: 20px; font-weight: 500;
-        background: rgba(100,116,139,0.08); color: #64748b; border: 1px solid rgba(100,116,139,0.15);
-        margin-bottom: 0.75rem;
-    }
-    .ws-no-results { text-align: center; padding: 1rem; color: var(--mc-text-secondary); font-size: 0.82rem; }
-    .ws-loading { text-align: center; padding: 1rem; }
-</style>
+<div class="row g-4 justify-content-center">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 h-100 border-start border-4 border-warning" id="gwDossier">
+            <div class="card-body p-4">
+                <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis px-3 py-2 mb-3">
+                    <i class="bi bi-folder2-open me-1"></i>Dossier client
+                </span>
+                <h2 class="h4 fw-bold">Entrer dans un dossier</h2>
+                <p class="text-body-secondary">Recherchez un client, activez son contexte, puis ouvrez ses déclarations et missions.</p>
 
-<div class="workspace-container">
-    <div class="workspace-header">
-        <h2><i class="bi bi-grid-fill" style="color:var(--mc-primary); margin-right:0.5rem;"></i>Espace de travail</h2>
-        <p>Bonjour <strong>@userName</strong> — @cabinetName</p>
-        <p style="font-size:0.85rem; color:var(--mc-text-secondary); margin-top:-0.25rem;">
-            Choisissez votre espace pour commencer
-        </p>
-    </div>
-
-    <div class="workspace-cards">
-
-        <!-- ==================== CARD 1: DOSSIER CLIENT ==================== -->
-        <div class="ws-card ws-card-client">
-            <div class="ws-card-icon">
-                <i class="bi bi-folder-symlink-fill"></i>
-            </div>
-            <h4>Dossier Client</h4>
-            <p class="ws-desc">S&#233;lectionnez un client pour g&#233;rer sa comptabilit&#233;, d&#233;clarations fiscales, paie, juridique, documents et rapports.</p>
-
-            @if (hasClient)
-            {
-                <div class="ws-client-active-pill">
-                    <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
-                    Client actif : <strong>@selectedClientName</strong>
-                </div>
-            }
-
-            <!-- Client search embedded in card -->
-            <div class="ws-client-search-box">
-                <i class="bi bi-search search-icon"></i>
-                <input type="text" id="wsClientSearch" placeholder="Rechercher un client (nom, ICE)..." autocomplete="off" />
-            </div>
-            <div class="ws-client-results" id="wsClientResults"></div>
-
-            <ul class="ws-card-features">
-                <li><i class="bi bi-check-circle-fill"></i> Comptabilit&#233; (&#233;critures, journaux, grand livre)</li>
-                <li><i class="bi bi-check-circle-fill"></i> D&#233;clarations fiscales (TVA, IS, IR, CNSS)</li>
-                <li><i class="bi bi-check-circle-fill"></i> Social &amp; Paie (bulletins, employ&#233;s)</li>
-                <li><i class="bi bi-check-circle-fill"></i> Juridique &amp; &#201;tats financiers</li>
-                <li><i class="bi bi-check-circle-fill"></i> Documents, rapports &amp; &#233;ch&#233;ances</li>
-            </ul>
-            <div class="ws-card-action">
                 @if (hasClient)
                 {
-                    <a href="@Url.Action("Index", "Declarations")" style="color:#f59e0b; text-decoration:none; display:flex; align-items:center; gap:0.3rem;">
-                        <span>Ouvrir le dossier de @selectedClientName</span>
-                        <i class="bi bi-arrow-right-circle-fill" style="font-size:1.1rem;"></i>
+                    <div class="alert alert-success py-2 rounded-pill d-inline-flex align-items-center gap-2 mb-3">
+                        <span class="badge rounded-circle text-bg-success">&nbsp;</span>
+                        Client actif&nbsp;: <strong>@selectedClientName</strong>
+                    </div>
+                }
+
+                <div class="input-group mb-2">
+                    <span class="input-group-text bg-body-tertiary"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="wsClientSearch" placeholder="Nom, raison sociale ou ICE…" autocomplete="off" />
+                </div>
+                <div class="list-group shadow-sm rounded-3 d-none" id="wsClientResults" style="max-height:240px;overflow-y:auto;"></div>
+
+                @if (hasClient)
+                {
+                    <a class="btn btn-warning rounded-pill mt-3" href="@Url.Action("Index", "Declarations")">
+                        Ouvrir le dossier de @selectedClientName
+                        <i class="bi bi-arrow-right ms-1"></i>
                     </a>
                 }
                 else
                 {
-                    <span style="font-size:0.82rem; color:var(--mc-text-secondary);"><i class="bi bi-info-circle"></i> Recherchez et s&#233;lectionnez un client ci-dessus</span>
+                    <p class="small text-body-secondary mt-3 mb-0">
+                        <i class="bi bi-mouse me-1"></i>Cliquez un client pour ouvrir son dossier fiscal
+                    </p>
                 }
             </div>
         </div>
+    </div>
 
-        <!-- ==================== CARD 2: GESTION INTERNE CABINET ==================== -->
-        <a href="@Url.Action("Index", "Home")" class="ws-card ws-card-cabinet">
-            <div class="ws-card-icon">
-                <i class="bi bi-building-gear"></i>
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 h-100 border-start border-4 border-primary">
+            <div class="card-body p-4 d-flex flex-column">
+                <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2 mb-3">
+                    <i class="bi bi-building me-1"></i>Cabinet
+                </span>
+                <h2 class="h4 fw-bold">Gestion interne</h2>
+                <p class="text-body-secondary">Pilot, commercial, équipes, planification et pilotage du cabinet.</p>
+                <div class="bg-primary-subtle rounded-3 p-3 mb-3">
+                    <div class="fw-bold text-primary">@cabinetName</div>
+                    <div class="small text-body-secondary">Espace administration</div>
+                </div>
+                <a href="@Url.Action("EnterCabinet", "Home")" class="btn btn-primary rounded-pill mt-auto align-self-start">
+                    Accéder au cabinet
+                    <i class="bi bi-arrow-right ms-1"></i>
+                </a>
             </div>
-            <h4>Gestion Interne Cabinet</h4>
-            <p class="ws-desc">Administration du cabinet : gestion des clients, commercial, documents internes, workflow, planification, &#233;quipes et configuration.</p>
-            <ul class="ws-card-features">
-                <li><i class="bi bi-check-circle-fill"></i> Gestion clients &amp; commercial</li>
-                <li><i class="bi bi-check-circle-fill"></i> Documents &amp; mod&#232;les cabinet</li>
-                <li><i class="bi bi-check-circle-fill"></i> Planification &amp; workflow</li>
-                <li><i class="bi bi-check-circle-fill"></i> &#201;quipes, permissions &amp; r&#244;les</li>
-                <li><i class="bi bi-check-circle-fill"></i> Rapports cabinet &amp; configuration</li>
-            </ul>
-            <div class="ws-card-action">
-                <span>Acc&#233;der au cabinet</span>
-                <i class="bi bi-arrow-right-circle-fill" style="font-size:1.1rem;"></i>
-            </div>
-        </a>
-
+        </div>
     </div>
 </div>
 
@@ -267,7 +86,7 @@
 
     searchInput.addEventListener('focus', function() {
         if (searchInput.value.length > 0) {
-            resultsBox.classList.add('show');
+            resultsBox.classList.remove('d-none');
         } else {
             loadClients('');
         }
@@ -281,17 +100,17 @@
     });
 
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('.ws-card-client')) {
-            resultsBox.classList.remove('show');
+        if (!e.target.closest('#gwDossier')) {
+            resultsBox.classList.add('d-none');
         }
     });
 
     function loadClients(query) {
-        resultsBox.innerHTML = '<div class="ws-loading"><div class="spinner-border spinner-border-sm text-warning"></div></div>';
-        resultsBox.classList.add('show');
+        resultsBox.innerHTML = '<div class="list-group-item text-center text-body-secondary py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+        resultsBox.classList.remove('d-none');
         $.get('@Url.Action("SearchClients", "Clients")', { q: query }, function(data) {
             if (!data || data.length === 0) {
-                resultsBox.innerHTML = '<div class="ws-no-results"><i class="bi bi-search"></i> Aucun client trouv&#233;</div>';
+                resultsBox.innerHTML = '<div class="list-group-item text-center text-body-secondary">Aucun client trouvé</div>';
                 return;
             }
             var currentId = '@(ViewBag.HasClient == true ? Context.Session.GetString("SelectedClientId") : "")';
@@ -299,15 +118,15 @@
             data.forEach(function(c) {
                 var initials = (c.raisonSociale || '??').substring(0, 2).toUpperCase();
                 var isActive = c.id.toString() === currentId;
-                html += '<div class="ws-cr-item ' + (isActive ? 'active' : '') + '" data-id="' + c.id + '" data-name="' + (c.raisonSociale || '').replace(/"/g, '&quot;') + '">';
-                html += '<div class="cr-avatar">' + initials + '</div>';
-                html += '<div class="cr-info"><div class="cr-name">' + c.raisonSociale + '</div>';
-                html += '<div class="cr-ice">' + (c.ice || '') + (c.formeJuridique ? ' &#8212; ' + c.formeJuridique : '') + '</div></div>';
-                if (isActive) html += '<i class="bi bi-check-circle-fill" style="color:#f59e0b;"></i>';
-                html += '</div>';
+                html += '<button type="button" class="list-group-item list-group-item-action d-flex align-items-center gap-3' + (isActive ? ' active' : '') + '" data-id="' + c.id + '" data-name="' + (c.raisonSociale || '').replace(/"/g, '&quot;') + '">';
+                html += '<span class="badge rounded-circle text-bg-primary">' + initials + '</span>';
+                html += '<span class="flex-grow-1 text-start"><span class="fw-semibold d-block">' + c.raisonSociale + '</span>';
+                html += '<span class="small opacity-75">' + (c.ice || '') + (c.formeJuridique ? ' — ' + c.formeJuridique : '') + '</span></span>';
+                if (isActive) html += '<i class="bi bi-check-circle-fill"></i>';
+                html += '</button>';
             });
             resultsBox.innerHTML = html;
-            resultsBox.querySelectorAll('.ws-cr-item').forEach(function(item) {
+            resultsBox.querySelectorAll('[data-id]').forEach(function(item) {
                 item.addEventListener('click', function() {
                     var id = item.dataset.id;
                     var name = item.dataset.name;
@@ -319,7 +138,6 @@
         });
     }
 
-    // Auto-load clients on page load so the list is ready
     loadClients('');
 })();
 </script>

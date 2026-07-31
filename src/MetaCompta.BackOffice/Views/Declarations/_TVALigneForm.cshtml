@@ -1,0 +1,78 @@
+@{
+    var declarationId = (int)(ViewData["DeclarationId"] ?? 0);
+    var typeOperation = ViewData["TypeOperation"]?.ToString() ?? "Vente";
+    var partnerLabel = ViewData["PartnerLabel"]?.ToString() ?? "Client / Fournisseur";
+    var submitLabel = ViewData["SubmitLabel"]?.ToString() ?? "Ajouter la ligne";
+    var submitClass = ViewData["SubmitClass"]?.ToString() ?? "btn-success";
+}
+
+<form asp-action="AddTVALigne" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="declarationId" value="@declarationId" />
+    <input type="hidden" name="TypeOperation" value="@typeOperation" />
+    <div class="row g-2">
+        <div class="col-md-2">
+            <label class="form-label small">Type Pièce</label>
+            <select name="TypePiece" class="form-select form-select-sm">
+                <option value="Facture">Facture</option>
+                <option value="Avoir">Avoir</option>
+                <option value="AutoFacture">Auto-Facture</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">N° Facture</label>
+            <input name="NumeroFacture" class="form-control form-control-sm" placeholder="FAC-001" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Date</label>
+            <input name="DateFacture" type="date" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">@partnerLabel</label>
+            <input name="FournisseurClient" class="form-control form-control-sm" placeholder="Nom" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">ICE @partnerLabel</label>
+            <input name="ICE" class="form-control form-control-sm" placeholder="ICE 15 chiffres" maxlength="15" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">IF</label>
+            <input name="IdentifiantFiscal" class="form-control form-control-sm" placeholder="IF" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Description</label>
+            <input name="Description" class="form-control form-control-sm" placeholder="Libellé opération" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Montant HT</label>
+            <input name="MontantHT" type="number" step="0.01" class="form-control form-control-sm" required />
+        </div>
+        <div class="col-md-1">
+            <label class="form-label small">Taux %</label>
+            <select name="TauxTVA" class="form-select form-select-sm">
+                <option value="20">20%</option>
+                <option value="14">14%</option>
+                <option value="10">10%</option>
+                <option value="7">7%</option>
+                <option value="0">0%</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Régime</label>
+            <select name="Regime" class="form-select form-select-sm">
+                <option value="Encaissement">Encaissement</option>
+                <option value="Debit">Débit</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <span class="badge @(typeOperation == "Vente" ? "bg-danger" : "bg-success") rounded-pill w-100 py-2">
+                @(typeOperation == "Vente" ? "Vente → TVA Facturée" : "Achat → TVA Déductible")
+            </span>
+        </div>
+        <div class="col-12 text-end mt-2">
+            <button type="submit" class="btn @submitClass rounded-pill px-4">
+                <i class="bi bi-plus-lg me-1"></i>@submitLabel
+            </button>
+        </div>
+    </div>
+</form>

@@ -1,4 +1,4 @@
-﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DocumentDto>
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DocumentDto>
 @{
     ViewData["Title"] = "Documents";
     var categorie = ViewBag.Categorie as string;
@@ -46,7 +46,7 @@
                 <input type="text" name="search" class="form-control" placeholder="Nom du document..." value="@ViewBag.Search" />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>
@@ -101,11 +101,14 @@
                                 </td>
                                 <td>
                                     <a href="@Url.Action("Details", "Documents", new { id = doc.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
-                                    <form method="post" action="@Url.Action("ToggleShare", "Documents")" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@doc.Id" />
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Basculer partage"><i class="bi bi-share"></i></button>
-                                    </form>
+                                    @if (ViewBag.CanDocumentShare as bool? ?? false)
+                                    {
+                                        <form method="post" action="@Url.Action("ToggleShare", "Documents")" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@doc.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Basculer partage"><i class="bi bi-share"></i></button>
+                                        </form>
+                                    }
                                 </td>
                             </tr>
                         }

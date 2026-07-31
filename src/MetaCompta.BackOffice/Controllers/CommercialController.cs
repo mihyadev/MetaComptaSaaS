@@ -1,4 +1,5 @@
 using MetaCompta.Application.DTOs;
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -13,16 +14,32 @@ public class CommercialController : BaseController
 {
     private readonly ICommercialFacade _commercial;
     private readonly IClientFacade _clients;
+    private readonly ICabinetFacade _cabinet;
 
     public CommercialController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         ICommercialFacade commercial,
-        IClientFacade clients)
+        IClientFacade clients,
+        ICabinetFacade cabinet)
         : base(referenceData, contextAccessor)
     {
         _commercial = commercial;
         _clients = clients;
+        _cabinet = cabinet;
+    }
+
+    private async Task LoadEmployeesAsync()
+    {
+        try
+        {
+            var employees = await _cabinet.GetEmployeesAsync(page: 1, pageSize: 200);
+            ViewBag.Employees = employees?.Items ?? new List<CabinetEmployeeDto>();
+        }
+        catch
+        {
+            ViewBag.Employees = new List<CabinetEmployeeDto>();
+        }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -33,6 +50,7 @@ public class CommercialController : BaseController
     /// Returns the active ServiceContrat list for a given client (used in line dropdowns).
     /// </summary>
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> GetClientServices(int clientId)
     {
         if (clientId <= 0)
@@ -49,6 +67,7 @@ public class CommercialController : BaseController
     //  DASHBOARD COMMERCIAL
     // ════════════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> Index()
     {
         var dashboard = await _commercial.GetDashboardAsync();
@@ -59,6 +78,7 @@ public class CommercialController : BaseController
     //  DEVIS
     // ════════════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> Devis(int page = 1, int? clientId = null, string? statut = null)
     {
         var result = await _commercial.GetDevisAsync(clientId, statut, page);
@@ -68,6 +88,7 @@ public class CommercialController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> DevisDetails(int id)
     {
         var devis = await _commercial.GetDevisByIdAsync(id);
@@ -80,6 +101,7 @@ public class CommercialController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> DevisCreate()
     {
         var clients = await _clients.GetAllForDropdownAsync();
@@ -92,6 +114,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> DevisCreate(DevisCreateDto dto)
     {
         var result = await _commercial.CreateDevisAsync(dto);
@@ -110,6 +133,7 @@ public class CommercialController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> DevisEdit(int id)
     {
         var devis = await _commercial.GetDevisByIdAsync(id);
@@ -164,6 +188,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> DevisEdit(int id, DevisCreateDto dto)
     {
         var result = await _commercial.UpdateDevisAsync(id, dto);
@@ -179,6 +204,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> DevisSoumettre(int id)
     {
         var result = await _commercial.SoumettreDevisAsync(id);
@@ -187,6 +213,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> DevisApprouver(int id)
     {
         var result = await _commercial.ApprouverDevisAsync(id);
@@ -195,6 +222,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> DevisRejeter(int id, string motif)
     {
         var result = await _commercial.RejeterDevisAsync(id, motif);
@@ -203,6 +231,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> DevisDupliquer(int id)
     {
         var result = await _commercial.DupliquerDevisAsync(id);
@@ -216,6 +245,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialConvert)]
     public async Task<IActionResult> DevisConvertir(int id)
     {
         var result = await _commercial.ConvertirDevisAsync(id);
@@ -229,6 +259,7 @@ public class CommercialController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialConvert)]
     public async Task<IActionResult> DevisConvertirEnContrat(int id)
     {
         var devis = await _commercial.GetDevisByIdAsync(id);
@@ -238,10 +269,7 @@ public class CommercialController : BaseController
             return RedirectToAction("Devis");
         }
         ViewBag.Devis = devis;
-
-        // Charger tous les services actifs de tous les clients (liste plate, cohérente avec DevisCreate)
-        var clients = await _clients.GetAllForDropdownAsync();
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
+        await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
 
         return View(new ConvertDevisEnContratDto
         {
@@ -252,6 +280,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialConvert)]
     public async Task<IActionResult> DevisConvertirEnContrat(ConvertDevisEnContratDto dto)
     {
         var result = await _commercial.ConvertirDevisEnContratAsync(dto.DevisId, dto);
@@ -265,6 +294,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialDelete)]
     public async Task<IActionResult> DevisSupprimer(int id)
     {
         var result = await _commercial.DeleteDevisAsync(id);
@@ -276,6 +306,7 @@ public class CommercialController : BaseController
     //  BONS DE COMMANDE
     // ════════════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> BonsCommande(int page = 1, int? clientId = null, string? statut = null)
     {
         var result = await _commercial.GetBonsCommandeAsync(clientId, statut, page);
@@ -285,6 +316,7 @@ public class CommercialController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> BonCommandeDetails(int id)
     {
         var bc = await _commercial.GetBonCommandeByIdAsync(id);
@@ -297,6 +329,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> BonCommandeConfirmer(int id)
     {
         var result = await _commercial.ConfirmerBonCommandeAsync(id);
@@ -305,6 +338,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> BonCommandeApprouver(int id)
     {
         var result = await _commercial.ApprouverBonCommandeAsync(id);
@@ -313,6 +347,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> BonCommandeDupliquer(int id)
     {
         var result = await _commercial.DupliquerBonCommandeAsync(id);
@@ -326,6 +361,7 @@ public class CommercialController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialConvert)]
     public async Task<IActionResult> BonCommandeConvertir(int id)
     {
         var bc = await _commercial.GetBonCommandeByIdAsync(id);
@@ -335,10 +371,7 @@ public class CommercialController : BaseController
             return RedirectToAction("BonsCommande");
         }
         ViewBag.BonCommande = bc;
-
-        // Charger tous les services actifs de tous les clients (liste plate, cohérente avec DevisCreate)
-        var clients = await _clients.GetAllForDropdownAsync();
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
+        await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
 
         return View(new ConvertBonCommandeEnContratDto
         {
@@ -349,6 +382,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialConvert)]
     public async Task<IActionResult> BonCommandeConvertir(ConvertBonCommandeEnContratDto dto)
     {
         var result = await _commercial.ConvertirBonCommandeAsync(dto);
@@ -365,6 +399,7 @@ public class CommercialController : BaseController
     //  CONTRATS
     // ════════════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> Contrats(int page = 1, int? clientId = null, string? statut = null)
     {
         var result = await _commercial.GetContratsAsync(clientId, statut, page);
@@ -374,6 +409,7 @@ public class CommercialController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.CommercialDetail)]
     public async Task<IActionResult> ContratDetails(int id)
     {
         var contrat = await _commercial.GetContratByIdAsync(id);
@@ -382,27 +418,42 @@ public class CommercialController : BaseController
             TempData["Error"] = "Contrat introuvable.";
             return RedirectToAction("Contrats");
         }
+        await LoadEmployeesAsync();
         return View(contrat);
     }
 
+    [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
+    public async Task<IActionResult> ContratEquipe(int id, ContratEquipeUpdateDto dto)
+    {
+        var result = await _commercial.UpdateContratEquipeAsync(id, dto);
+        if (result?.Success == true)
+            TempData["Success"] = "Équipe du contrat mise à jour.";
+        else
+            SetApiError(result, "Impossible de mettre à jour l'équipe.");
+        return RedirectToAction("ContratDetails", new { id });
+    }
+
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> ContratCreate()
     {
         var clients = await _clients.GetAllForDropdownAsync();
         ViewBag.Clients = clients;
+        await LoadEmployeesAsync();
         await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
-
-        // Charger tous les services de tous les clients (avec statut actif/inactif)
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
 
         return View(new ContratCommercialCreateDto
         {
             DateDebutContrat = DateTime.UtcNow.Date,
+            DateFinContrat = new DateTime(DateTime.UtcNow.Year, 12, 31),
+            Devise = "MAD",
             ModeleFacturation = "Forfait"
         });
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> ContratCreate(ContratCommercialCreateDto dto)
     {
         var result = await _commercial.CreateContratAsync(dto);
@@ -415,13 +466,14 @@ public class CommercialController : BaseController
 
         var clients = await _clients.GetAllForDropdownAsync();
         ViewBag.Clients = clients;
+        await LoadEmployeesAsync();
         await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
 
         return View(dto);
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> ContratEdit(int id)
     {
         var contrat = await _commercial.GetContratByIdAsync(id);
@@ -438,8 +490,8 @@ public class CommercialController : BaseController
 
         var clients = await _clients.GetAllForDropdownAsync();
         ViewBag.Clients = clients;
+        await LoadEmployeesAsync();
         await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
 
         var dto = new ContratCommercialCreateDto
         {
@@ -451,9 +503,16 @@ public class CommercialController : BaseController
             DateFinContrat = contrat.DateFinContrat,
             ModeleFacturation = contrat.ModeleFacturation,
             FrequenceFacturation = contrat.FrequenceFacturation,
-            ClausesSpecifiques = contrat.Lignes.Any() ? null : null,
             ConditionsParticulieres = null,
             Notes = contrat.Notes,
+            ResponsableId = null,
+            Membres = contrat.Membres?.Select(m => new ContratMembreInputDto
+            {
+                UserId = m.UserId,
+                RoleLabel = m.RoleLabel
+            }).ToList() ?? new List<ContratMembreInputDto>(),
+            MembreIds = contrat.Membres?.Select(m => m.UserId).ToList() ?? new List<string>(),
+            ServicesActives = contrat.ServicesActives,
             Lignes = contrat.Lignes.Select(l => new LigneDocumentCommercialCreateDto
             {
                 TypeLigne = l.TypeLigne,
@@ -468,7 +527,8 @@ public class CommercialController : BaseController
                 PrixUnitaireHT = l.PrixUnitaireHT,
                 RemisePourcentage = l.RemisePourcentage,
                 RemiseMontant = l.RemiseMontant,
-                TauxTVA = l.TauxTVA
+                TauxTVA = l.TauxTVA,
+                ModeFacturation = l.ModeFacturation
             }).ToList()
         };
         ViewBag.ContratId = id;
@@ -476,6 +536,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> ContratEdit(int id, ContratCommercialCreateDto dto)
     {
         var result = await _commercial.UpdateContratAsync(id, dto);
@@ -488,13 +549,14 @@ public class CommercialController : BaseController
 
         var clients = await _clients.GetAllForDropdownAsync();
         ViewBag.Clients = clients;
+        await LoadEmployeesAsync();
         await LoadReferenceDataToViewBagAsync("TYPE_SERVICE");
-        ViewBag.ClientServices = await LoadAllClientServicesAsync(clients);
         ViewBag.ContratId = id;
         return View("ContratCreate", dto);
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialSign)]
     public async Task<IActionResult> ContratSigner(int id, ContratSignatureDto dto)
     {
         var result = await _commercial.SignerContratAsync(id, dto);
@@ -503,6 +565,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialValidate)]
     public async Task<IActionResult> ContratValider(int id)
     {
         var result = await _commercial.ValiderContratAsync(id);
@@ -511,6 +574,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> ContratSuspendre(int id)
     {
         var result = await _commercial.SuspendreContratAsync(id);
@@ -519,6 +583,16 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
+    public async Task<IActionResult> ContratReactiver(int id)
+    {
+        var result = await _commercial.ReactiverContratAsync(id);
+        SetApiResult(result, "Contrat réactivé et services restaurés.", "Erreur lors de la réactivation.");
+        return RedirectToAction("ContratDetails", new { id });
+    }
+
+    [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> ContratTerminer(int id)
     {
         var result = await _commercial.TerminerContratAsync(id);
@@ -527,6 +601,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
     public async Task<IActionResult> ContratDupliquer(int id)
     {
         var result = await _commercial.DupliquerContratAsync(id);
@@ -543,6 +618,7 @@ public class CommercialController : BaseController
     //  FACTURES
     // ════════════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.FactureDetail)]
     public async Task<IActionResult> Factures(int page = 1, int? clientId = null, string? statut = null)
     {
         var result = await _commercial.GetFacturesAsync(clientId, statut, page);
@@ -552,6 +628,7 @@ public class CommercialController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.FactureDetail)]
     public async Task<IActionResult> FactureDetails(int id)
     {
         var facture = await _commercial.GetFactureByIdAsync(id);
@@ -564,6 +641,7 @@ public class CommercialController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.FactureCreate)]
     public async Task<IActionResult> FactureCreate(int? contratId = null)
     {
         // Mode contrat : facture depuis un contrat existant
@@ -599,6 +677,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.FactureCreate)]
     public async Task<IActionResult> FactureCreate(FactureCreateDto dto)
     {
         var result = await _commercial.CreateFactureAsync(dto);
@@ -634,6 +713,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.FactureSend)]
     public async Task<IActionResult> FactureEnvoyer(int id)
     {
         var result = await _commercial.EnvoyerFactureAsync(id);
@@ -642,6 +722,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.FactureCancel)]
     public async Task<IActionResult> FactureAnnuler(int id)
     {
         var result = await _commercial.AnnulerFactureAsync(id);
@@ -650,6 +731,7 @@ public class CommercialController : BaseController
     }
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.FactureCreate)]
     public async Task<IActionResult> FactureDupliquer(int id)
     {
         var result = await _commercial.DupliquerFactureAsync(id);
@@ -667,6 +749,7 @@ public class CommercialController : BaseController
     // ════════════════════════════════════════════════════════════════
 
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.FactureManagePayments)]
     public async Task<IActionResult> EnregistrerPaiement(int factureId, PaiementCreateDto dto)
     {
         dto.FactureId = factureId;

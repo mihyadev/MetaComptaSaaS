@@ -1,6 +1,9 @@
 ﻿@model BonCommandeDto
 @{
     ViewData["Title"] = $"Bon de Commande {Model.Reference}";
+    var canCommercialValidate = ViewBag.CanCommercialValidate as bool? ?? false;
+    var canCommercialConvert = ViewBag.CanCommercialConvert as bool? ?? false;
+    var canCommercialCreate = ViewBag.CanCommercialCreate as bool? ?? false;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -9,25 +12,28 @@
         <p class="text-muted mb-0">@Model.ClientName — Depuis devis <code>@Model.DevisReference</code></p>
     </div>
     <div class="d-flex gap-2">
-        @if (Model.Statut == RefCodes.StatutBonCommande.Brouillon)
+        @if (Model.Statut == RefCodes.StatutBonCommande.Brouillon && canCommercialValidate)
         {
             <form asp-action="BonCommandeConfirmer" asp-route-id="@Model.Id" method="post" class="d-inline">
                 <button type="submit" class="btn btn-info rounded-pill text-white"><i class="bi bi-check me-1"></i>Confirmer</button>
             </form>
         }
-        @if (Model.Statut == RefCodes.StatutBonCommande.Confirme)
+        @if (Model.Statut == RefCodes.StatutBonCommande.Confirme && canCommercialValidate)
         {
             <form asp-action="BonCommandeApprouver" asp-route-id="@Model.Id" method="post" class="d-inline">
                 <button type="submit" class="btn btn-success rounded-pill"><i class="bi bi-check-circle me-1"></i>Approuver</button>
             </form>
         }
-        @if (Model.Statut == RefCodes.StatutBonCommande.Approuve)
+        @if (Model.Statut == RefCodes.StatutBonCommande.Approuve && canCommercialConvert)
         {
             <a asp-action="BonCommandeConvertir" asp-route-id="@Model.Id" class="btn btn-primary rounded-pill"><i class="bi bi-arrow-right-circle me-1"></i>Convertir en Contrat</a>
         }
-        <form asp-action="BonCommandeDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
-            <button type="submit" class="btn btn-outline-info rounded-pill"><i class="bi bi-copy me-1"></i>Dupliquer</button>
-        </form>
+        @if (canCommercialCreate)
+        {
+            <form asp-action="BonCommandeDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
+                <button type="submit" class="btn btn-outline-info rounded-pill"><i class="bi bi-copy me-1"></i>Dupliquer</button>
+            </form>
+        }
         <a asp-action="BonsCommande" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-left me-1"></i>Retour</a>
     </div>
 </div>

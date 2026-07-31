@@ -1,210 +1,872 @@
+@using MetaCompta.Application.DTOs
+@using System.Text.Json
 @{
-    ViewData["Title"] = "Planning";
-    var clients = ViewBag.Clients as IEnumerable<MetaCompta.Application.DTOs.ClientDto>;
+    ViewData["Title"] = ViewBag.IsClientSpace == true ? "Planning client" : "Planning";
+    var clients     = ViewBag.Clients     as IEnumerable<ClientDto>          ?? new List<ClientDto>();
+    var events      = ViewBag.Events      as List<PlanningEventDto>          ?? new List<PlanningEventDto>();
+    var myTasks     = ViewBag.MyTasks     as List<TaskItemDto>               ?? new List<TaskItemDto>();
+    var teamTasks   = ViewBag.TeamTasks   as List<TaskItemDto>               ?? new List<TaskItemDto>();
+    var employees   = ViewBag.Employees   as List<CabinetEmployeeDto>        ?? new List<CabinetEmployeeDto>();
+    var weekStart   = (DateTime)(ViewBag.WeekStart       ?? DateTime.Today);
+    var userName    = (string)  (ViewBag.UserDisplayName ?? "Vous");
+    var currentUid  = (string?) ViewBag.CurrentUserId;
+    var isClientSpace = ViewBag.IsClientSpace == true;
+    var selectedClientName = ViewBag.SelectedClientName as string;
+    var lockedClientId = ViewBag.ClientId as int?;
+
+    var today = DateTime.Today;
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    string Initials(string? full)
+    {
+        if (string.IsNullOrWhiteSpace(full)) return "··";
+        var parts = full.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpper();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpper();
+    }
+    string AvatarColor(string? key)
+    {
+        var palette = new[] { "#6366f1","#06b6d4","#f59e0b","#ec4899","#10b981","#8b5cf6","#ef4444","#0ea5e9","#84cc16","#f43f5e" };
+        var h = (key ?? "").Aggregate(0, (a, c) => a + c);
+        return palette[Math.Abs(h) % palette.Length];
+    }
+    string PriorityColor(string? p) => p switch {
+        "Haute"  or "High"   => "#ef4444",
+        "Moyenne"or "Medium" => "#f59e0b",
+        "Basse"  or "Low"    => "#10b981",
+        _ => "#64748b"
+    };
+    string StatutBadge(string? s) => s switch {
+        "AFaire"     => "<span class='mc-badge bg-secondary-subtle text-secondary'>À faire</span>",
+        "EnCours"    => "<span class='mc-badge bg-primary-subtle text-primary'>En cours</span>",
+        "Termine"    => "<span class='mc-badge bg-success-subtle text-success'>Terminé</span>",
+        "EnAttente"  => "<span class='mc-badge bg-warning-subtle text-warning'>En attente</span>",
+        "Bloque"     => "<span class='mc-badge bg-danger-subtle text-danger'>Bloqué</span>",
+        _ => $"<span class='mc-badge bg-light text-dark'>{s}</span>"
+    };
+    string EventColor(string? t) => t switch {
+        "EcheanceFiscale" => "#ef4444",
+        "Reunion"         => "#3b82f6",
+        "Tache"           => "#8b5cf6",
+        "Rappel"          => "#f59e0b",
+        _ => "#64748b"
+    };
+
+    // ── KPIs ───────────────────────────────────────────────────────────────────
+    var todayEvents  = events.Where(e => e.DateDebut.Date == today).OrderBy(e => e.DateDebut).ToList();
+    var activeMine   = myTasks.Where(t => t.Statut != "Termine" && t.Statut != "Annule").ToList();
+    var activeTeam   = teamTasks.Where(t => t.Statut != "Termine" && t.Statut != "Annule").ToList();
+    var overdueMine  = activeMine.Where(t => t.DateEcheance.HasValue && t.DateEcheance.Value.Date < today).ToList();
+    var dueSoonMine  = activeMine.Where(t => t.DateEcheance.HasValue && t.DateEcheance.Value.Date >= today && t.DateEcheance.Value.Date <= today.AddDays(3)).ToList();
+    var workflowOpen = activeMine.Where(t => t.IsWorkflowTask).Count();
+
+    // Active dossiers (grouped by declaration) — pulled from team active tasks so the user sees ALL files
+    var activeDossiers = activeTeam
+        .Where(t => t.DeclarationId.HasValue)
+        .GroupBy(t => t.DeclarationId!.Value)
+        .Select(g => new {
+            DeclId      = g.Key,
+            ClientName  = g.First().ClientName,
+            DeclType    = g.First().DeclarationType,
+            DeclPeriode = g.First().DeclarationPeriode,
+            DeclStatut  = g.First().DeclarationStatut,
+            CurrentStep = g.OrderByDescending(t => t.WorkflowStepOrder ?? 0).FirstOrDefault(),
+            Total       = g.Count(),
+            Done        = g.Count(t => t.Statut == "Termine"),
+            NextDue     = g.Where(t => t.DateEcheance.HasValue).Min(t => (DateTime?)t.DateEcheance!.Value),
+            MineCount   = g.Count(t => t.AssigneA == userName) // best-effort flag
+        })
+        .OrderBy(d => d.NextDue ?? DateTime.MaxValue)
+        .Take(12)
+        .ToList();
+
+    // ── Board: 14-day horizon for swimlane ─────────────────────────────────────
+    var boardStart = today;
+    var boardDays  = Enumerable.Range(0, 14).Select(i => boardStart.AddDays(i)).ToList();
+
+    // Group team tasks into one row per assignee
+    var teamLanes = activeTeam
+        .GroupBy(t => t.AssigneA ?? "Non assigné")
+        .Select(g => new { Assignee = g.Key, Tasks = g.OrderBy(t => t.DateEcheance ?? DateTime.MaxValue).ToList() })
+        .OrderByDescending(g => g.Assignee == userName)
+        .ThenBy(g => g.Assignee)
+        .ToList();
+
+    // Group team tasks into one row per client (top 12)
+    var clientLanes = activeTeam
+        .Where(t => t.ClientId.HasValue)
+        .GroupBy(t => new { t.ClientId, t.ClientName })
+        .Select(g => new { ClientId = g.Key.ClientId, ClientName = g.Key.ClientName ?? "Client", Tasks = g.OrderBy(t => t.DateEcheance ?? DateTime.MaxValue).ToList() })
+        .OrderByDescending(g => g.Tasks.Count)
+        .Take(12)
+        .ToList();
+
+    var mineLane = activeMine.OrderBy(t => t.DateEcheance ?? DateTime.MaxValue).ToList();
+
+    // ── JSON-ready lane projections ────────────────────────────────────────────
+    var laneTaskProj = (IEnumerable<TaskItemDto> ts) => ts.Select(t => new {
+        id = t.Id, titre = t.Titre, due = t.DateEcheance, prio = t.Priorite,
+        client = t.ClientName, assignee = t.AssigneA
+    });
+
+    var lanesMineJs = new[] {
+        new {
+            key = currentUid ?? "me", label = userName, sub = $"{activeMine.Count} tâches",
+            color = AvatarColor(currentUid), initials = Initials(userName), badge = (string?)null,
+            link = (string?)null, kind = "user",
+            tasks = laneTaskProj(activeMine)
+        }
+    };
+    var lanesTeamJs = activeTeam
+        .GroupBy(t => t.AssigneA ?? "Non assigné")
+        .OrderByDescending(g => g.Key == userName).ThenBy(g => g.Key)
+        .Select(g => new {
+            key = g.Key, label = g.Key, sub = $"{g.Count()} tâches",
+            color = AvatarColor(g.Key), initials = Initials(g.Key),
+            badge = g.Key == userName ? "vous" : null, link = (string?)null, kind = "user",
+            tasks = laneTaskProj(g)
+        }).ToList();
+    var lanesClientJs = activeTeam.Where(t => t.ClientId.HasValue)
+        .GroupBy(t => new { t.ClientId, t.ClientName })
+        .OrderByDescending(g => g.Count()).Take(15)
+        .Select(g => new {
+            key = $"c{g.Key.ClientId}", label = g.Key.ClientName ?? "Client",
+            sub = $"{g.Count()} tâches", color = AvatarColor(g.Key.ClientName),
+            initials = "", badge = (string?)null,
+            link = $"/Clients/Details/{g.Key.ClientId}", kind = "client",
+            tasks = laneTaskProj(g)
+        }).ToList();
+    var lanesDossJs = activeTeam.Where(t => t.DeclarationId.HasValue)
+        .GroupBy(t => t.DeclarationId!.Value)
+        .OrderByDescending(g => g.Count()).Take(15)
+        .Select(g => new {
+            key = $"d{g.Key}",
+            label = $"{g.First().DeclarationType} · {g.First().ClientName}",
+            sub = $"{g.First().DeclarationPeriode} — {g.Count()} tâches",
+            color = AvatarColor(g.First().DeclarationType),
+            initials = "", badge = (string?)null,
+            link = $"/Declarations/Details/{g.Key}", kind = "doss",
+            tasks = laneTaskProj(g)
+        }).ToList();
 }
 
-<div class="page-header">
-    <div>
-        <h2><i class="bi bi-calendar3 me-2"></i>Planning</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
-                <li class="breadcrumb-item active">Planning</li>
-            </ol>
-        </nav>
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalEvent">
-            <i class="bi bi-plus-circle me-1"></i> Nouvel événement
-        </button>
-    </div>
-</div>
+@section Styles {
+<style>
+.pl-shell { --pl-radius: 12px; }
+.pl-hero {
+    position: relative; border-radius: 16px; padding: 1.75rem 2rem; color: #fff; overflow: hidden;
+    background: var(--monday-blue);
+    box-shadow: var(--monday-shadow-lg);
+}
+.pl-hero h1 { font-weight: 800; letter-spacing: -.02em; margin: 0; font-size: 1.85rem; }
+.pl-hero .pl-sub { opacity: .85; font-size: .95rem; margin-top: .15rem; }
+.pl-kpi {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 12px; padding: .85rem 1rem; color: #fff;
+}
+.pl-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; opacity: .78; }
+.pl-kpi .val { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.pl-kpi .sub { font-size: .72rem; opacity: .7; margin-top: .15rem; }
+.pl-segmented { display: inline-flex; background: var(--monday-bg); border-radius: 12px; padding: 4px; gap: 2px; border: 1px solid var(--monday-border); }
+.pl-segmented button {
+    border: 0; background: transparent; border-radius: 9px; padding: .45rem .9rem;
+    font-weight: 600; font-size: .85rem; color: var(--monday-muted); cursor: pointer;
+}
+.pl-segmented button.active { background: var(--monday-surface); color: var(--monday-blue); box-shadow: var(--monday-shadow); }
+.pl-card { background: var(--monday-surface); border-radius: var(--pl-radius); border: 1px solid var(--monday-border); box-shadow: var(--monday-shadow); }
+.pl-card-h { padding: 1rem 1.25rem; border-bottom: 1px solid var(--monday-border); display: flex; align-items: center; gap: .75rem; }
+.pl-card-h h5 { margin: 0; font-weight: 700; font-size: 1rem; color: var(--monday-text); }
+.pl-card-b { padding: 1rem 1.25rem; }
+.pl-board { overflow: auto; border-radius: var(--pl-radius); border: 1px solid var(--monday-border); background: var(--monday-surface); max-height: 560px; }
+.pl-board-grid { display: grid; }
+.pl-board[data-zoom="day"]   .pl-board-grid { grid-template-columns: 200px repeat(1,  minmax(420px,1fr)); min-width: 640px; }
+.pl-board[data-zoom="week"]  .pl-board-grid { grid-template-columns: 200px repeat(7,  minmax(110px,1fr)); min-width: 1000px; }
+.pl-board[data-zoom="2week"] .pl-board-grid { grid-template-columns: 200px repeat(14, minmax(80px,1fr)); min-width: 1320px; }
+.pl-board[data-zoom="month"] .pl-board-grid { grid-template-columns: 200px repeat(var(--pl-cols,30), minmax(42px,1fr)); min-width: 1500px; }
+.pl-bh {
+    position: sticky; top: 0; z-index: 5; background: var(--monday-bg);
+    padding: .45rem .35rem; font-size: .65rem; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--monday-muted); font-weight: 700; border-bottom: 1px solid var(--monday-border);
+    border-right: 1px solid var(--monday-border); text-align: center;
+}
+.pl-bh.today { background: color-mix(in srgb, var(--monday-blue) 10%, var(--monday-surface)); color: var(--monday-blue); }
+.pl-bh small { display: block; font-size: .95rem; color: var(--monday-text); font-weight: 800; text-transform: none; letter-spacing: 0; margin-top: 1px; }
+.pl-bh.today small { color: var(--monday-blue); }
+.pl-bh.weekend { background: var(--monday-bg); color: var(--monday-muted); }
+.pl-board[data-zoom="month"] .pl-bh { font-size: .55rem; padding: .35rem .15rem; }
+.pl-board[data-zoom="month"] .pl-bh small { font-size: .78rem; margin-top: 0; }
+.pl-lane-h {
+    position: sticky; left: 0; z-index: 4; background: var(--monday-surface);
+    padding: .55rem .65rem; border-right: 1px solid var(--monday-border); border-bottom: 1px solid var(--monday-border);
+    display: flex; align-items: center; gap: .5rem; font-weight: 600; color: var(--monday-text); font-size: .82rem;
+}
+.pl-cell {
+    border-right: 1px solid var(--monday-border); border-bottom: 1px solid var(--monday-border);
+    min-height: 54px; padding: 3px; position: relative; background: var(--monday-surface); cursor: pointer;
+}
+.pl-board[data-zoom="day"] .pl-cell { min-height: 120px; padding: 6px; }
+.pl-board[data-zoom="month"] .pl-cell { min-height: 38px; padding: 2px; }
+.pl-cell.today { background: color-mix(in srgb, var(--monday-blue) 6%, var(--monday-surface)); }
+.pl-cell.weekend { background: var(--monday-bg); }
+.pl-cell:hover { background: var(--monday-bg); }
+.pl-pill {
+    display: block; font-size: .68rem; font-weight: 600; color: #fff;
+    background: var(--monday-blue); border-radius: 5px; padding: 2px 5px; margin-bottom: 2px;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;
+}
+.pl-board[data-zoom="day"]  .pl-pill { font-size: .78rem; padding: 4px 8px; margin-bottom: 4px; border-radius: 7px; }
+.pl-board[data-zoom="week"] .pl-pill { font-size: .72rem; padding: 3px 6px; }
+.pl-board[data-zoom="month"] .pl-pill { font-size: .55rem; padding: 1px 3px; border-radius: 3px; }
+.pl-pill.task { background: var(--monday-green); }
+.pl-pill.task.overdue { background: var(--monday-red); }
+.pl-pill.task.high { background: var(--monday-orange); }
+.pl-pill.evt { background: var(--monday-blue); }
+.pl-pill.evt-fiscal { background: var(--monday-red); }
+.pl-pill.evt-meet { background: var(--monday-blue); }
+.pl-pill.evt-rmd { background: var(--monday-orange); }
+.pl-pill.doss { background: var(--monday-blue); }
+.pl-more { font-size: .6rem; color: var(--monday-muted); font-weight: 600; padding: 0 3px; }
+.pl-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: .78rem; flex-shrink: 0;
+    box-shadow: 0 0 0 2px var(--monday-surface), var(--monday-shadow); }
+.pl-avatar.lg { width: 40px; height: 40px; font-size: .9rem; }
+.pl-agenda-it {
+    display: flex; gap: .75rem; padding: .7rem .85rem; border-radius: 12px;
+    background: var(--monday-bg); border-left: 3px solid var(--monday-border); margin-bottom: .5rem; cursor: pointer;
+}
+.pl-agenda-it .t { font-weight: 600; color: var(--monday-text); font-size: .88rem; }
+.pl-agenda-it .m { color: var(--monday-muted); font-size: .75rem; }
+.pl-doss {
+    background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 14px; padding: .9rem 1rem;
+    display: flex; flex-direction: column; gap: .55rem; position: relative; overflow: hidden;
+}
+.pl-doss::before { content: ""; position: absolute; left: 0; top: 0; width: 4px; height: 100%; background: var(--monday-blue); }
+.pl-doss.urg::before { background: var(--monday-red); }
+.pl-doss .ttl { font-weight: 700; font-size: .92rem; color: var(--monday-text); margin: 0; }
+.pl-doss .meta { font-size: .74rem; color: var(--monday-muted); }
+.pl-stepper { display: flex; align-items: center; gap: 4px; margin: .25rem 0; }
+.pl-stepper .dot { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--monday-border); font-size: .6rem; font-weight: 700; color: var(--monday-muted); flex-shrink: 0; }
+.pl-stepper .dot.done { background: var(--monday-green); color: #fff; }
+.pl-stepper .dot.cur { background: var(--monday-blue); color: #fff; }
+.pl-stepper .bar { flex: 1; height: 3px; background: var(--monday-border); border-radius: 2px; min-width: 6px; }
+.pl-stepper .bar.done { background: var(--monday-green); }
+.pl-trow {
+    display: flex; align-items: center; gap: .85rem; padding: .7rem .9rem; border-radius: 12px;
+    background: var(--monday-surface); border: 1px solid var(--monday-border); margin-bottom: .4rem;
+}
+.pl-tbar { width: 4px; height: 38px; border-radius: 3px; flex-shrink: 0; }
+.mc-badge { display: inline-block; padding: .18rem .55rem; border-radius: 6px; font-size: .7rem; font-weight: 600; line-height: 1.4; }
+.pl-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.pl-mh { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--monday-muted); font-weight: 700; text-align: center; padding: .4rem 0; }
+.pl-mc {
+    aspect-ratio: 1.1/1; background: var(--monday-bg); border-radius: 10px; padding: .4rem;
+    display: flex; flex-direction: column; gap: 2px; cursor: pointer; border: 1px solid transparent;
+    overflow: hidden;
+}
+.pl-mc:hover { background: color-mix(in srgb, var(--monday-blue) 8%, var(--monday-bg)); border-color: var(--monday-border); }
+.pl-mc.out { opacity: .35; }
+.pl-mc.today { background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); border-color: var(--monday-blue); }
+.pl-mc .d { font-weight: 700; font-size: .78rem; color: var(--monday-text); }
+.pl-mc.today .d { color: var(--monday-blue); }
+.pl-mc .pp { font-size: .66rem; background: var(--monday-blue); color: #fff; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-mc .pp.task { background: var(--monday-green); }
+.pl-mc .pp.over { background: var(--monday-red); }
+.pl-toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; background: var(--monday-surface); border: 1px solid var(--monday-border);
+    border-radius: 14px; padding: .5rem .65rem; box-shadow: var(--monday-shadow); }
+.pl-toolbar .nav-grp { display: inline-flex; background: var(--monday-bg); border-radius: 10px; padding: 3px; gap: 2px; }
+.pl-toolbar .nav-grp .btn { border: 0; background: transparent; border-radius: 8px; padding: .3rem .6rem; font-size: .78rem; color: var(--monday-muted); font-weight: 600; }
+.pl-toolbar .nav-grp .btn:hover { background: var(--monday-surface); color: var(--monday-blue); }
+.pl-range-lbl { font-weight: 700; color: var(--monday-text); font-size: .92rem; padding: 0 .5rem; min-width: 160px; text-align: center; }
+@@media (max-width: 768px) {
+    .pl-hero h1 { font-size: 1.4rem; }
+    .pl-board[data-zoom="month"] .pl-board-grid { grid-template-columns: 140px repeat(var(--pl-cols,30), minmax(34px,1fr)); }
+    .pl-range-lbl { min-width: 120px; font-size: .82rem; }
+}
+</style>
+}
 
-<!-- Calendar Container -->
-<div class="mc-card">
-    <div class="card-body">
-        <div id="calendar" style="min-height:600px;"></div>
-    </div>
-</div>
+<div class="pl-shell">
 
-<!-- Modal Create/Edit Event -->
-<div class="modal fade" id="modalEvent" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-calendar-plus me-1"></i>Événement</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+@* ───────────────────────────────────  HERO  ─────────────────────────────────── *@
+<div class="pl-hero mb-3">
+    <div class="row align-items-center g-3 position-relative">
+        <div class="col-lg-5">
+            <h1>Bonjour @userName <span style="font-weight:400;opacity:.7">·</span> <span style="font-weight:500;opacity:.85">@(isClientSpace ? $"Planning — {selectedClientName}" : "Voici votre planning")</span></h1>
+            <div class="pl-sub">@today.ToString("dddd dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))@(isClientSpace && !string.IsNullOrEmpty(selectedClientName) ? $" · Client : {selectedClientName}" : "")</div>
+            <div class="d-flex gap-2 mt-3 flex-wrap">
+                @if (ViewBag.CanTaskCreate as bool? ?? false)
+                {
+                    <button class="btn btn-light fw-semibold" data-bs-toggle="modal" data-bs-target="#evtModal" id="btnNewEvt">
+                        <i class="bi bi-plus-lg"></i> Nouvel événement
+                    </button>
+                }
+                <a href="/Tasks/MyTasks" class="btn btn-outline-light">
+                    <i class="bi bi-list-task"></i> Mes tâches
+                </a>
+                <a href="/Tasks/Index" class="btn btn-outline-light">
+                    <i class="bi bi-people"></i> Toutes les tâches
+                </a>
             </div>
-            <div class="modal-body">
-                <input type="hidden" id="eventId" />
-                <div class="mb-3">
-                    <label class="form-label">Titre <span class="text-danger">*</span></label>
-                    <input type="text" id="eventTitre" class="form-control" placeholder="Titre de l'événement" />
-                </div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Date début</label>
-                        <input type="datetime-local" id="eventDebut" class="form-control" />
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Date fin</label>
-                        <input type="datetime-local" id="eventFin" class="form-control" />
-                    </div>
-                </div>
-                <div class="mb-3 mt-3">
-                    <label class="form-label">Type</label>
-                    <select id="eventType" class="form-select">
-                        <option value="Reunion">Réunion</option>
-                        <option value="Echeance">Échéance fiscale</option>
-                        <option value="Tache">Tâche</option>
-                        <option value="Rappel">Rappel</option>
-                        <option value="Autre">Autre</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Description</label>
-                    <textarea id="eventDescription" class="form-control" rows="3" placeholder="Description..."></textarea>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Client</label>
-                    <select id="eventClient" class="form-select">
-                        <option value="">— Aucun —</option>
-                        @if (clients != null)
-                        {
-                            foreach (var c in clients)
-                            {
-                                <option value="@c.Id">@c.RaisonSociale</option>
-                            }
-                        }
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-danger d-none" id="btnDeleteEvent"><i class="bi bi-trash me-1"></i> Supprimer</button>
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-mc-primary" id="btnSaveEvent"><i class="bi bi-check me-1"></i> Enregistrer</button>
+        </div>
+        <div class="col-lg-7">
+            <div class="row g-2">
+                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-calendar-event"></i> Aujourd'hui</div><div class="val">@todayEvents.Count</div><div class="sub">événements</div></div></div>
+                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-check2-square"></i> Mes tâches</div><div class="val">@activeMine.Count</div><div class="sub">actives</div></div></div>
+                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-people"></i> Équipe</div><div class="val">@activeTeam.Count</div><div class="sub">en cours</div></div></div>
+                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-exclamation-triangle"></i> En retard</div><div class="val">@overdueMine.Count</div><div class="sub">à traiter</div></div></div>
             </div>
         </div>
     </div>
 </div>
 
-@section Scripts {
-    <script>
-        $(function() {
-            var calendarEl = document.getElementById('calendar');
-            var events = [];
+@* ─────────────────────────────  BOARD TOOLBAR  ─────────────────────────────── *@
+<div class="pl-toolbar mb-3">
+    <div class="nav-grp" id="plNav">
+        <button class="btn" data-nav="prev" title="Précédent"><i class="bi bi-chevron-left"></i></button>
+        <button class="btn" data-nav="today" title="Aujourd'hui">Aujourd'hui</button>
+        <button class="btn" data-nav="next" title="Suivant"><i class="bi bi-chevron-right"></i></button>
+    </div>
+    <div class="pl-range-lbl" id="plRangeLbl">—</div>
+    <div class="ms-auto d-flex gap-2 flex-wrap align-items-center">
+        <div class="pl-segmented" id="plZoom">
+            <button data-zoom="day" title="Jour"><i class="bi bi-calendar-day"></i> Jour</button>
+            <button data-zoom="week" class="active" title="Semaine"><i class="bi bi-calendar-week"></i> Sem.</button>
+            <button data-zoom="2week" title="2 semaines">2 sem.</button>
+            <button data-zoom="month" title="Mois"><i class="bi bi-calendar3"></i> Mois</button>
+        </div>
+        <div class="pl-segmented" id="plMode">
+            <button data-mode="mine"   class="active"><i class="bi bi-person"></i> Moi</button>
+            <button data-mode="team"><i class="bi bi-people"></i> Équipe</button>
+            <button data-mode="client"><i class="bi bi-building"></i> Clients</button>
+            <button data-mode="doss"><i class="bi bi-folder2-open"></i> Dossiers</button>
+        </div>
+    </div>
+</div>
 
-            function loadEvents() {
+@* ─────────────────────────────  SWIMLANE BOARD  ────────────────────────────── *@
+<div class="pl-board mb-4" id="plBoard" data-zoom="week">
+    <div class="pl-board-grid" id="plGrid"></div>
+</div>
 
-                $.getJSON('@Url.Action("GetEvents", "Planning")', {}, function(data) {
-                    renderCalendar(data || []);
-                });
-            }
-
-            function renderCalendar(evts) {
-                var $cal = $('#calendar');
-                $cal.empty();
-
-                // Simple month view using ECharts or plain HTML
-                var html = '<div class="table-responsive"><table class="table table-bordered">';
-                html += '<thead><tr>';
-                var jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-                jours.forEach(function(j) { html += '<th class="text-center bg-light">' + j + '</th>'; });
-                html += '</tr></thead><tbody>';
-
-                var today = new Date();
-                var year = today.getFullYear();
-                var month = today.getMonth();
-                var firstDay = new Date(year, month, 1);
-                var lastDay = new Date(year, month + 1, 0);
-                var startOffset = (firstDay.getDay() + 6) % 7;
-
-                var day = 1 - startOffset;
-                for (var row = 0; row < 6; row++) {
-                    html += '<tr>';
-                    for (var col = 0; col < 7; col++) {
-                        var currentDate = new Date(year, month, day);
-                        var isCurrentMonth = currentDate.getMonth() === month;
-                        var isToday = currentDate.toDateString() === today.toDateString();
-                        var dayClass = isCurrentMonth ? '' : 'text-muted opacity-50';
-                        var todayClass = isToday ? 'bg-primary text-white rounded px-1' : '';
-
-                        html += '<td style="min-height:80px;vertical-align:top;min-width:120px;" class="' + dayClass + '">';
-                        html += '<div class="fw-bold small mb-1"><span class="' + todayClass + '">' + currentDate.getDate() + '</span></div>';
-
-                        // Show events for this day
-                        var dateStr = currentDate.toISOString().split('T')[0];
-                        evts.forEach(function(e) {
-                            var evtDate = e.dateDebut ? e.dateDebut.split('T')[0] : '';
-                            if (evtDate === dateStr) {
-                                var color = e.type === 'Echeance' ? 'danger' : e.type === 'Reunion' ? 'primary' : 'success';
-                                html += '<div class="badge bg-' + color + ' w-100 text-start mb-1 text-truncate" style="font-size:0.7rem;cursor:pointer;" title="' + e.titre + '">' + e.titre + '</div>';
-                            }
-                        });
-
-                        html += '</td>';
-                        day++;
-                    }
-                    html += '</tr>';
-                    if (day > lastDay.getDate() && row >= 3) break;
+@* ─────────────────────────────  AGENDA + DOSSIERS  ─────────────────────────── *@
+<div class="row g-3 mb-3">
+    @* Today agenda *@
+    <div class="col-lg-4">
+        <div class="pl-card h-100">
+            <div class="pl-card-h">
+                <i class="bi bi-sun-fill text-warning"></i>
+                <h5>Ma journée</h5>
+                <span class="ms-auto mc-badge bg-primary-subtle text-primary">@(todayEvents.Count + activeMine.Count(t=>t.DateEcheance?.Date==today))</span>
+            </div>
+            <div class="pl-card-b">
+                @if (todayEvents.Count == 0 && !activeMine.Any(t => t.DateEcheance?.Date == today) && !overdueMine.Any())
+                {
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-cup-hot" style="font-size:2.4rem"></i>
+                        <div class="mt-2">Journée libre — bon courage !</div>
+                    </div>
                 }
-
-                html += '</tbody></table></div>';
-                html += '<div class="mt-3 d-flex gap-2 justify-content-center">';
-                html += '<span class="badge bg-primary">Réunion</span>';
-                html += '<span class="badge bg-danger">Échéance</span>';
-                html += '<span class="badge bg-success">Tâche</span>';
-                html += '</div>';
-                $cal.html(html);
-            }
-
-            loadEvents();
-
-
-            // Save event
-            $('#btnSaveEvent').on('click', function() {
-                var id = $('#eventId').val();
-                var data = {
-                    id: id ? parseInt(id) : 0,
-                    titre: $('#eventTitre').val(),
-                    dateDebut: $('#eventDebut').val(),
-                    dateFin: $('#eventFin').val(),
-                    type: $('#eventType').val(),
-                    description: $('#eventDescription').val(),
-                    clientId: $('#eventClient').val() || null
-                };
-                var url = id ? '@Url.Action("Update", "Planning")' : '@Url.Action("Create", "Planning")';
-                $.ajax({
-                    url: url,
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify(data),
-                    headers: { 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
-                    success: function(res) {
-                        if (res && res.success) {
-                            toastr.success(res.message || 'Opération réussie');
-                            $('#modalEvent').modal('hide');
-                            loadEvents();
-                        } else {
-                            toastr.error(res && res.message || 'Erreur');
+                @foreach (var e in todayEvents)
+                {
+                    <div class="pl-agenda-it" style="border-left-color:@EventColor(e.Type)" data-evt-id="@e.Id">
+                        <div style="width:46px;text-align:center"><div class="t">@e.DateDebut.ToString("HH:mm")</div><div class="m">@e.DateFin.ToString("HH:mm")</div></div>
+                        <div class="flex-grow-1"><div class="t">@e.Titre</div><div class="m"><i class="bi bi-tag"></i> @e.Type @(string.IsNullOrEmpty(e.ClientName)?null:Html.Raw($"· {e.ClientName}"))</div></div>
+                    </div>
+                }
+                @foreach (var t in activeMine.Where(x => x.DateEcheance?.Date == today).Take(5))
+                {
+                    <div class="pl-agenda-it" style="border-left-color:@PriorityColor(t.Priorite)">
+                        <div style="width:46px;text-align:center"><i class="bi bi-check2-square text-success" style="font-size:1.3rem"></i></div>
+                        <div class="flex-grow-1"><div class="t"><a class="text-decoration-none text-dark" href="/Tasks/Details/@t.Id">@t.Titre</a></div><div class="m"><i class="bi bi-building"></i> @(t.ClientName ?? "—") · @t.Priorite</div></div>
+                    </div>
+                }
+                @if (overdueMine.Any())
+                {
+                    <div class="mt-3 pt-2 border-top">
+                        <div class="text-danger fw-semibold small mb-2"><i class="bi bi-exclamation-triangle"></i> En retard (@overdueMine.Count)</div>
+                        @foreach (var t in overdueMine.Take(3))
+                        {
+                            <div class="pl-agenda-it" style="border-left-color:#ef4444;background:#fef2f2">
+                                <div style="width:46px;text-align:center;color:#ef4444"><div class="t" style="font-size:.85rem">@t.DateEcheance!.Value.ToString("dd MMM")</div></div>
+                                <div class="flex-grow-1"><div class="t"><a class="text-decoration-none text-dark" href="/Tasks/Details/@t.Id">@t.Titre</a></div><div class="m text-danger"><i class="bi bi-clock-history"></i> @((today - t.DateEcheance.Value.Date).Days) j de retard</div></div>
+                            </div>
                         }
-                    }
-                });
-            });
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
 
-            // Delete event
-            $('#btnDeleteEvent').on('click', function() {
-                var id = $('#eventId').val();
-                if (!id || !confirm('Supprimer cet événement ?')) return;
-                $.post('@Url.Action("Delete", "Planning")', { id: id }, function(res) {
-                    if (res && res.success) {
-                        toastr.success('Événement supprimé');
-                        $('#modalEvent').modal('hide');
-                        loadEvents();
+    @* Active dossiers *@
+    <div class="col-lg-8">
+        <div class="pl-card h-100">
+            <div class="pl-card-h">
+                <i class="bi bi-folder2-open text-primary"></i>
+                <h5>Dossiers actifs</h5>
+                <span class="ms-auto mc-badge bg-primary-subtle text-primary">@activeDossiers.Count</span>
+                <a href="/Declarations" class="ms-2 small text-decoration-none">Voir tout <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div class="pl-card-b">
+                @if (!activeDossiers.Any())
+                {
+                    <div class="text-center text-muted py-4"><i class="bi bi-folder-x" style="font-size:2.2rem"></i><div class="mt-2">Aucun dossier actif</div></div>
+                }
+                <div class="row g-3">
+                    @foreach (var d in activeDossiers)
+                    {
+                        var urgent = d.NextDue.HasValue && d.NextDue.Value.Date <= today.AddDays(3);
+                        var totalSteps = d.CurrentStep?.WorkflowTotalSteps ?? Math.Max(1, d.Total);
+                        var curOrder = d.CurrentStep?.WorkflowStepOrder ?? d.Done;
+                        <div class="col-md-6">
+                            <div class="pl-doss @(urgent?"urg":"")">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div class="flex-grow-1">
+                                        <div class="meta text-uppercase fw-bold" style="color:@(urgent?"#ef4444":"#6366f1");letter-spacing:.05em">
+                                            @d.DeclType @(string.IsNullOrEmpty(d.DeclPeriode)?null:Html.Raw($"· {d.DeclPeriode}"))
+                                            @if (urgent) { <i class="bi bi-fire ms-1"></i> }
+                                        </div>
+                                        <div class="ttl"><a class="text-decoration-none text-dark" href="/Declarations/Details/@d.DeclId">@d.ClientName</a></div>
+                                    </div>
+                                    @if (d.MineCount > 0) { <span class="mc-badge bg-primary-subtle text-primary">@d.MineCount mienne(s)</span> }
+                                </div>
+                                @if (!string.IsNullOrEmpty(d.CurrentStep?.WorkflowStepName))
+                                {
+                                    <div class="meta"><i class="bi bi-arrow-right-circle text-primary"></i> Étape : <strong>@d.CurrentStep.WorkflowStepName</strong></div>
+                                }
+                                <div class="pl-stepper">
+                                    @for (var i = 0; i < totalSteps; i++)
+                                    {
+                                        var done = i < curOrder;
+                                        var cur = i == curOrder;
+                                        <span class="dot @(done?"done":"") @(cur?"cur":"")">@(done ? Html.Raw("<i class='bi bi-check'></i>") : Html.Raw((i + 1).ToString()))</span>
+                                        @if (i < totalSteps - 1) { <span class="bar @(done?"done":"")"></span> }
+                                    }
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="meta">
+                                        <i class="bi bi-list-check"></i> @d.Done/@d.Total tâches
+                                        @if (d.NextDue.HasValue) { <span class="ms-2"><i class="bi bi-calendar-event"></i> @d.NextDue.Value.ToString("dd MMM")</span> }
+                                    </div>
+                                    @if (d.CurrentStep?.WorkflowStepInstanceId != null && d.CurrentStep.AssigneA == userName
+                                        && (ViewBag.CanWorkflowValidate as bool? ?? false))
+                                    {
+                                        <form asp-controller="Tasks" asp-action="ValidateWorkflowStep" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="taskId" value="@d.CurrentStep.Id" />
+                                            <input type="hidden" name="workflowInstanceId" value="@d.CurrentStep.WorkflowInstanceId" />
+                                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check2-circle"></i> Valider</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <a href="/Declarations/Details/@d.DeclId" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right"></i></a>
+                                    }
+                                </div>
+                            </div>
+                        </div>
                     }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ────────────────────────  TASKS LIST + MONTH GRID  ───────────────────────── *@
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="pl-card h-100">
+            <div class="pl-card-h">
+                <i class="bi bi-list-task text-primary"></i>
+                <h5>Mes tâches actives</h5>
+                <span class="ms-auto mc-badge bg-primary-subtle text-primary">@activeMine.Count</span>
+                <a href="/Tasks/MyTasks" class="ms-2 small text-decoration-none">Tout voir <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div class="pl-card-b">
+                @if (!activeMine.Any())
+                {
+                    <div class="text-center text-muted py-4"><i class="bi bi-clipboard-check" style="font-size:2.2rem"></i><div class="mt-2">Aucune tâche active</div></div>
+                }
+                @foreach (var t in activeMine.OrderBy(x => x.DateEcheance ?? DateTime.MaxValue).Take(10))
+                {
+                    var overdue = t.DateEcheance.HasValue && t.DateEcheance.Value.Date < today;
+                    <div class="pl-trow">
+                        <div class="pl-tbar" style="background:@PriorityColor(t.Priorite)"></div>
+                        <div class="flex-grow-1">
+                            <div><a class="text-decoration-none text-dark fw-semibold" href="/Tasks/Details/@t.Id">@t.Titre</a></div>
+                            <div class="text-muted small">
+                                @if (!string.IsNullOrEmpty(t.ClientName)) { <span><i class="bi bi-building"></i> @t.ClientName</span> }
+                                @if (!string.IsNullOrEmpty(t.DeclarationType)) { <span class="ms-2"><i class="bi bi-file-earmark-text"></i> @t.DeclarationType @t.DeclarationPeriode</span> }
+                                @if (!string.IsNullOrEmpty(t.WorkflowStepName)) { <span class="ms-2 mc-badge bg-info-subtle text-info"><i class="bi bi-arrow-right-circle"></i> @t.WorkflowStepName</span> }
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            @if (t.DateEcheance.HasValue)
+                            {
+                                <div class="@(overdue ? "text-danger fw-bold" : "text-muted") small">
+                                    <i class="bi bi-calendar-event"></i> @t.DateEcheance.Value.ToString("dd MMM")
+                                </div>
+                            }
+                            <div>@Html.Raw(StatutBadge(t.Statut))</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="pl-card h-100">
+            <div class="pl-card-h">
+                <i class="bi bi-calendar3 text-primary"></i>
+                <h5 id="monthLbl">Calendrier</h5>
+                <div class="ms-auto btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" id="mPrev"><i class="bi bi-chevron-left"></i></button>
+                    <button class="btn btn-outline-secondary" id="mToday">Auj.</button>
+                    <button class="btn btn-outline-secondary" id="mNext"><i class="bi bi-chevron-right"></i></button>
+                </div>
+            </div>
+            <div class="pl-card-b">
+                <div class="pl-month" id="mHead">
+                    <div class="pl-mh">Lun</div><div class="pl-mh">Mar</div><div class="pl-mh">Mer</div><div class="pl-mh">Jeu</div><div class="pl-mh">Ven</div><div class="pl-mh">Sam</div><div class="pl-mh">Dim</div>
+                </div>
+                <div class="pl-month mt-2" id="mGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+@* ─────────────────────────────  EVENT MODAL  ──────────────────────────────── *@
+<div class="modal fade" id="evtModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="evtModalTitle">Nouvel événement</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="evtId" />
+        <div class="row g-3">
+          <div class="col-12"><label class="form-label">Titre</label><input type="text" class="form-control" id="evtTitre" /></div>
+          <div class="col-md-6"><label class="form-label">Début</label><input type="datetime-local" class="form-control" id="evtDebut" /></div>
+          <div class="col-md-6"><label class="form-label">Fin</label><input type="datetime-local" class="form-control" id="evtFin" /></div>
+          <div class="col-md-6">
+            <label class="form-label">Type</label>
+            <select class="form-select" id="evtType">
+              <option value="EcheanceFiscale">Échéance fiscale</option><option value="Reunion">Réunion</option>
+              <option value="Tache">Tâche</option><option value="Rappel">Rappel</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Client</label>
+            @if (isClientSpace && lockedClientId.HasValue)
+            {
+                <input type="hidden" id="evtClient" value="@lockedClientId" />
+                <input type="text" class="form-control" value="@(selectedClientName ?? ("Client #" + lockedClientId))" readonly />
+            }
+            else
+            {
+                <select class="form-select" id="evtClient"><option value="">— Aucun —</option>
+                  @foreach (var c in clients) { <option value="@c.Id">@c.RaisonSociale</option> }
+                </select>
+            }
+          </div>
+          <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" id="evtDesc" rows="3"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        @if (ViewBag.CanTaskEdit as bool? ?? false)
+        {
+            <button class="btn btn-outline-danger me-auto d-none" id="evtDel"><i class="bi bi-trash"></i> Supprimer</button>
+        }
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        @if ((ViewBag.CanTaskCreate as bool? ?? false) || (ViewBag.CanTaskEdit as bool? ?? false))
+        {
+            <button class="btn btn-primary" id="evtSave"><i class="bi bi-check2"></i> Enregistrer</button>
+        }
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+(function(){
+    // ── Data ────────────────────────────────────────────────────────────────
+    const canTaskCreate = @(ViewBag.CanTaskCreate as bool? ?? false ? "true" : "false");
+    const canTaskEdit = @(ViewBag.CanTaskEdit as bool? ?? false ? "true" : "false");
+    const allEvents = @Html.Raw(JsonSerializer.Serialize(events.Select(e => new {
+        id = e.Id, titre = e.Titre, dateDebut = e.DateDebut, dateFin = e.DateFin,
+        type = e.Type, description = e.Description, clientId = e.ClientId,
+        userId = e.AssignedToUserId
+    })));
+    const lanesMine = @Html.Raw(JsonSerializer.Serialize(lanesMineJs));
+    const lanesTeam = @Html.Raw(JsonSerializer.Serialize(lanesTeamJs));
+    const lanesClient = @Html.Raw(JsonSerializer.Serialize(lanesClientJs));
+    const lanesDoss = @Html.Raw(JsonSerializer.Serialize(lanesDossJs));
+
+    const token = $('input[name="__RequestVerificationToken"]').val();
+    const monthsFr = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+    const daysFr = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+    const today0 = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+    // ── State ───────────────────────────────────────────────────────────────
+    let zoom = 'week';   // day | week | 2week | month
+    let mode = 'mine';   // mine | team | client | doss
+    let anchor = new Date(today0);
+
+    function startOfWeek(d){ const x = new Date(d); x.setHours(0,0,0,0); const dow = x.getDay(); const diff = (dow===0?-6:1-dow); x.setDate(x.getDate()+diff); return x; }
+    function fmtFr(d){ return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}); }
+    function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+    function getRange(){
+        if (zoom === 'day')   return { start: new Date(anchor), days: 1 };
+        if (zoom === 'week')  return { start: startOfWeek(anchor), days: 7 };
+        if (zoom === '2week') return { start: startOfWeek(anchor), days: 14 };
+        // month
+        const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+        const last  = new Date(anchor.getFullYear(), anchor.getMonth()+1, 0);
+        return { start: first, days: last.getDate() };
+    }
+
+    function laneSet(){
+        if (mode === 'mine')   return lanesMine;
+        if (mode === 'team')   return lanesTeam;
+        if (mode === 'client') return lanesClient;
+        return lanesDoss;
+    }
+
+    function rangeLabel(r){
+        if (zoom === 'day')   return r.start.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+        if (zoom === 'month') return monthsFr[r.start.getMonth()] + ' ' + r.start.getFullYear();
+        const end = new Date(r.start); end.setDate(end.getDate() + r.days - 1);
+        return fmtFr(r.start) + ' → ' + fmtFr(end);
+    }
+
+    // ── Render board ────────────────────────────────────────────────────────
+    function renderBoard(){
+        const r = getRange();
+        const $b = $('#plBoard').attr('data-zoom', zoom).css('--pl-cols', r.days);
+        const $g = $('#plGrid').empty();
+        $('#plRangeLbl').text(rangeLabel(r));
+
+        // Header row
+        $g.append('<div class="pl-bh" style="background:#f8fafc"><i class="bi bi-grid-3x3-gap"></i><br/><small>Ligne</small></div>');
+        const days = [];
+        for (let i=0;i<r.days;i++){ const d=new Date(r.start); d.setDate(r.start.getDate()+i); days.push(d); }
+        days.forEach(d => {
+            const isT = sameDay(d, today0);
+            const isW = d.getDay() === 0 || d.getDay() === 6;
+            const cls = (isT?' today':'') + (isW?' weekend':'');
+            $g.append(`<div class="pl-bh${cls}">${daysFr[(d.getDay()+6)%7]}<small>${d.getDate()}${zoom==='month'?'':''}</small></div>`);
+        });
+
+        // Lanes
+        const lanes = laneSet();
+        if (!lanes || !lanes.length){
+            $g.append('<div class="pl-lane-h text-muted">Aucune donnée</div>');
+            days.forEach(()=>$g.append('<div class="pl-cell"></div>'));
+            return;
+        }
+        lanes.forEach(lane => {
+            const av = lane.initials
+                ? `<span class="pl-avatar lg" style="background:${lane.color}">${lane.initials}</span>`
+                : `<span class="pl-avatar lg" style="background:${lane.color}"><i class="bi bi-${mode==='client'?'building':'folder2-open'}"></i></span>`;
+            const lbl = lane.link
+                ? `<a href="${lane.link}" class="text-decoration-none text-dark">${escapeHtml(lane.label)}</a>`
+                : escapeHtml(lane.label);
+            const badge = lane.badge ? `<span class='mc-badge bg-primary-subtle text-primary ms-1'>${lane.badge}</span>` : '';
+            $g.append(`<div class="pl-lane-h">${av}<div><div>${lbl}${badge}</div><div class="text-muted small fw-normal">${escapeHtml(lane.sub)}</div></div></div>`);
+
+            // Index events for this lane (mine = user only, others = none filter)
+            days.forEach(d => {
+                const isT = sameDay(d, today0);
+                const isW = d.getDay() === 0 || d.getDay() === 6;
+                const cls = 'pl-cell' + (isT?' today':'') + (isW?' weekend':'');
+                const dStr = d.toISOString().slice(0,10);
+
+                // Tasks for this lane on this day
+                const dayTasks = (lane.tasks||[]).filter(t => t.due && sameDay(new Date(t.due), d));
+                // Events: only show in 'mine' mode (and only events for the user / unassigned)
+                const dayEvts = mode === 'mine'
+                    ? allEvents.filter(e => sameDay(new Date(e.dateDebut), d))
+                    : [];
+
+                let html = `<div class="${cls}" data-date="${dStr}">`;
+                const maxItems = zoom === 'month' ? 2 : (zoom === 'day' ? 12 : 4);
+                const items = [];
+
+                dayTasks.forEach(t => {
+                    const isOver = new Date(t.due) < today0;
+                    const tcls = isOver ? 'task overdue' : (t.prio === 'Haute' ? 'task high' : 'task');
+                    const ttl = zoom === 'month' ? '•' : escapeHtml(t.titre);
+                    items.push(`<a class="pl-pill ${tcls}" href="/Tasks/Details/${t.id}" title="${escapeHtml(t.titre)} — ${escapeHtml(t.client||'')}">${ttl}</a>`);
                 });
+                dayEvts.forEach(e => {
+                    const ec = e.type === 'EcheanceFiscale' ? 'evt evt-fiscal'
+                        : e.type === 'Reunion' ? 'evt evt-meet'
+                        : e.type === 'Rappel' ? 'evt evt-rmd' : 'evt';
+                    const tm = new Date(e.dateDebut).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+                    const ttl = zoom === 'month' ? '•' : `${tm} ${escapeHtml(e.titre)}`;
+                    items.push(`<span class="pl-pill ${ec}" data-evt-id="${e.id}" title="${escapeHtml(e.titre)}">${ttl}</span>`);
+                });
+
+                html += items.slice(0, maxItems).join('');
+                if (items.length > maxItems) html += `<div class="pl-more">+${items.length - maxItems}</div>`;
+                html += '</div>';
+                $g.append(html);
             });
         });
-    </script>
-    @Html.AntiForgeryToken()
+    }
+    function escapeHtml(s){ return (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    // ── Toolbar ─────────────────────────────────────────────────────────────
+    $('#plZoom button').on('click', function(){
+        zoom = $(this).data('zoom');
+        $('#plZoom button').removeClass('active'); $(this).addClass('active');
+        renderBoard();
+    });
+    $('#plMode button').on('click', function(){
+        mode = $(this).data('mode');
+        $('#plMode button').removeClass('active'); $(this).addClass('active');
+        renderBoard();
+    });
+    $('#plNav button').on('click', function(){
+        const dir = $(this).data('nav');
+        if (dir === 'today'){ anchor = new Date(today0); }
+        else {
+            const step = (dir === 'prev' ? -1 : 1);
+            if (zoom === 'day')   anchor.setDate(anchor.getDate() + step);
+            else if (zoom === 'week')  anchor.setDate(anchor.getDate() + step*7);
+            else if (zoom === '2week') anchor.setDate(anchor.getDate() + step*14);
+            else { anchor.setMonth(anchor.getMonth() + step); anchor.setDate(1); }
+        }
+        renderBoard();
+    });
+
+    // ── Click cell to add event / pill to edit ──────────────────────────────
+    $(document).on('click', '.pl-cell', function(e){
+        if ($(e.target).closest('.pl-pill, a').length) return;
+        if (!canTaskCreate) return;
+        const dt = $(this).data('date');
+        if (!dt) return;
+        openEvtModal(null, dt + 'T09:00', dt + 'T10:00');
+    });
+    $(document).on('click', '.pl-pill[data-evt-id]', function(e){
+        e.preventDefault();
+        if (!canTaskEdit) return;
+        const id = $(this).data('evt-id');
+        const ev = allEvents.find(x => x.id == id);
+        if (ev) openEvtModalFromObj(ev);
+    });
+
+    $('#btnNewEvt').on('click', function(){
+        if (!canTaskCreate) return;
+        const t = new Date(); t.setHours(9,0,0,0);
+        const e = new Date(t); e.setHours(10);
+        openEvtModal(null, fmtLocal(t), fmtLocal(e));
+    });
+
+    function fmtLocal(d){
+        const p = n => String(n).padStart(2,'0');
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+    const lockedClientId = @(lockedClientId.HasValue ? lockedClientId.Value.ToString() : "null");
+
+    function openEvtModal(id, deb, fin){
+        $('#evtModalTitle').text(id ? 'Modifier événement' : 'Nouvel événement');
+        $('#evtId').val(id||''); $('#evtTitre').val(''); $('#evtDebut').val(deb); $('#evtFin').val(fin);
+        $('#evtType').val('Reunion');
+        $('#evtClient').val(lockedClientId != null ? lockedClientId : '');
+        $('#evtDesc').val('');
+        $('#evtDel').toggleClass('d-none', !id || !canTaskEdit);
+        new bootstrap.Modal('#evtModal').show();
+    }
+    function openEvtModalFromObj(ev){
+        $('#evtModalTitle').text('Modifier événement');
+        $('#evtId').val(ev.id); $('#evtTitre').val(ev.titre);
+        $('#evtDebut').val(ev.dateDebut?.substring(0,16));
+        $('#evtFin').val(ev.dateFin?.substring(0,16));
+        $('#evtType').val(ev.type||'Reunion');
+        $('#evtClient').val(lockedClientId != null ? lockedClientId : (ev.clientId||''));
+        $('#evtDesc').val(ev.description||'');
+        if (canTaskEdit) $('#evtDel').removeClass('d-none');
+        else $('#evtDel').addClass('d-none');
+        new bootstrap.Modal('#evtModal').show();
+    }
+
+    // ── Save / delete event ─────────────────────────────────────────────────
+    $('#evtSave').on('click', function(){
+        const id = $('#evtId').val();
+        if (id ? !canTaskEdit : !canTaskCreate) return;
+        const dto = {
+            id: id ? parseInt(id) : 0,
+            titre: $('#evtTitre').val(),
+            dateDebut: $('#evtDebut').val(),
+            dateFin: $('#evtFin').val(),
+            type: $('#evtType').val(),
+            description: $('#evtDesc').val(),
+            clientId: $('#evtClient').val() ? parseInt($('#evtClient').val()) : null
+        };
+        if (!dto.titre){ toastr.warning('Titre requis'); return; }
+        const url = id ? '/Planning/Update' : '/Planning/Create';
+        $.ajax({ url, type:'POST', contentType:'application/json',
+            headers:{ 'RequestVerificationToken': token }, data: JSON.stringify(dto) })
+            .done(function(){ toastr.success('Enregistré'); setTimeout(()=>location.reload(),500); })
+            .fail(()=>toastr.error('Erreur lors de l\'enregistrement'));
+    });
+    $('#evtDel').on('click', function(){
+        if (!canTaskEdit) return;
+        if (!confirm('Supprimer cet événement ?')) return;
+        const id = $('#evtId').val();
+        $.ajax({ url:`/Planning/Delete?id=${id}`, type:'POST', headers:{ 'RequestVerificationToken': token } })
+            .done(function(){ toastr.success('Supprimé'); setTimeout(()=>location.reload(),500); })
+            .fail(()=>toastr.error('Erreur de suppression'));
+    });
+
+    // ── Mini month grid (right card) ────────────────────────────────────────
+    let cur = new Date(); cur.setDate(1);
+    function renderMonth(){
+        $('#monthLbl').text(monthsFr[cur.getMonth()] + ' ' + cur.getFullYear());
+        const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
+        let dow = first.getDay(); dow = dow === 0 ? 6 : dow - 1;
+        const start = new Date(first); start.setDate(first.getDate() - dow);
+        const $g = $('#mGrid').empty();
+        for (let i=0; i<42; i++){
+            const d = new Date(start); d.setDate(start.getDate()+i);
+            const out = d.getMonth() !== cur.getMonth();
+            const isT = sameDay(d, today0);
+            const dayEvts = allEvents.filter(e => sameDay(new Date(e.dateDebut), d));
+            const $c = $('<div class="pl-mc"></div>')
+                .toggleClass('out', out).toggleClass('today', isT)
+                .attr('data-date', d.toISOString().slice(0,10));
+            $c.append('<div class="d">'+d.getDate()+'</div>');
+            dayEvts.slice(0,2).forEach(e => {
+                $c.append($('<div class="pp"></div>').text(e.titre).attr('data-evt-id', e.id));
+            });
+            if (dayEvts.length > 2) $c.append('<div class="pp" style="background:#94a3b8">+'+(dayEvts.length-2)+'</div>');
+            $g.append($c);
+        }
+    }
+    $('#mPrev').on('click', ()=>{ cur.setMonth(cur.getMonth()-1); renderMonth(); });
+    $('#mNext').on('click', ()=>{ cur.setMonth(cur.getMonth()+1); renderMonth(); });
+    $('#mToday').on('click', ()=>{ cur = new Date(); cur.setDate(1); renderMonth(); });
+    $(document).on('click', '#mGrid .pl-mc', function(e){
+        if ($(e.target).hasClass('pp')){
+            const id = $(e.target).data('evt-id');
+            if (id){
+                if (!canTaskEdit) return;
+                const ev = allEvents.find(x=>x.id==id); if (ev) openEvtModalFromObj(ev); return;
+            }
+        }
+        if (!canTaskCreate) return;
+        const dt = $(this).data('date');
+        if (dt) openEvtModal(null, dt+'T09:00', dt+'T10:00');
+    });
+
+    renderBoard();
+    renderMonth();
+})();
+</script>
+@Html.AntiForgeryToken()
 }

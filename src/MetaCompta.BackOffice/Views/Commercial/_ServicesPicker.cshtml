@@ -1,0 +1,186 @@
+@{
+    var typeServiceItems = (ViewData["typeServiceItems"] as List<ReferenceDataDto>) ?? new();
+    var checkedServices  = (ViewData["checkedServices"]  as List<ContratServiceActiveLine>) ?? new();
+    var prefix           = (ViewData["prefix"]           as string) ?? "svc";
+    var allServicesJson  = System.Text.Json.JsonSerializer.Serialize(
+        typeServiceItems.Select(s => new { code = s.Code, label = s.Label }).ToList()
+    );
+    var checkedCodesJson = System.Text.Json.JsonSerializer.Serialize(
+        checkedServices.Select(s => s.TypeService ?? "").ToList()
+    );
+}
+
+<div id="@(prefix)Picker">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <span class="badge rounded-pill bg-dark text-white px-3 py-2" id="@(prefix)CountBadge">0 sélectionné(s)</span>
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="spcSelectAll_@(prefix)()">Tout</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="spcClearAll_@(prefix)()">Effacer</button>
+        </div>
+    </div>
+    <div class="vstack gap-3" id="@(prefix)Families"></div>
+    <div id="@(prefix)Hidden"></div>
+</div>
+
+<script>
+(function () {
+    var pfx = '@prefix';
+    var ALL_SERVICES  = @Html.Raw(allServicesJson);
+    var CHECKED_CODES = @Html.Raw(checkedCodesJson);
+    var COLORS = ['primary','info','warning','success','danger'];
+
+    var FAMILIES = [
+        { id: 'compta', title: 'Tenue comptable & États financiers',
+          items: ['COMPTABILITE','TRESORERIE','BILAN','ETATSFISCAUX','LIASSEFISCALE','EG'] },
+        { id: 'fiscale', title: 'Déclarations fiscales (DGI / SIMPL)',
+          items: ['TVA','IR_SAL','RAS_FONC','RAS_DIV','DRF','CM'] },
+        { id: 'acomptes', title: 'Acomptes IS & Solde',
+          items: ['ACOMPTES','REG_IS'] },
+        { id: 'sociale', title: 'Social (CNSS / Damancom) & Paie',
+          items: ['CNSS','DTS','PAIE'] },
+        { id: 'juridique', title: 'Secrétariat juridique annuel',
+          items: ['PV_AGO','DEPOT_RC'] }
+    ];
+
+    var FALLBACK = {
+        PAIE: 'Bulletins de paie & traitement de la paie',
+        DEPOT_RC: 'Dépôt des comptes au greffe',
+        COMPTABILITE: 'Tenue comptable, saisie & rapprochements',
+        TRESORERIE: 'Trésorerie & rapprochements bancaires',
+        BILAN: 'Bilan, CPC & états de synthèse',
+        ETATSFISCAUX: 'États fiscaux (CPC, ESG, TFT)',
+        LIASSEFISCALE: 'Liasse fiscale',
+        EG: 'E.G – État Descriptif du Gasoil',
+        TVA: 'TVA – Taxe sur la Valeur Ajoutée',
+        IR_SAL: 'IR / Salaires – Retenue à la source',
+        RAS_FONC: 'RAS / Foncier', RAS_DIV: 'RAS / Dividendes',
+        DRF: 'D.R.F – Déclaration du Résultat Fiscal',
+        CM: 'CM – Cotisation Minimale',
+        ACOMPTES: 'Acomptes IS (trimestriels)', REG_IS: 'Régularisation / Solde IS',
+        CNSS: 'CNSS – Déclarations Damancom', DTS: 'D.T.S / État 9421',
+        PV_AGO: 'PV AGO & Rapport de gestion'
+    };
+
+    var checked = new Set();
+    CHECKED_CODES.forEach(function (c) { if (c) checked.add(String(c).toUpperCase()); });
+
+    function labelFor(code) {
+        var cu = (code || '').toUpperCase();
+        var found = ALL_SERVICES.find(function (s) { return (s.code || '').toUpperCase() === cu; });
+        return (found && found.label) ? found.label : (FALLBACK[cu] || cu);
+    }
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function updateBadge() {
+        var n = checked.size;
+        var b = document.getElementById(pfx + 'CountBadge');
+        if (b) b.textContent = n + (n <= 1 ? ' sélectionné' : ' sélectionnés');
+    }
+
+    function render() {
+        var root = document.getElementById(pfx + 'Families');
+        if (!root) return;
+        root.innerHTML = '';
+
+        FAMILIES.forEach(function (fam, idx) {
+            var color = COLORS[idx % COLORS.length];
+            var selectedInFam = fam.items.filter(function (code) {
+                return checked.has(String(code).toUpperCase());
+            }).length;
+
+            var card = document.createElement('div');
+            card.className = 'card border-0 shadow-sm rounded-4 border-start border-4 border-' + color;
+
+            var head = document.createElement('div');
+            head.className = 'card-header bg-white border-0 py-3 d-flex flex-wrap align-items-center gap-2 rounded-top-4';
+            head.innerHTML =
+                '<span class="badge rounded-pill bg-' + color + '-subtle text-' + color + '-emphasis px-3 py-2">' + esc(fam.title) + '</span>' +
+                '<span class="small text-body-secondary fam-count">' + selectedInFam + '/' + fam.items.length + '</span>' +
+                '<div class="ms-auto btn-group btn-group-sm">' +
+                '<button type="button" class="btn btn-outline-' + color + ' rounded-pill" data-act="all">Tout</button>' +
+                '<button type="button" class="btn btn-outline-secondary rounded-pill" data-act="none">Aucun</button></div>';
+
+            head.querySelector('[data-act=all]').addEventListener('click', function () {
+                fam.items.forEach(function (code) { checked.add(String(code).toUpperCase()); });
+                render();
+            });
+            head.querySelector('[data-act=none]').addEventListener('click', function () {
+                fam.items.forEach(function (code) { checked.delete(String(code).toUpperCase()); });
+                render();
+            });
+
+            var body = document.createElement('div');
+            body.className = 'card-body pt-0';
+            var list = document.createElement('div');
+            list.className = 'list-group list-group-flush rounded-3 border';
+
+            fam.items.forEach(function (raw) {
+                var code = String(raw).toUpperCase();
+                var on = checked.has(code);
+                var uid = pfx + '_' + fam.id + '_' + code;
+                var row = document.createElement('label');
+                row.className = 'list-group-item list-group-item-action d-flex align-items-start gap-3 py-3' + (on ? ' bg-' + color + '-subtle' : '');
+                row.setAttribute('for', uid);
+                row.innerHTML =
+                    '<input class="form-check-input mt-1 flex-shrink-0" type="checkbox" id="' + uid + '" data-code="' + esc(code) + '"' + (on ? ' checked' : '') + '>' +
+                    '<span class="flex-grow-1">' +
+                    '<span class="badge rounded-pill text-bg-light border me-2">' + esc(code) + '</span>' +
+                    '<span>' + esc(labelFor(code)) + '</span></span>';
+                var cb = row.querySelector('input');
+                cb.addEventListener('change', function () {
+                    if (cb.checked) checked.add(code); else checked.delete(code);
+                    updateBadge();
+                    row.classList.toggle('bg-' + color + '-subtle', cb.checked);
+                    var n = fam.items.filter(function (c) { return checked.has(String(c).toUpperCase()); }).length;
+                    var countEl = head.querySelector('.fam-count');
+                    if (countEl) countEl.textContent = n + '/' + fam.items.length;
+                });
+                list.appendChild(row);
+            });
+
+            body.appendChild(list);
+            card.appendChild(head);
+            card.appendChild(body);
+            root.appendChild(card);
+        });
+        updateBadge();
+    }
+
+    window['spcSelectAll_' + pfx] = function () {
+        FAMILIES.forEach(function (f) { f.items.forEach(function (code) { checked.add(String(code).toUpperCase()); }); });
+        render();
+    };
+    window['spcClearAll_' + pfx] = function () { checked.clear(); render(); };
+    window['spcSerialize_' + pfx] = function () {
+        var hid = document.getElementById(pfx + 'Hidden');
+        if (!hid) return;
+        hid.innerHTML = '';
+        var idx = 0;
+        FAMILIES.forEach(function (fam) {
+            fam.items.forEach(function (raw) {
+                var code = String(raw).toUpperCase();
+                if (!checked.has(code)) return;
+                function h(name, val) {
+                    var inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'ServicesActives[' + idx + '].' + name;
+                    inp.value = val;
+                    hid.appendChild(inp);
+                }
+                h('TypeService', code);
+                h('LibelleService', labelFor(code));
+                h('AutoGenererDeclarations', 'true');
+                idx++;
+            });
+        });
+    };
+
+    render();
+    var picker = document.getElementById(pfx + 'Picker');
+    if (picker) {
+        var form = picker.closest('form');
+        if (form) form.addEventListener('submit', function () { window['spcSerialize_' + pfx](); }, true);
+    }
+}());
+</script>

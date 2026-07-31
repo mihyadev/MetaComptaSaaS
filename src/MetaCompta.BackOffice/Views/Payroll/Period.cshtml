@@ -1,4 +1,4 @@
-﻿@using MetaCompta.Application.DTOs
+@using MetaCompta.Application.DTOs
 @using MetaCompta.Domain.Common
 @model PayrollPeriodDto
 @{
@@ -22,6 +22,8 @@
     var totalNet = paySlips.Sum(s => s.SalaireNet);
     var totalRetenues = totalCNSSSalarial + totalAMOSalarial + totalCIMR + totalIR;
     var totalChargesPatr = totalCNSSPatronal + totalAMOPatronal + totalFP;
+    var canPayrollEdit = ViewBag.CanPayrollEdit as bool? ?? false;
+    var canPayrollValidate = ViewBag.CanPayrollValidate as bool? ?? false;
 }
 
 @* ══════════════════════════════════════════════════════════════ *@
@@ -64,7 +66,7 @@
         </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        @if (isBrouillon)
+        @if (isBrouillon && canPayrollEdit)
         {
             <form asp-action="Calculate" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
@@ -76,20 +78,26 @@
         }
         @if (isCalcule)
         {
-            <form asp-action="Calculate" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="id" value="@Model.Id" />
-                <button type="submit" class="btn btn-outline-primary rounded-pill px-3">
-                    <i class="bi bi-arrow-repeat me-1"></i> Recalculer
-                </button>
-            </form>
-            <form asp-action="Validate" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="id" value="@Model.Id" />
-                <button type="submit" class="btn btn-success rounded-pill px-3" onclick="return confirm('Valider définitivement cette paie ? Cette action est irréversible.')">
-                    <i class="bi bi-check-circle me-1"></i> Valider la Paie
-                </button>
-            </form>
+            @if (canPayrollEdit)
+            {
+                <form asp-action="Calculate" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button type="submit" class="btn btn-outline-primary rounded-pill px-3">
+                        <i class="bi bi-arrow-repeat me-1"></i> Recalculer
+                    </button>
+                </form>
+            }
+            @if (canPayrollValidate)
+            {
+                <form asp-action="Validate" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button type="submit" class="btn btn-success rounded-pill px-3" onclick="return confirm('Valider définitivement cette paie ? Cette action est irréversible.')">
+                        <i class="bi bi-check-circle me-1"></i> Valider la Paie
+                    </button>
+                </form>
+            }
         }
         <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i> Retour
@@ -102,13 +110,13 @@
 @* ══════════════════════════════════════════════════════════════ *@
 <div class="row g-3 mb-4">
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-primary);">
+        <div class="stat-card" style="border-left:4px solid var(--primary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <div class="stat-label">Employés</div>
                     <div class="stat-value">@paySlips.Count</div>
                 </div>
-                <div class="stat-icon" style="background:rgba(37,99,235,.1);color:var(--mc-primary);"><i class="bi bi-people"></i></div>
+                <div class="stat-icon" style="background:rgba(37,99,235,.1);color:var(--primary);"><i class="bi bi-people"></i></div>
             </div>
         </div>
     </div>
@@ -229,12 +237,13 @@
                                     <td class="text-end text-danger">@totalRetSlip.ToString("N2")</td>
                                     <td class="text-end fw-bold text-success">@slip.SalaireNet.ToString("N2")</td>
                                     <td class="text-center">
-                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill btn-detail"
-                                                data-bs-toggle="modal" data-bs-target="#modalDetail"
-                                                data-slip="@System.Text.Json.JsonSerializer.Serialize(slip)">
-                                            <i class="bi bi-eye me-1"></i>Voir
-                                        </button>
-                                        @if (isBrouillon || isCalcule)
+                                        <a asp-action="Bulletin" asp-route-id="@slip.Id" class="btn btn-sm btn-outline-primary rounded-pill">
+                                            <i class="bi bi-eye me-1"></i>Bulletin
+                                        </a>
+                                        <a asp-action="BulletinPdf" asp-route-id="@slip.Id" target="_blank" class="btn btn-sm btn-outline-danger rounded-pill ms-1">
+                                            <i class="bi bi-file-pdf me-1"></i>PDF
+                                        </a>
+                                        @if ((isBrouillon || isCalcule) && canPayrollEdit)
                                         {
                                             <button type="button" class="btn btn-sm btn-outline-warning rounded-pill ms-1"
                                                     data-bs-toggle="modal" data-bs-target="#modalVars"
@@ -389,83 +398,31 @@
 </div>
 
 @* ══════════════════════════════════════════════════════════════ *@
-@* MODAL: Edit Variables                                          *@
-@* ══════════════════════════════════════════════════════════════ *@
+@* MODAL: Edit Variables (Dynamic AJAX) *@
 @if (isBrouillon || isCalcule)
 {
     <div class="modal fade" id="modalVars" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content rounded-4">
-                <form asp-action="UpdateVariables" method="post">
+                <form asp-action="SaveEmployeeVariables" method="post" id="varsForm">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="periodId" value="@Model.Id" />
-                    <input type="hidden" name="dto.EmployeeId" id="varEmpId" />
+                    <input type="hidden" name="employeeId" id="varEmpId" />
+                    <input type="hidden" name="annee" value="@Model.Year" />
+                    <input type="hidden" name="mois" value="@Model.Month" />
                     <div class="modal-header border-0 bg-warning bg-opacity-10">
-                        <h5 class="modal-title fw-bold"><i class="bi bi-sliders me-2"></i>Variables de Paie — <span id="varEmpName"></span></h5>
+                        <h5 class="modal-title fw-bold"><i class="bi bi-sliders me-2"></i>Variables de Paie - <span id="varEmpName"></span></h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info rounded-3 small mb-3">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Modifiez les éléments variables du mois. Le calcul (brut, CNSS, AMO, IR, net) sera automatique.
+                            <i class="bi bi-info-circle me-1"></i>Modifiez les elements variables du mois.
                         </div>
-                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-clock-history me-1"></i>Heures Supplémentaires</h6>
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold">Heures à 25%</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
-                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp25" id="varHs25" class="form-control" />
-                                    <span class="input-group-text">h</span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold">Heures à 50%</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
-                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp50" id="varHs50" class="form-control" />
-                                    <span class="input-group-text">h</span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold">Heures à 100%</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
-                                    <input type="number" step="0.5" min="0" name="dto.HeuresSupp100" id="varHs100" class="form-control" />
-                                    <span class="input-group-text">h</span>
-                                </div>
-                            </div>
+                        <div id="varsLoadingSpinner" class="text-center py-5" style="display:none;">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="text-muted mt-2">Chargement des variables...</p>
                         </div>
-                        <h6 class="fw-bold text-success mb-3"><i class="bi bi-plus-circle me-1"></i>Primes & Indemnités</h6>
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Primes Exceptionnelles</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-gift"></i></span>
-                                    <input type="number" step="0.01" min="0" name="dto.PrimesExceptionnelles" id="varPrimes" class="form-control" />
-                                    <span class="input-group-text">MAD</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Avances sur Salaire</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-arrow-down-circle"></i></span>
-                                    <input type="number" step="0.01" min="0" name="dto.AvancesSalaire" id="varAvances" class="form-control" />
-                                    <span class="input-group-text">MAD</span>
-                                </div>
-                            </div>
-                        </div>
-                        <h6 class="fw-bold text-danger mb-3"><i class="bi bi-dash-circle me-1"></i>Absences</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Jours d'Absence Non Rémunérée</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text"><i class="bi bi-calendar-x"></i></span>
-                                    <input type="number" step="0.5" min="0" name="dto.AbsencesNonRemunerees" id="varAbsences" class="form-control" />
-                                    <span class="input-group-text">jours</span>
-                                </div>
-                            </div>
-                        </div>
+                        <div id="varsContainer"></div>
                     </div>
                     <div class="modal-footer border-0">
                         <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
@@ -476,137 +433,69 @@
         </div>
     </div>
 }
-
 @section Scripts {
 <script>
 $(function () {
-    // ── DataTable custom init (override global to control this table) ──
-    if ($.fn.DataTable && !$.fn.DataTable.isDataTable('#payslipsTable')) {
-        $('#payslipsTable').DataTable({
-            pageLength: 15,
-            lengthMenu: [[10, 15, 25, 50, -1], [10, 15, 25, 50, "Tous"]],
-            order: [[0, 'asc']],
-            language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/fr-FR.json' },
-            dom: "<'row align-items-center mb-3'<'col-md-4'l><'col-md-8 text-end'f>>" +
-                 "<'row'<'col-12'tr>>" +
-                 "<'row mt-3'<'col-md-5'i><'col-md-7 text-end'p>>",
-            columnDefs: [{ targets: -1, orderable: false, searchable: false }],
-            drawCallback: function () {
-                // Show/hide tfoot based on whether all data is visible
-                var api = this.api();
-                var total = api.rows().count();
-                var filtered = api.rows({ search: 'applied' }).count();
-                $(this).find('tfoot').toggle(filtered === total);
-            }
+    if ($.fn.DataTable && !$.fn.DataTable.isDataTable("#payslipsTable")) {
+        $("#payslipsTable").DataTable({
+            pageLength: 15, order: [[0, "asc"]],
+            language: { url: "https://cdn.datatables.net/plug-ins/1.13.8/i18n/fr-FR.json" },
+            columnDefs: [{ targets: -1, orderable: false, searchable: false }]
         });
     }
-
-    // ── Variables modal: fill inputs ──
-    var modalVars = document.getElementById('modalVars');
+    var modalVars = document.getElementById("modalVars");
     if (modalVars) {
-        modalVars.addEventListener('show.bs.modal', function (e) {
+        modalVars.addEventListener("show.bs.modal", function (e) {
             var btn = e.relatedTarget;
-            $('#varEmpId').val(btn.dataset.empId);
-            $('#varEmpName').text(btn.dataset.empName);
-            $('#varHs25').val(parseFloat(btn.dataset.hs25) || 0);
-            $('#varHs50').val(parseFloat(btn.dataset.hs50) || 0);
-            $('#varHs100').val(parseFloat(btn.dataset.hs100) || 0);
-            $('#varPrimes').val(parseFloat(btn.dataset.primes) || 0);
-            $('#varAvances').val(parseFloat(btn.dataset.avances) || 0);
-            $('#varAbsences').val(parseFloat(btn.dataset.absences) || 0);
-        });
-    }
-
-    // ── Detail modal: build bulletin ──
-    var modalDetail = document.getElementById('modalDetail');
-    if (modalDetail) {
-        modalDetail.addEventListener('show.bs.modal', function (e) {
-            var btn = e.relatedTarget;
-            try {
-                var s = JSON.parse(btn.dataset.slip);
-                $('#detailEmpName').text(s.EmployeeName || s.employeeName || '—');
-                var totalRet = (s.CotisationCNSS||s.cotisationCNSS||0) + (s.CotisationAMO||s.cotisationAMO||0) + (s.CotisationCIMR||s.cotisationCIMR||0) + (s.IR||s.ir||0);
-                var totalChP = (s.CNSSPatronal||s.cnssPatronal||0) + (s.AMOPatronal||s.amoPatronal||0) + (s.FormationProfessionnelle||s.formationProfessionnelle||0);
-                var f = function(v) { return (v||0).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}); };
-
-                var html = '<div id="bulletinPrint">';
-
-                // ── Gains ──
-                html += '<h6 class="fw-bold text-success border-bottom pb-2 mb-3"><i class="bi bi-plus-circle me-2"></i>Gains</h6>';
-                html += '<table class="table table-sm table-borderless mb-4"><tbody>';
-                html += '<tr><td class="text-muted">Salaire de Base</td><td class="text-end fw-semibold">' + f(s.SalaireBase||s.salaireBase) + ' MAD</td></tr>';
-                html += '<tr><td class="text-muted">Primes Fixes Totales</td><td class="text-end fw-semibold">' + f(s.PrimesFixesTotales||s.primesFixesTotales) + ' MAD</td></tr>';
-                if ((s.HeuresSupp25||s.heuresSupp25||0) > 0 || (s.HeuresSupp50||s.heuresSupp50||0) > 0 || (s.HeuresSupp100||s.heuresSupp100||0) > 0) {
-                    html += '<tr><td class="text-muted ps-3">› Heures Supp 25% : ' + f(s.HeuresSupp25||s.heuresSupp25) + ' h</td><td></td></tr>';
-                    html += '<tr><td class="text-muted ps-3">› Heures Supp 50% : ' + f(s.HeuresSupp50||s.heuresSupp50) + ' h</td><td></td></tr>';
-                    html += '<tr><td class="text-muted ps-3">› Heures Supp 100% : ' + f(s.HeuresSupp100||s.heuresSupp100) + ' h</td><td></td></tr>';
-                    html += '<tr><td class="text-muted">Montant Heures Supp</td><td class="text-end fw-semibold">' + f(s.MontantHeuresSupp||s.montantHeuresSupp) + ' MAD</td></tr>';
+            var empId = btn.dataset.empId;
+            $("#varEmpId").val(empId);
+            $("#varEmpName").text(btn.dataset.empName);
+            $("#varsContainer").html("");
+            $("#varsLoadingSpinner").show();
+            var annee = @Model.Year;
+            var mois = @Model.Month;            $.getJSON("@Url.Action("GetEmployeeVariables", "Payroll")", { employeeId: empId, annee: annee, mois: mois }, function (data) {
+                $("#varsLoadingSpinner").hide();
+                if (!data || data.length === 0) {
+                    $("#varsContainer").html("<div class='alert alert-warning'>Aucune variable trouvee.</div>");
+                    return;
                 }
-                if ((s.PrimesExceptionnelles||s.primesExceptionnelles||0) > 0) {
-                    html += '<tr><td class="text-muted">Primes Exceptionnelles</td><td class="text-end fw-semibold">' + f(s.PrimesExceptionnelles||s.primesExceptionnelles) + ' MAD</td></tr>';
+                var groups = { "Salaire": [], "Primes": [], "Heures Sup": [], "Absences": [], "Autres": [] };
+                data.forEach(function (v) {
+                    var code = (v.rubriqueCode || v.code || "").toUpperCase();
+                    var cat = "Autres";
+                    if (code.indexOf("SALAIRE") >= 0 || code.indexOf("BASE") >= 0) cat = "Salaire";
+                    else if (code.indexOf("PRIME") >= 0 || code.indexOf("INDEMNITE") >= 0) cat = "Primes";
+                    else if (code.indexOf("HS_") >= 0 || code.indexOf("HEURE") >= 0) cat = "Heures Sup";
+                    else if (code.indexOf("ABSENCE") >= 0) cat = "Absences";
+                    groups[cat].push(v);
+                });
+                var html = "", idx = 0;
+                for (var cat in groups) {
+                    if (groups[cat].length === 0) continue;
+                    html += "<h6 class='fw-bold mb-3'>" + cat + "</h6><div class='row g-3 mb-4'>";
+                    groups[cat].forEach(function (v) {
+                        var label = v.rubriqueLibelle || v.rubriqueCode || v.code;
+                        var unit = (cat === "Heures Sup") ? "h" : (cat === "Absences" ? "jours" : "MAD");
+                        var step = (cat === "Heures Sup" || cat === "Absences") ? "0.5" : "0.01";
+                        html += "<div class='col-md-4'><label class='form-label small fw-semibold'>" + label + "</label>";
+                        html += "<div class='input-group input-group-sm'>";
+                        html += "<input type='hidden' name='variables[" + idx + "].EmployeeId' value='" + empId + "' />";
+                        html += "<input type='hidden' name='variables[" + idx + "].Code' value='" + (v.rubriqueCode || v.code) + "' />";
+                        html += "<input type='hidden' name='variables[" + idx + "].Mois' value='" + mois + "' />";
+                        html += "<input type='hidden' name='variables[" + idx + "].Annee' value='" + annee + "' />";
+                        html += "<input type='number' step='" + step + "' min='0' name='variables[" + idx + "].Valeur' value='" + (v.valeur || 0) + "' class='form-control' />";
+                        html += "<span class='input-group-text'>" + unit + "</span></div></div>";
+                        idx++;
+                    });
+                    html += "</div>";
                 }
-                html += '</tbody>';
-                html += '<tfoot><tr class="border-top"><td class="fw-bold">Salaire Brut Global</td><td class="text-end fw-bold text-success">' + f(s.SalaireBrut||s.salaireBrut) + ' MAD</td></tr></tfoot>';
-                html += '</table>';
-
-                // ── Retenues Salariales ──
-                html += '<h6 class="fw-bold text-danger border-bottom pb-2 mb-3"><i class="bi bi-dash-circle me-2"></i>Retenues Salariales</h6>';
-                html += '<table class="table table-sm table-borderless mb-4"><tbody>';
-                html += '<tr><td class="text-muted">CNSS Salariale (4.48%)</td><td class="text-end fw-semibold">' + f(s.CotisationCNSS||s.cotisationCNSS) + ' MAD</td></tr>';
-                html += '<tr><td class="text-muted">AMO Salariale (2.26%)</td><td class="text-end fw-semibold">' + f(s.CotisationAMO||s.cotisationAMO) + ' MAD</td></tr>';
-                if ((s.CotisationCIMR||s.cotisationCIMR||0) > 0)
-                    html += '<tr><td class="text-muted">CIMR</td><td class="text-end fw-semibold">' + f(s.CotisationCIMR||s.cotisationCIMR) + ' MAD</td></tr>';
-                html += '<tr><td class="text-muted">IR (Impôt sur le Revenu)</td><td class="text-end fw-semibold">' + f(s.IR||s.ir) + ' MAD</td></tr>';
-                if ((s.AvancesSalaire||s.avancesSalaire||0) > 0)
-                    html += '<tr><td class="text-muted">Avances sur Salaire</td><td class="text-end fw-semibold">' + f(s.AvancesSalaire||s.avancesSalaire) + ' MAD</td></tr>';
-                if ((s.AbsencesNonRemunerees||s.absencesNonRemunerees||0) > 0)
-                    html += '<tr><td class="text-muted">Absences Non Rémunérées (' + f(s.AbsencesNonRemunerees||s.absencesNonRemunerees) + ' j)</td><td class="text-end fw-semibold">—</td></tr>';
-                html += '</tbody>';
-                html += '<tfoot><tr class="border-top"><td class="fw-bold">Total Retenues</td><td class="text-end fw-bold text-danger">' + f(totalRet) + ' MAD</td></tr></tfoot>';
-                html += '</table>';
-
-                // ── Net ──
-                html += '<div class="p-3 bg-success bg-opacity-10 rounded-3 text-center mb-4">';
-                html += '<span class="text-muted">Net à Payer</span><br/>';
-                html += '<span class="fs-3 fw-bold text-success">' + f(s.SalaireNet||s.salaireNet) + ' MAD</span>';
-                html += '</div>';
-
-                // ── Charges Patronales ──
-                html += '<h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-building me-2"></i>Charges Patronales</h6>';
-                html += '<table class="table table-sm table-borderless mb-0"><tbody>';
-                html += '<tr><td class="text-muted">CNSS Patronale (8.98%)</td><td class="text-end fw-semibold">' + f(s.CNSSPatronal||s.cnssPatronal) + ' MAD</td></tr>';
-                html += '<tr><td class="text-muted">AMO Patronale (4.11%)</td><td class="text-end fw-semibold">' + f(s.AMOPatronal||s.amoPatronal) + ' MAD</td></tr>';
-                html += '<tr><td class="text-muted">Formation Professionnelle (1.6%)</td><td class="text-end fw-semibold">' + f(s.FormationProfessionnelle||s.formationProfessionnelle) + ' MAD</td></tr>';
-                html += '</tbody>';
-                html += '<tfoot><tr class="border-top"><td class="fw-bold">Total Charges Patronales</td><td class="text-end fw-bold text-primary">' + f(totalChP) + ' MAD</td></tr></tfoot>';
-                html += '</table>';
-
-                html += '</div>';
-                $('#detailBody').html(html);
-            } catch (ex) {
-                $('#detailBody').html('<div class="alert alert-danger">Erreur lors du chargement du bulletin.</div>');
-            }
+                $("#varsContainer").html(html);
+            }).fail(function () {
+                $("#varsLoadingSpinner").hide();
+                $("#varsContainer").html("<div class='alert alert-danger'>Erreur lors du chargement.</div>");
+            });
         });
     }
 });
-
-// ── Print bulletin ──
-function printBulletin() {
-    var content = document.getElementById('bulletinPrint');
-    if (!content) return;
-    var empName = document.getElementById('detailEmpName').textContent;
-    var w = window.open('', '_blank', 'width=800,height=900');
-    w.document.write('<!DOCTYPE html><html><head><title>Bulletin de Paie — ' + empName + '</title>');
-    w.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">');
-    w.document.write('<style>body{padding:30px;font-size:14px;} table{margin-bottom:1rem;} .fw-bold{font-weight:700!important;} .text-end{text-align:right!important;} .text-muted{color:#6c757d!important;} .fw-semibold{font-weight:600!important;} .border-top{border-top:1px solid #dee2e6!important;} @@media print{body{padding:15px;}}</style>');
-    w.document.write('</head><body>');
-    w.document.write('<h4 class="mb-1">Bulletin de Paie</h4>');
-    w.document.write('<p class="text-muted mb-4">' + empName + ' — @(moisLabel) @(Model.Year)</p>');
-    w.document.write(content.innerHTML);
-    w.document.write('<hr class="my-4"/><p class="text-muted small text-center">Document généré le ' + new Date().toLocaleDateString('fr-FR') + '</p>');
-    w.document.write('</body></html>');
-    w.document.close();
-    setTimeout(function(){ w.print(); }, 500);
-}
 </script>
 }

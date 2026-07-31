@@ -16,9 +16,12 @@
         </nav>
     </div>
     <div class="d-flex gap-2">
-        <a href="@Url.Action("Edit", "Employees", new { id = Model.Id })" class="btn btn-warning rounded-pill px-3">
-            <i class="bi bi-pencil me-1"></i> Modifier
-        </a>
+        @if (ViewBag.CanEmployeeEdit as bool? ?? false)
+        {
+            <a href="@Url.Action("Edit", "Employees", new { id = Model.Id })" class="btn btn-warning rounded-pill px-3">
+                <i class="bi bi-pencil me-1"></i> Modifier
+            </a>
+        }
         <a href="@Url.Action("Index", "Employees")" class="btn btn-outline-secondary rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i> Retour
         </a>
@@ -122,13 +125,16 @@
                     <a href="@Url.Action("Index", "Declarations", new { })" class="btn btn-outline-primary rounded-pill btn-sm">
                         <i class="bi bi-file-earmark-text me-1"></i> Déclarations
                     </a>
-                    <form asp-action="Delete" asp-route-id="@Model.Id" method="post"
-                        onsubmit="return confirm('Supprimer cet employé ? Cette action est irréversible.');">
-                        @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-outline-danger rounded-pill btn-sm w-100">
-                            <i class="bi bi-trash me-1"></i> Supprimer l'Employé
-                        </button>
-                    </form>
+                    @if (ViewBag.CanEmployeeDelete as bool? ?? false)
+                    {
+                        <form asp-action="Delete" asp-route-id="@Model.Id" method="post"
+                            onsubmit="return confirm('Supprimer cet employé ? Cette action est irréversible.');">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-danger rounded-pill btn-sm w-100">
+                                <i class="bi bi-trash me-1"></i> Supprimer l'Employé
+                            </button>
+                        </form>
+                    }
                 </div>
             </div>
         </div>
@@ -152,6 +158,11 @@
                     <li class="nav-item">
                         <button class="nav-link rounded-pill px-4" data-bs-toggle="pill" data-bs-target="#dBank" type="button">
                             <i class="bi bi-bank2 me-1"></i> Banque
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link rounded-pill px-4" data-bs-toggle="pill" data-bs-target="#dRubriques" type="button">
+                            <i class="bi bi-list-check me-1"></i> Rubriques
                         </button>
                     </li>
                 </ul>
@@ -204,7 +215,7 @@
                     <div class="tab-pane fade" id="dSalary">
                         <div class="row g-4 mt-1">
                             <div class="col-md-6">
-                                <div class="p-4 rounded-3 text-center" style="background:linear-gradient(135deg,rgba(37,99,235,0.05),rgba(124,58,237,0.05));border:1px solid rgba(37,99,235,0.1);">
+                                <div class="p-4 rounded-3 text-center" style="background:linear-gradient(135deg,rgba(37,99,235,0.05),rgba(124,58,237,0.05));border:1px solid rgba(14,165,233,0.1);">
                                     <i class="bi bi-currency-exchange text-primary fs-3 mb-2 d-block"></i>
                                     <small class="text-muted d-block mb-1">Salaire de Base</small>
                                     <h3 class="fw-bold text-primary mb-0">@(@Model.SalaireBase.ToString("N2"))</h3>
@@ -212,7 +223,7 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="p-4 rounded-3 text-center" style="background:rgba(5,150,105,0.04);border:1px solid rgba(5,150,105,0.1);">
+                                <div class="p-4 rounded-3 text-center" style="background:rgba(5,150,105,0.04);border:1px solid rgba(16,185,129,0.1);">
                                     <i class="bi bi-credit-card text-success fs-3 mb-2 d-block"></i>
                                     <small class="text-muted d-block mb-1">Mode de Paiement</small>
                                     <h4 class="fw-bold text-success mb-0">@(Model.ModePaiement ?? "Non défini")</h4>
@@ -225,7 +236,7 @@
                     <div class="tab-pane fade" id="dBank">
                         <div class="row g-4 mt-1">
                             <div class="col-12">
-                                <div class="p-4 rounded-3" style="background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.1);">
+                                <div class="p-4 rounded-3" style="background:rgba(37,99,235,0.04);border:1px solid rgba(14,165,233,0.1);">
                                     <div class="d-flex align-items-center gap-2 mb-3">
                                         <i class="bi bi-credit-card-2-front text-primary fs-4"></i>
                                         <h6 class="fw-bold mb-0">Relevé d'Identité Bancaire (RIB)</h6>
@@ -246,8 +257,106 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Rubriques Tab -->
+                    <div class="tab-pane fade" id="dRubriques">
+                        <div class="mt-2">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div><h6 class="fw-bold mb-1"><i class="bi bi-list-check text-primary me-2"></i>Rubriques Affectees</h6>
+                                <small class="text-muted">Rubriques specifiques a cet employe.</small></div>
+                                @if (ViewBag.CanEmployeeEdit as bool? ?? false)
+                                {
+                                    <button class="btn btn-success rounded-pill px-3" onclick="openAddRubriqueModal()"><i class="bi bi-plus-circle me-1"></i> Ajouter</button>
+                                }
+                            </div>
+                            <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+                                <thead class="table-light"><tr><th>Code</th><th>Libelle</th><th>Type</th><th>Section</th><th class="text-end">Valeur Defaut</th><th class="text-center">Actif</th><th class="text-center">Actions</th></tr></thead>
+                                <tbody id="affBody"><tr><td colspan="7" class="text-center text-muted py-4">Cliquez sur l'onglet pour charger...</td></tr></tbody>
+                            </table></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Add Rubrique Modal -->
+<div class="modal fade" id="addRubModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle text-success me-2"></i>Ajouter une Rubrique</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body"><div class="mb-3"><label class="form-label fw-semibold">Rubrique</label><select id="selRub" class="form-select"><option value="">Chargement...</option></select></div>
+<div class="mb-3"><label class="form-label fw-semibold">Valeur par Defaut</label><input type="number" id="txtDefVal" class="form-control" value="0" step="0.01" /><small class="text-muted">Valeur utilisee si aucune variable mensuelle.</small></div></div>
+<div class="modal-footer"><button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button><button type="button" class="btn btn-success rounded-pill px-4" onclick="saveAff()"><i class="bi bi-check-circle me-1"></i> Affecter</button></div>
+</div></div></div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil text-warning me-2"></i>Modifier Valeur</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body"><input type="hidden" id="eAffId"/><input type="hidden" id="eEmpId"/><input type="hidden" id="eRubId"/><input type="hidden" id="eRubCode"/>
+<div class="mb-3"><label class="form-label fw-semibold" id="eLabel">Rubrique</label><input type="number" id="eVal" class="form-control" step="0.01"/></div></div>
+<div class="modal-footer"><button type="button" class="btn btn-outline-secondary rounded-pill btn-sm" data-bs-dismiss="modal">Annuler</button><button type="button" class="btn btn-primary rounded-pill btn-sm px-3" onclick="updateAff()"><i class="bi bi-check me-1"></i> Enregistrer</button></div>
+</div></div></div>
+
+@section Scripts {
+<script>
+const empId = @Model.Id;
+const cliId = @(Model.ClientId);
+const canEmpEdit = @(ViewBag.CanEmployeeEdit as bool? ?? false ? "true" : "false");
+document.querySelector('[data-bs-target="#dRubriques"]').addEventListener("shown.bs.tab", function(){ loadAff(); });
+
+function loadAff(){
+  $.getJSON("@Url.Action("GetAffectations","Employees")?employeeId="+empId, function(d){
+    var tb=$("#affBody"); tb.empty();
+    if(!d||d.length===0){tb.append('<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Aucune rubrique affectee.</td></tr>'); return;}
+    d.forEach(function(a){
+      var bc=a.rubriqueType==="Gain"?"bg-success-subtle text-success":a.rubriqueType==="Retenue"?"bg-danger-subtle text-danger":"bg-info-subtle text-info";
+      var actions = canEmpEdit
+        ? "<td class=text-center><button class='btn btn-outline-warning btn-sm rounded-pill me-1' onclick='openEdit("+a.id+","+a.employeeId+","+a.rubriqueId+",\""+a.rubriqueCode+"\",\""+a.rubriqueLibelle+"\","+a.valeurDefaut+")'><i class='bi bi-pencil'></i></button><button class='btn btn-outline-danger btn-sm rounded-pill' onclick='removeAff("+a.id+",\""+a.rubriqueLibelle+"\")'><i class='bi bi-trash'></i></button></td>"
+        : "<td class=text-center></td>";
+      tb.append("<tr><td><code class=fw-bold>"+a.rubriqueCode+"</code></td><td>"+a.rubriqueLibelle+"</td><td><span class='badge "+bc+" rounded-pill'>"+a.rubriqueType+"</span></td><td><small>"+(a.rubriqueSection||"")+"</small></td><td class=text-end>"+parseFloat(a.valeurDefaut).toFixed(2)+"</td><td class=text-center>"+(a.actif?"<i class='bi bi-check-circle-fill text-success'></i>":"<i class='bi bi-x-circle text-danger'></i>")+"</td>"+actions+"</tr>");
+    });
+  });
+}
+
+function openAddRubriqueModal(){
+  var s=$("#selRub"); s.empty().append('<option value="">Chargement...</option>');
+  $("#txtDefVal").val(0);
+  new bootstrap.Modal(document.getElementById("addRubModal")).show();
+  $.getJSON("@Url.Action("GetRubriquesDisponibles","Employees")?employeeId="+empId+"&clientId="+cliId, function(d){
+    s.empty().append('<option value="">-- Selectionner --</option>');
+    if(d&&d.length>0) d.forEach(function(r){ s.append('<option value="'+r.id+'" data-code="'+r.code+'">' +r.code+" - "+r.libelle+"</option>"); });
+    else s.append('<option value="" disabled>Toutes les rubriques sont affectees</option>');
+  });
+}
+
+function saveAff(){
+  var rid=parseInt($("#selRub").val()); if(!rid){alert("Selectionnez une rubrique."); return;}
+  var rc=$("#selRub").find(":selected").data("code"), v=parseFloat($("#txtDefVal").val())||0;
+  $.ajax({url:"@Url.Action("AddAffectation","Employees")",type:"POST",contentType:"application/json",
+    data:JSON.stringify({employeeId:empId,rubriqueId:rid,rubriqueCode:rc,valeurDefaut:v,actif:true}),
+    success:function(r){ bootstrap.Modal.getInstance(document.getElementById("addRubModal")).hide(); loadAff(); },
+    error:function(){alert("Erreur serveur.");}
+  });
+}
+
+function openEdit(aId,eId,rId,rc,rl,val){
+  $("#eAffId").val(aId);$("#eEmpId").val(eId);$("#eRubId").val(rId);$("#eRubCode").val(rc);$("#eLabel").text(rl);$("#eVal").val(val);
+  new bootstrap.Modal(document.getElementById("editModal")).show();
+}
+
+function updateAff(){
+  var aId=parseInt($("#eAffId").val());
+  var dto={employeeId:parseInt($("#eEmpId").val()),rubriqueId:parseInt($("#eRubId").val()),rubriqueCode:$("#eRubCode").val(),valeurDefaut:parseFloat($("#eVal").val())||0,actif:true};
+  $.ajax({url:"@Url.Action("UpdateAffectation","Employees")?id="+aId,type:"PUT",contentType:"application/json",data:JSON.stringify(dto),
+    success:function(){ bootstrap.Modal.getInstance(document.getElementById("editModal")).hide(); loadAff(); },
+    error:function(){alert("Erreur serveur.");}
+  });
+}
+
+function removeAff(aId,rl){
+  if(!confirm("Retirer \""+rl+"\" ?")) return;
+  $.ajax({url:"@Url.Action("RemoveAffectation","Employees")?id="+aId,type:"DELETE",
+    success:function(){ loadAff(); },error:function(){alert("Erreur serveur.");}});
+}
+</script>
+}
+

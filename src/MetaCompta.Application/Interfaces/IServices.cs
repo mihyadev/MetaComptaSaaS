@@ -12,6 +12,13 @@ public interface IAuthService
     Task<ApiResponse<bool>> ResetPasswordAsync(string email);
 }
 
+public interface IContractAccessService
+{
+    /// <summary>True when client has ≥1 Valide/Actif contract within DateDebut–DateFin (Manage mode).</summary>
+    Task<bool> HasManageAccessAsync(int clientId, int cabinetId);
+    Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId);
+}
+
 public interface IClientService
 {
     Task<ApiResponse<PagedResult<ClientDto>>> GetAllAsync(int cabinetId, int page = 1, int pageSize = 20, string? search = null, string? statut = null);
@@ -20,8 +27,9 @@ public interface IClientService
     Task<ApiResponse<ClientDto>> UpdateAsync(int id, ClientCreateDto dto, int cabinetId, string userId);
     Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
     Task<List<string>> GetActiveServicesAsync(int clientId, int cabinetId);
-    /// <summary>Returns true if the client has at least one contract with status Valide or Actif.</summary>
+    /// <summary>Returns true if the client has Manage-mode access (Valide/Actif + date window).</summary>
     Task<bool> HasActiveContractAsync(int clientId, int cabinetId);
+    Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId);
     // Enterprise service contract management
     Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(int clientId, int cabinetId, int? exerciceFiscal = null);
     Task<ApiResponse<ServiceContratDto>> GetServiceContratByIdAsync(int serviceContratId, int cabinetId);
@@ -49,7 +57,7 @@ public interface IDeclarationService
     // TVA
     Task<ApiResponse<DeclarationDto>> CreateTVAAsync(int clientId, int cabinetId, string userId);
     Task<ApiResponse<DeclarationTVADto>> SaveTVADataAsync(int declarationId, DeclarationTVADto dto, int cabinetId, string userId);
-    Task<ApiResponse<DeclarationTVADto>> SaveTVAAjustementsAsync(int declarationId, decimal immobilisations, decimal creditPrecedent, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationTVADto>> SaveTVAAjustementsAsync(int declarationId, decimal tvaFacturee, decimal tvaDeductible, decimal creditPrecedent, int cabinetId, string userId);
     Task<ApiResponse<DeclarationTVADto>> CalculateTVAAsync(DeclarationTVADto dto);
     Task<ApiResponse<DeclarationTVADto>> GetTVADataAsync(int declarationId, int cabinetId);
     // TVA Invoice Lines
@@ -73,6 +81,7 @@ public interface IDeclarationService
     Task<ApiResponse<DeclarationCNSSDto>> GetCNSSDataAsync(int declarationId, int cabinetId);
     // Status
     Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId, string? comment = null);
+    Task<ApiResponse<List<DeclarationHistoryDto>>> GetStatusHistoryAsync(int declarationId, int cabinetId);
 }
 
 public interface IPayrollService
@@ -82,18 +91,50 @@ public interface IPayrollService
     Task<ApiResponse<PayrollPeriodDto>> GetPeriodAsync(int id, int cabinetId);
     Task<ApiResponse<List<PaySlipDto>>> GetPaySlipsAsync(int periodId, int cabinetId);
     Task<ApiResponse<PaySlipDto>> UpdateVariablesAsync(int periodId, PaySlipVariablesDto dto, int cabinetId, string userId);
+    Task<ApiResponse<List<VariableEmployeDto>>> GetVariablesForPeriodAsync(int employeeId, int annee, int mois, int cabinetId);
+    Task<ApiResponse<bool>> UpdateVariablesBulkAsync(int employeeId, int annee, int mois, List<VariableEmployeCreateDto> variables, int cabinetId, string userId);
     Task<ApiResponse<PayrollPeriodDto>> CalculateAllAsync(int periodId, int cabinetId, string userId);
     Task<ApiResponse<bool>> ValidateAsync(int periodId, int cabinetId, string userId);
+
+    // Payroll Engine
+    Task<ApiResponse<BulletinCompletDto>> GetBulletinAsync(int paySlipId, int cabinetId);
+    Task<ApiResponse<List<RubriqueDto>>> GetRubriquesAsync(int cabinetId, int? clientId = null);
+    Task<ApiResponse<RubriqueDto>> GetRubriqueAsync(int id, int cabinetId);
+    Task<ApiResponse<RubriqueDto>> CreateRubriqueAsync(RubriqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<RubriqueDto>> UpdateRubriqueAsync(int id, RubriqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ToggleRubriqueAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteRubriqueAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<List<ConstanteGlobaleDto>>> GetConstantesAsync(int cabinetId, string? categorie = null);
+    Task<ApiResponse<ConstanteGlobaleDto>> CreateConstanteAsync(ConstanteGlobaleDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ConstanteGlobaleDto>> UpdateConstanteAsync(int id, ConstanteGlobaleDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteConstanteAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<List<VariableEmployeDto>>> GetVariablesEmployeAsync(int employeeId, int cabinetId);
+    Task<ApiResponse<VariableEmployeDto>> CreateVariableAsync(VariableEmployeCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<VariableEmployeDto>> UpdateVariableAsync(int id, VariableEmployeCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteVariableAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<List<CumulEmployeDto>>> GetCumulsAsync(int employeeId, int annee, int cabinetId);
+    Task<ApiResponse<bool>> SeedDefaultRubriquesAsync(int cabinetId, string userId);
+    Task<ApiResponse<bool>> SeedDefaultConstantesAsync(int cabinetId, string userId);
+    Task<ApiResponse<bool>> SeedDemo2025Async(int clientId, int cabinetId, string userId);
+
+    // Affectation Rubriques (ERP-style: assign rubriques to employees)
+    Task<ApiResponse<List<AffectationRubriqueDto>>> GetAffectationsAsync(int employeeId, int cabinetId);
+    Task<ApiResponse<List<RubriqueDto>>> GetRubriquesDisponiblesAsync(int employeeId, int cabinetId, int? clientId = null);
+    Task<ApiResponse<AffectationRubriqueDto>> AddAffectationAsync(AffectationRubriqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<AffectationRubriqueDto>> UpdateAffectationAsync(int id, AffectationRubriqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> RemoveAffectationAsync(int id, int cabinetId, string userId);
 }
 
 public interface IDocumentService
 {
     Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? categorie = null, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<List<DocumentDto>>> GetByDeclarationIdAsync(int declarationId, int cabinetId);
     Task<ApiResponse<DocumentDto>> GetByIdAsync(int id, int cabinetId);
-    Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId);
+    Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId, int? declarationId = null);
     Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId, string? motif = null);
     Task<ApiResponse<bool>> ToggleShareAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<Stream>> DownloadAsync(int id, int cabinetId);
+    Task<int?> GetDeclarationClientIdAsync(int declarationId, int cabinetId);
 }
 
 public interface INotificationService
@@ -105,20 +146,32 @@ public interface INotificationService
     Task CreateAsync(string userId, string titre, string message, string type = "Info", string? module = null, string? url = null, int? cabinetId = null);
 }
 
+public interface IMessageService
+{
+    Task<ApiResponse<List<MessageDto>>> GetByDeclarationAsync(int declarationId, int cabinetId, int? clientId = null);
+    Task<ApiResponse<List<MessageDto>>> GetByClientAsync(int clientId, int cabinetId);
+    Task<ApiResponse<List<MessageDto>>> GetConversationsAsync(int cabinetId, string? userId = null, int? clientId = null);
+    Task<ApiResponse<MessageDto>> SendAsync(SendMessageDto dto, int cabinetId, string userId, string userName, string senderRole);
+    Task<ApiResponse<bool>> MarkAsReadAsync(int id, string userId);
+    Task<ApiResponse<int>> GetUnreadCountAsync(int cabinetId, string? userId = null, int? clientId = null);
+}
+
 public interface ITaskService
 {
-    Task<ApiResponse<PagedResult<TaskItemDto>>> GetAllAsync(int cabinetId, string? assignedToUserId = null, string? statut = null, int page = 1, int pageSize = 20);
+    /// <param name="assignedToKind">Optional: "Client" = assignee is extranet user; "Employee" = cabinet staff (or unassigned).</param>
+    Task<ApiResponse<PagedResult<TaskItemDto>>> GetAllAsync(int cabinetId, string? assignedToUserId = null, string? statut = null, int? clientId = null, string? assignedToKind = null, int page = 1, int pageSize = 20);
     Task<ApiResponse<TaskItemDto>> GetByIdAsync(int id, int cabinetId);
     Task<ApiResponse<TaskItemDto>> CreateAsync(TaskItemDto dto, int cabinetId, string userId);
     Task<ApiResponse<TaskItemDto>> UpdateAsync(int id, TaskItemDto dto, int cabinetId, string userId);
     Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId);
+    Task<ApiResponse<TaskCommentDto>> AddCommentAsync(int taskId, string contenu, int cabinetId, string userId, string userName);
 }
 
 public interface IDashboardService
 {
     Task<ApiResponse<DashboardDto>> GetManagerDashboardAsync(int cabinetId, string userId);
     Task<ApiResponse<DashboardDto>> GetAssistantDashboardAsync(int cabinetId, string userId);
-    Task<ApiResponse<object>> GetExtranetDashboardAsync(int clientId);
+    Task<ApiResponse<ExtranetDashboardDto>> GetExtranetDashboardAsync(int clientId);
 }
 
 public interface IReferenceDataService
@@ -190,6 +243,8 @@ public interface IWorkflowService
     Task<ApiResponse<bool>> DeleteTemplateAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<WorkflowTemplateDto>> CreateDefaultTemplateAsync(int cabinetId, string userId);
     Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId);
+    Task<ApiResponse<WorkflowTemplateDto>> RefreshTvaDefaultTemplateAsync(int cabinetId, string userId);
+    Task<int> ProcessDueRelancesAsync();
 
     // ── Instances (Workflow Execution) ───────────────────────────
     Task<ApiResponse<WorkflowInstanceDto>> StartWorkflowAsync(StartWorkflowDto dto, int cabinetId, string userId);
@@ -201,6 +256,7 @@ public interface IWorkflowService
 
     // ── Step Operations ──────────────────────────────────────────
     Task<ApiResponse<WorkflowStepInstanceDto>> AdvanceStepAsync(int instanceId, AdvanceStepDto dto, int cabinetId, string userId);
+    Task<ApiResponse<WorkflowStepInstanceDto>> ClaimStepAsync(int instanceId, int cabinetId, string userId, bool forceOverride = false, string? reason = null);
     Task<ApiResponse<bool>> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto, int cabinetId, string userId);
     Task<ApiResponse<WorkflowStepInstanceDto>> GetCurrentStepAsync(int instanceId, int cabinetId);
     Task<ApiResponse<List<WorkflowStepInstanceDto>>> GetMyPendingStepsAsync(int cabinetId, string userId, int? clientId = null);
@@ -260,9 +316,11 @@ public interface ICommercialService
     Task<ApiResponse<ContratCommercialDto>> GetContratByIdAsync(int id, int cabinetId);
     Task<ApiResponse<ContratCommercialDto>> CreateContratAsync(ContratCommercialCreateDto dto, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> UpdateContratAsync(int id, ContratCommercialCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> UpdateContratEquipeAsync(int id, ContratEquipeUpdateDto dto, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> SignerContratAsync(int id, ContratSignatureDto dto, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> ValiderContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> SuspendreContratAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<ContratCommercialDto>> ReactiverContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> TerminerContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> DupliquerContratAsync(int id, int cabinetId, string userId);
 
@@ -294,4 +352,15 @@ public interface IWorkflowSchedulerService
 {
     Task SyncScheduledJobsAsync();
     Task ExecuteScheduledStepAsync(int stepTemplateId, int cabinetId);
+    Task ProcessDueRelancesAsync();
+}
+
+// ===== Client Users (Extranet) =====
+public interface IClientUserService
+{
+    Task<ApiResponse<List<ClientUserDto>>> GetClientUsersAsync(int clientId, int cabinetId);
+    Task<ApiResponse<ClientUserDto>> GetClientUserAsync(string userId, int clientId, int cabinetId);
+    Task<ApiResponse<ClientUserDto>> CreateClientUserAsync(ClientUserCreateDto dto, int clientId, int cabinetId, string createdBy);
+    Task<ApiResponse<ClientUserDto>> UpdateClientUserAsync(string userId, ClientUserUpdateDto dto, int clientId, int cabinetId, string updatedBy);
+    Task<ApiResponse<bool>> ToggleClientUserActiveAsync(string userId, int clientId, int cabinetId, string updatedBy);
 }

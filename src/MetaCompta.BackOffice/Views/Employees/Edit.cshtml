@@ -295,8 +295,11 @@
         <a href="@Url.Action("Details", "Employees", new { id = empId })" class="btn btn-outline-secondary rounded-pill px-4">
             <i class="bi bi-x-lg me-1"></i> Annuler
         </a>
-        <button type="submit" class="btn btn-warning rounded-pill px-4">
-            <i class="bi bi-check-lg me-1"></i> Enregistrer les Modifications
-        </button>
+        @if (ViewBag.CanEmployeeEdit as bool? ?? false)
+        {
+            <button type="submit" class="btn btn-warning rounded-pill px-4">
+                <i class="bi bi-check-lg me-1"></i> Enregistrer les Modifications
+            </button>
+        }
     </div>
 </form>

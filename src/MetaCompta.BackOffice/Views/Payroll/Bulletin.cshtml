@@ -1,0 +1,193 @@
+﻿@using MetaCompta.Application.DTOs
+@model BulletinCompletDto
+@{
+    ViewData["Title"] = $"Bulletin de Paie - {Model.EmployeeNom}";
+    var paySlipId = ViewBag.PaySlipId;
+    var moisNoms = new[] { "", "Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre" };
+    var moisLabel = Model.Mois >= 1 && Model.Mois <= 12 ? moisNoms[Model.Mois] : Model.Mois.ToString();
+}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Payroll"><i class="bi bi-cash-stack me-1"></i>Paie</a></li>
+                <li class="breadcrumb-item active">Bulletin &#8212; @Model.EmployeeNom</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-1"><i class="bi bi-receipt text-primary me-2"></i>Bulletin de Paie</h4>
+        <p class="text-muted mb-0">@moisLabel @Model.Annee &#8212; @Model.EmployeeNom</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("BulletinPdf", "Payroll", new { id = paySlipId })" target="_blank" class="btn btn-danger rounded-pill px-3">
+            <i class="bi bi-file-earmark-pdf me-1"></i> Exporter PDF
+        </a>
+        <button onclick="window.print()" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-printer me-1"></i> Imprimer
+        </button>
+        <a href="javascript:history.back()" class="btn btn-outline-primary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i> Retour
+        </a>
+    </div>
+</div>
+
+@* ===== BULLETIN CARD ===== *@
+<div class="card border-0 shadow-sm rounded-4 bulletin-card" id="bulletinPrint">
+
+    @* Header bar *@
+    <div class="card-header text-white py-3 px-4 rounded-top-4" style="background:linear-gradient(135deg,#1a3a5c,#2d5f8a);">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-receipt-cutoff me-2"></i>BULLETIN DE PAIE</h5>
+            <span class="badge bg-white text-dark fs-6 px-3 py-2 rounded-pill">@moisLabel @Model.Annee</span>
+        </div>
+    </div>
+
+    <div class="card-body px-4 py-3">
+
+        @* Employeur + Employe *@
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="border rounded-3 p-3 h-100" style="border-color:#dee2e6 !important;">
+                    <h6 class="fw-bold text-primary mb-2" style="font-size:0.8rem;letter-spacing:1px;"><i class="bi bi-building me-1"></i>EMPLOYEUR</h6>
+                    <div class="fw-bold" style="font-size:1.05rem;">@(Model.EmployeurRaisonSociale ?? "&#8212;")</div>
+                    @if (!string.IsNullOrEmpty(Model.EmployeurAdresse)) { <div class="text-muted small">@Model.EmployeurAdresse</div> }
+                    <div class="row mt-2" style="font-size:0.82rem;">
+                        <div class="col-4"><span class="text-muted">ICE:</span> <strong>@(Model.EmployeurICE ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">IF:</span> <strong>@(Model.EmployeurIF ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">CNSS:</span> <strong>@(Model.EmployeurCNSS ?? "&#8212;")</strong></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded-3 p-3 h-100" style="border-color:#dee2e6 !important;">
+                    <h6 class="fw-bold text-primary mb-2" style="font-size:0.8rem;letter-spacing:1px;"><i class="bi bi-person me-1"></i>EMPLOYE</h6>
+                    <div class="fw-bold" style="font-size:1.05rem;">@(Model.EmployeeNom ?? "&#8212;")</div>
+                    <div class="row mt-2" style="font-size:0.82rem;">
+                        <div class="col-4"><span class="text-muted">CIN:</span> <strong>@(Model.EmployeeCIN ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">Mat:</span> <strong>@(Model.EmployeeMatricule ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">CNSS:</span> <strong>@(Model.EmployeeCNSS ?? "&#8212;")</strong></div>
+                    </div>
+                    <div class="row mt-1" style="font-size:0.82rem;">
+                        <div class="col-4"><span class="text-muted">Poste:</span> <strong>@(Model.EmployeePoste ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">Embauche:</span> <strong>@(Model.EmployeeDateEmbauche?.ToString("dd/MM/yyyy") ?? "&#8212;")</strong></div>
+                        <div class="col-4"><span class="text-muted">Sit. Fam.:</span> <strong>@(Model.EmployeeSituationFamiliale ?? "&#8212;")</strong> @if (Model.EmployeeNbEnfants > 0) { <span>(@Model.EmployeeNbEnfants enf.)</span> }</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Sections *@
+        @foreach (var section in Model.Sections)
+        {
+            <div class="mb-3">
+                <div class="py-2 px-3 rounded-2 mb-0" style="background:#e8edf2;">
+                    <strong class="text-uppercase" style="font-size:0.8rem;color:#1a3a5c;letter-spacing:0.5px;">@(section.SectionLabel)</strong>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" style="font-size:0.85rem;">
+                        <thead>
+                            <tr class="text-muted" style="font-size:0.75rem;">
+                                <th style="width:60px">Code</th>
+                                <th>D&#233;signation</th>
+                                <th class="text-end" style="width:100px">Base</th>
+                                <th class="text-end" style="width:80px">Taux</th>
+                                <th class="text-end" style="width:100px">Gain</th>
+                                <th class="text-end" style="width:100px">Retenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var l in section.Lignes.OrderBy(x => x.OrdreAffichage))
+                            {
+                                <tr>
+                                    <td><code class="text-muted" style="font-size:0.7rem;">@l.RubriqueCode</code></td>
+                                    <td>@l.Libelle</td>
+                                    <td class="text-end font-monospace">@(l.Base != 0 ? l.Base.ToString("N2") : "")</td>
+                                    <td class="text-end font-monospace">@(l.Taux != 0 ? l.Taux.ToString("N4") : "")</td>
+                                    <td class="text-end font-monospace fw-semibold text-success">@(l.Gain != 0 ? l.Gain.ToString("N2") : "")</td>
+                                    <td class="text-end font-monospace fw-semibold text-danger">@(l.Retenue != 0 ? l.Retenue.ToString("N2") : "")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        @if (section.TotalGains != 0 || section.TotalRetenues != 0)
+                        {
+                            <tfoot>
+                                <tr class="fw-bold border-top">
+                                    <td colspan="4" class="text-end">Sous-total @(section.SectionLabel)</td>
+                                    <td class="text-end text-success font-monospace">@(section.TotalGains != 0 ? section.TotalGains.ToString("N2") : "")</td>
+                                    <td class="text-end text-danger font-monospace">@(section.TotalRetenues != 0 ? section.TotalRetenues.ToString("N2") : "")</td>
+                                </tr>
+                            </tfoot>
+                        }
+                    </table>
+                </div>
+            </div>
+        }
+
+        @* Totaux *@
+        <div class="border-top border-2 pt-3 mt-2" style="border-color:#1a3a5c !important;">
+            <div class="row g-2">
+                <div class="col-md-7">
+                    <table class="table table-sm table-borderless mb-0" style="font-size:0.9rem;">
+                        <tr><td class="text-muted">Total des Gains</td><td class="text-end fw-semibold text-success">@Model.TotalGains.ToString("N2") MAD</td></tr>
+                        <tr><td class="text-muted">Total des Retenues</td><td class="text-end fw-semibold text-danger">@Model.TotalRetenues.ToString("N2") MAD</td></tr>
+                        <tr class="border-top"><td class="fw-bold">Salaire Brut</td><td class="text-end fw-bold">@Model.SalaireBrut.ToString("N2") MAD</td></tr>
+                        <tr><td class="text-muted">Salaire Net Imposable</td><td class="text-end fw-semibold">@Model.SalaireNetImposable.ToString("N2") MAD</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-5">
+                    <div class="rounded-3 p-3 text-center" style="background:linear-gradient(135deg,#1a3a5c,#2d5f8a);">
+                        <div class="text-white-50 small mb-1">NET A PAYER</div>
+                        <div class="text-white fw-bold" style="font-size:1.8rem;">@Model.SalaireNet.ToString("N2")</div>
+                        <div class="text-white-50 small">MAD</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Charges Patronales *@
+        @if (Model.TotalChargesPatronales > 0)
+        {
+            <div class="mt-3 p-3 rounded-3" style="background:#f8f9fa;">
+                <h6 class="fw-bold text-primary mb-2" style="font-size:0.8rem;"><i class="bi bi-building me-1"></i>CHARGES PATRONALES</h6>
+                <div class="row" style="font-size:0.85rem;">
+                    <div class="col-md-6">
+                        <span class="text-muted">Total Charges Patronales:</span>
+                        <strong class="ms-1">@Model.TotalChargesPatronales.ToString("N2") MAD</strong>
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted">Co&#251;t Total Employeur:</span>
+                        <strong class="ms-1 text-danger">@Model.CoutTotalEmployeur.ToString("N2") MAD</strong>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Cumuls Annuels *@
+        @if (Model.CumulBrutAnnuel > 0)
+        {
+            <div class="mt-3 p-3 rounded-3 border" style="border-color:#dee2e6 !important;">
+                <h6 class="fw-bold text-primary mb-2" style="font-size:0.8rem;"><i class="bi bi-graph-up me-1"></i>CUMULS ANNUELS @Model.Annee</h6>
+                <div class="row" style="font-size:0.82rem;">
+                    <div class="col-3"><span class="text-muted">Brut:</span> <strong>@Model.CumulBrutAnnuel.ToString("N2")</strong></div>
+                    <div class="col-3"><span class="text-muted">Net Imposable:</span> <strong>@Model.CumulNetImposableAnnuel.ToString("N2")</strong></div>
+                    <div class="col-3"><span class="text-muted">IR:</span> <strong>@Model.CumulIRAnnuel.ToString("N2")</strong></div>
+                    <div class="col-3"><span class="text-muted">CNSS:</span> <strong>@Model.CumulCNSSAnnuel.ToString("N2")</strong></div>
+                </div>
+            </div>
+        }
+
+    </div>
+
+    @* Footer *@
+    <div class="card-footer text-muted text-center py-2" style="font-size:0.75rem;">
+        Document confidentiel &#8212; Usage interne uniquement &#8212; Edit&#233; le @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+    </div>
+</div>
+
+<style>
+@@media print {
+    .breadcrumb, nav, .btn, .sidebar, .navbar, header, footer, .no-print { display:none !important; }
+    .bulletin-card { box-shadow:none !important; border:1px solid var(--monday-border) !important; }
+    body { background: var(--monday-surface) !important; }
+}
+</style>

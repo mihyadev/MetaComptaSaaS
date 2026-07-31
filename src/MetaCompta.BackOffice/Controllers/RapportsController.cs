@@ -1,5 +1,6 @@
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -24,6 +25,7 @@ public class RapportsController : BaseController
         _clients = clients;
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, int page = 1, string? search = null)
     {
         clientId ??= SelectedClientId;
@@ -34,18 +36,23 @@ public class RapportsController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Financiers(int? clientId = null, int page = 1, string? search = null) =>
         await TypedIndex("Financier", clientId, page, search);
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Fiscaux(int? clientId = null, int page = 1, string? search = null) =>
         await TypedIndex("Fiscal", clientId, page, search);
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Sociaux(int? clientId = null, int page = 1, string? search = null) =>
         await TypedIndex("Social", clientId, page, search);
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Activites(int? clientId = null, int page = 1, string? search = null) =>
         await TypedIndex("Activite", clientId, page, search);
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Personnalises(int? clientId = null, int page = 1, string? search = null) =>
         await TypedIndex("Personnalise", clientId, page, search);
 
@@ -59,6 +66,7 @@ public class RapportsController : BaseController
         return View("Index", result);
     }
 
+    [RequirePermission(ClaimDefinitions.ReportView)]
     public async Task<IActionResult> Details(int id)
     {
         var rapport = await _rapports.GetByIdAsync(id);
@@ -68,6 +76,7 @@ public class RapportsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ReportExport)]
     public async Task<IActionResult> Generate(string type, int? clientId = null, DateTime? dateDebut = null, DateTime? dateFin = null)
     {
         clientId ??= SelectedClientId;

@@ -2,6 +2,7 @@ using AutoMapper;
 using MetaCompta.Application.DTOs;
 using MetaCompta.Application.Interfaces;
 using MetaCompta.Domain.Common;
+using MetaCompta.Domain.Entities;
 using MetaCompta.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,28 +70,65 @@ public class DashboardService : IDashboardService
         return dashboard;
     }
 
-    public async Task<ApiResponse<object>> GetExtranetDashboardAsync(int clientId)
+    public async Task<ApiResponse<ExtranetDashboardDto>> GetExtranetDashboardAsync(int clientId)
     {
         var now = DateTime.UtcNow;
         var client = await _db.Clients.FindAsync(clientId);
-        var recentDeclarations = await _db.Declarations
-            .Where(d => d.ClientId == clientId && d.Statut == RefCodes.StatutDeclaration.Soumise)
-            .OrderByDescending(d => d.DateSoumission)
-            .Take(5)
-            .Select(d => new { d.Id, d.Type, d.Periode, d.DateSoumission, d.MontantDu })
-            .ToListAsync();
+
+        var declarationsEnCours = await _db.Declarations
+            .CountAsync(d => d.ClientId == clientId && d.Statut != RefCodes.StatutDeclaration.Soumise && d.Statut != RefCodes.StatutDeclaration.Brouillon);
+
+        var declarationsSoumises = await _db.Declarations
+            .CountAsync(d => d.ClientId == clientId && d.Statut == RefCodes.StatutDeclaration.Soumise);
 
         var upcomingDeadlines = await _db.Declarations
-            .Where(d => d.ClientId == clientId && d.Statut != RefCodes.StatutDeclaration.Soumise && d.DateLimite >= now)
+            .Where(d => d.ClientId == clientId && d.Statut != RefCodes.StatutDeclaration.Soumise && d.DateLimite >= now.AddDays(-30))
             .OrderBy(d => d.DateLimite)
+            .Take(10)
+            .Select(d => new ExtranetDeadlineDto { Id = d.Id, Type = d.Type, Periode = d.Periode, DateLimite = d.DateLimite, Statut = d.Statut })
+            .ToListAsync();
+
+        var recentDeclarations = await _db.Declarations
+            .Where(d => d.ClientId == clientId)
+            .OrderByDescending(d => d.CreatedAt)
             .Take(5)
-            .Select(d => new { d.Id, d.Type, d.Periode, d.DateLimite, d.Statut })
+            .Select(d => new ExtranetRecentDto { Id = d.Id, Type = d.Type, Periode = d.Periode, DateSoumission = d.DateSoumission, MontantDu = d.MontantDu ?? 0m, Statut = d.Statut })
             .ToListAsync();
 
         var employeeCount = await _db.Employees.CountAsync(e => e.ClientId == clientId && e.Statut == RefCodes.StatutEmploye.Actif);
         var documentCount = await _db.Documents.CountAsync(d => d.ClientId == clientId && d.PartageExtranet);
 
-        return ApiResponse<object>.Ok(new { Client = client?.RaisonSociale, RecentDeclarations = recentDeclarations, UpcomingDeadlines = upcomingDeadlines, EmployeeCount = employeeCount, DocumentCount = documentCount });
+        var tachesEnAttente = await _db.WorkflowStepInstances
+            .CountAsync(s => !s.IsDeleted
+                && s.WorkflowInstance != null
+                && s.WorkflowInstance.ClientId == clientId
+                && s.WorkflowInstance.Status == WorkflowInstanceStatus.Active
+                && s.Status == WorkflowStepStatus.WaitingForClient
+                && s.WorkflowStepTemplate != null
+                && (s.WorkflowStepTemplate.IsClientStep
+                    || s.WorkflowStepTemplate.AssignmentType == AssignmentType.Client));
+
+        var messagesNonLus = await _db.Messages
+            .CountAsync(m => m.ClientId == clientId && !m.IsReadByRecipient && m.SenderRole != "Client");
+
+        var dto = new ExtranetDashboardDto
+        {
+            ClientName = client?.RaisonSociale,
+            ICE = client?.ICE,
+            FormeJuridique = client?.FormeJuridique,
+            SecteurActivite = client?.SecteurActivite,
+            Statut = client?.Statut,
+            EmployeeCount = employeeCount,
+            DocumentCount = documentCount,
+            DeclarationsEnCours = declarationsEnCours,
+            DeclarationsSoumises = declarationsSoumises,
+            TachesEnAttente = tachesEnAttente,
+            MessagesNonLus = messagesNonLus,
+            ProchainsDelais = upcomingDeadlines,
+            DernieresDeclarations = recentDeclarations
+        };
+
+        return ApiResponse<ExtranetDashboardDto>.Ok(dto);
     }
 
     private async Task<DashboardChartsDto> BuildChartsDataAsync(int cabinetId)

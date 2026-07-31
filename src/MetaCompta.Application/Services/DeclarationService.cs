@@ -14,28 +14,102 @@ public class DeclarationService : IDeclarationService
     private readonly IMapper _mapper;
     private readonly IReferenceDataService _refData;
     private readonly INotificationService _notifications;
+    private readonly IContractAccessService _contractAccess;
 
-    public DeclarationService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData, INotificationService notifications)
+    public DeclarationService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData, INotificationService notifications, IContractAccessService contractAccess)
     {
         _db = db;
         _mapper = mapper;
         _refData = refData;
         _notifications = notifications;
+        _contractAccess = contractAccess;
+    }
+
+    // ─── WORKFLOW STEP OWNERSHIP LOCK ──────────────────────────────
+    /// <summary>
+    /// When an Active workflow has a current employee step, only the step holder
+    /// (or Manager/Gérant) may edit declaration data or change status.
+    /// Returns an error message, or null if edit is allowed.
+    /// </summary>
+    private async Task<string?> EnsureStepHolderCanEditAsync(int declarationId, int cabinetId, string userId)
+    {
+        var activeWf = await _db.WorkflowInstances
+            .Include(w => w.StepInstances)
+            .FirstOrDefaultAsync(w =>
+                w.DeclarationId == declarationId
+                && w.CabinetId == cabinetId
+                && w.Status == WorkflowInstanceStatus.Active
+                && !w.IsDeleted);
+        if (activeWf == null) return null;
+
+        var currentStep = activeWf.StepInstances?
+            .FirstOrDefault(s => s.StepOrder == activeWf.CurrentStepOrder && !s.IsDeleted);
+        if (currentStep == null) return null;
+
+        var template = currentStep.WorkflowStepTemplateId > 0
+            ? await _db.WorkflowStepTemplates.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == currentStep.WorkflowStepTemplateId)
+            : null;
+
+        if (template?.AssignmentType == AssignmentType.AutoSystem)
+            return null;
+        if (template?.IsClientStep == true || template?.AssignmentType == AssignmentType.Client)
+            return null;
+
+        if (await IsManagerOrGerantAsync(userId, cabinetId))
+            return null;
+
+        // Exclusive soft lock: prefer open UnitTake on current workflow step, else AssignedToUserId.
+        var openTake = await _db.UnitTakes.AsNoTracking()
+            .Include(t => t.TakenByUser)
+            .Include(t => t.UnitType)
+            .Where(t => t.CabinetId == cabinetId
+                        && t.UnitEntityId == currentStep.Id
+                        && t.ClosedAt == null
+                        && t.Status == UnitTakeStatuses.Open
+                        && !t.IsDeleted
+                        && t.UnitType != null
+                        && t.UnitType.Code == UnitTypeCodes.WorkflowStep)
+            .OrderByDescending(t => t.TakenAt)
+            .FirstOrDefaultAsync();
+
+        var holderId = openTake?.TakenByUserId ?? currentStep.AssignedToUserId;
+
+        if (string.IsNullOrEmpty(holderId))
+        {
+            return "Cette étape n'est pas encore prise. Utilisez « Prendre / Ouvrir » avant de modifier la déclaration.";
+        }
+
+        if (string.Equals(holderId, userId, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        {
+            var holder = openTake?.TakenByUser != null
+                ? $"{openTake.TakenByUser.FirstName} {openTake.TakenByUser.LastName}".Trim()
+                : await _db.Users.AsNoTracking()
+                    .Where(u => u.Id == holderId)
+                    .Select(u => u.FirstName + " " + u.LastName)
+                    .FirstOrDefaultAsync();
+            var who = string.IsNullOrWhiteSpace(holder) ? "un autre collaborateur" : holder.Trim();
+            return $"Cette déclaration est verrouillée par {who} (titulaire de l'étape en cours). Seul ce collaborateur (ou un Manager/Gérant) peut la modifier.";
+        }
+    }
+
+    private async Task<bool> IsManagerOrGerantAsync(string userId, int cabinetId)
+    {
+        return await _db.Users
+            .Where(u => u.Id == userId && u.CabinetId == cabinetId && u.IsActive)
+            .Join(_db.UserRoles, u => u.Id, ur => ur.UserId, (u, ur) => ur)
+            .Join(_db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
+            .AnyAsync(name => name == "Manager" || name == "Gerant" || name == "Admin" || name == "SuperAdmin");
     }
 
     // ─── CONTRACT GUARD ────────────────────────────────────────────
-    private static readonly string[] ActiveContractStatuses = RefCodes.StatutContrat.ActiveStatuses;
-
     /// <summary>
-    /// Checks whether the client has at least one contract with status Valide or Actif.
-    /// All declaration create/edit/status-change operations require this.
+    /// Manage-mode gate: Valide/Actif + date window (shared with ClientService).
     /// </summary>
-    private async Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
-    {
-        return await _db.Set<ContratCommercial>()
-            .AnyAsync(c => c.ClientId == clientId && c.CabinetId == cabinetId
-                && ActiveContractStatuses.Contains(c.Statut) && !c.IsDeleted);
-    }
+    private Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
+        => _contractAccess.HasManageAccessAsync(clientId, cabinetId);
 
     // ─── LIST / GET ────────────────────────────────────────────────
     public async Task<ApiResponse<PagedResult<DeclarationDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? type = null, string? statut = null, int page = 1, int pageSize = 20)
@@ -58,9 +132,12 @@ public class DeclarationService : IDeclarationService
             .Take(pageSize)
             .ToListAsync();
 
+        var dtos = _mapper.Map<List<DeclarationDto>>(items);
+        await EnrichDeclarationsWithWorkflowAsync(dtos, cabinetId);
+
         return ApiResponse<PagedResult<DeclarationDto>>.Ok(new PagedResult<DeclarationDto>
         {
-            Items = _mapper.Map<List<DeclarationDto>>(items),
+            Items = dtos,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
@@ -73,7 +150,40 @@ public class DeclarationService : IDeclarationService
             .Include(d => d.Client).Include(d => d.Assistant).Include(d => d.Validateur)
             .FirstOrDefaultAsync(d => d.Id == id && d.CabinetId == cabinetId);
         if (dec == null) return ApiResponse<DeclarationDto>.Fail("Déclaration non trouvée.");
-        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(dec));
+        var dto = _mapper.Map<DeclarationDto>(dec);
+        await EnrichDeclarationsWithWorkflowAsync(new List<DeclarationDto> { dto }, cabinetId);
+        return ApiResponse<DeclarationDto>.Ok(dto);
+    }
+
+    private async Task EnrichDeclarationsWithWorkflowAsync(List<DeclarationDto> dtos, int cabinetId)
+    {
+        if (dtos.Count == 0) return;
+        var ids = dtos.Select(d => d.Id).ToList();
+        var instances = await _db.WorkflowInstances
+            .AsNoTracking()
+            .Include(w => w.StepInstances)
+            .Where(w => w.CabinetId == cabinetId
+                        && w.DeclarationId != null
+                        && ids.Contains(w.DeclarationId.Value)
+                        && !w.IsDeleted
+                        && (w.Status == WorkflowInstanceStatus.Active || w.Status == WorkflowInstanceStatus.Paused || w.Status == WorkflowInstanceStatus.Completed))
+            .OrderByDescending(w => w.StartedAt)
+            .ToListAsync();
+
+        foreach (var dto in dtos)
+        {
+            var wi = instances.FirstOrDefault(w => w.DeclarationId == dto.Id
+                                                   && w.Status is WorkflowInstanceStatus.Active or WorkflowInstanceStatus.Paused)
+                     ?? instances.FirstOrDefault(w => w.DeclarationId == dto.Id);
+            if (wi == null) continue;
+            dto.WorkflowInstanceId = wi.Id;
+            dto.WorkflowStatus = wi.Status.ToString();
+            dto.TotalSteps = wi.StepInstances?.Count ?? 0;
+            dto.CompletedSteps = wi.StepInstances?.Count(s =>
+                s.Status == WorkflowStepStatus.Completed || s.Status == WorkflowStepStatus.Skipped) ?? 0;
+            dto.CurrentStepName = wi.StepInstances?
+                .FirstOrDefault(s => s.StepOrder == wi.CurrentStepOrder)?.StepName;
+        }
     }
 
     // ─── GENERIC CREATE ────────────────────────────────────────────
@@ -132,7 +242,7 @@ public class DeclarationService : IDeclarationService
             DateDebut = periodeDebut,
             DateFin = periodeFin,
             DateLimite = new DateTime(dateLimite.Year, dateLimite.Month, Math.Min(30, DateTime.DaysInMonth(dateLimite.Year, dateLimite.Month))),
-            Statut = RefCodes.StatutDeclaration.ACompleter,
+            Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
             AssistantId = userId,
             CreatedBy = userId
         };
@@ -140,7 +250,12 @@ public class DeclarationService : IDeclarationService
         await _db.SaveChangesAsync();
 
         var previousCredit = await _db.DeclarationsTVA
-            .Where(t => t.Declaration!.ClientId == clientId && t.Declaration.Type == "TVA" && t.Declaration.Statut == RefCodes.StatutDeclaration.Soumise)
+            .Where(t => t.Declaration!.ClientId == clientId && t.Declaration.Type == "TVA"
+                && (t.Declaration.Statut == RefCodes.StatutDeclaration.Soumise
+                    || t.Declaration.Statut == RefCodes.StatutDeclaration.Deposee
+                    || t.Declaration.Statut == RefCodes.StatutDeclaration.Payee
+                    || t.Declaration.Statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                    || t.Declaration.Statut == RefCodes.StatutDeclaration.Cloturee))
             .OrderByDescending(t => t.Declaration!.DateFin)
             .Select(t => t.CreditTVA)
             .FirstOrDefaultAsync();
@@ -192,6 +307,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationTVADto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationTVADto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationTVADto>.Fail(lockErr);
 
         var calcResult = await CalculateTVAAsync(dto);
         var calculated = calcResult.Data!;
@@ -224,10 +341,11 @@ public class DeclarationService : IDeclarationService
     }
 
     /// <summary>
-    /// Saves only the manual adjustment fields (Immobilisations + Crédit Précédent),
-    /// then recalculates all TVA totals from invoice lines. Never overwrites line-calculated totals.
+    /// Saves manual Moroccan TVA totals:
+    /// TVA à payer = TVA facturée − TVA déductible − crédit déclaration précédente.
+    /// Invoice lines still override when present (after add/import).
     /// </summary>
-    public async Task<ApiResponse<DeclarationTVADto>> SaveTVAAjustementsAsync(int declarationId, decimal immobilisations, decimal creditPrecedent, int cabinetId, string userId)
+    public async Task<ApiResponse<DeclarationTVADto>> SaveTVAAjustementsAsync(int declarationId, decimal tvaFacturee, decimal tvaDeductible, decimal creditPrecedent, int cabinetId, string userId)
     {
         var declaration = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
         if (declaration == null) return ApiResponse<DeclarationTVADto>.Fail("Déclaration non trouvée.");
@@ -235,6 +353,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationTVADto>.Fail("Modification impossible : le client n’a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationTVADto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationTVADto>.Fail(lockErr);
 
         var tva = await _db.DeclarationsTVA.FirstOrDefaultAsync(t => t.DeclarationId == declarationId && t.CabinetId == cabinetId);
         if (tva == null)
@@ -244,19 +364,54 @@ public class DeclarationService : IDeclarationService
             await _db.SaveChangesAsync();
         }
 
-        // Only update the two manual fields
-        tva.TVARecuperableImmobilisations = immobilisations;
-        tva.CreditPrecedent = creditPrecedent;
+        var hasVentes = await _db.Set<TVALigneFacture>().AnyAsync(l =>
+            l.DeclarationTVAId == tva.Id && l.CabinetId == cabinetId && !l.IsDeleted && l.TypeOperation == "Vente");
+        var hasAchats = await _db.Set<TVALigneFacture>().AnyAsync(l =>
+            l.DeclarationTVAId == tva.Id && l.CabinetId == cabinetId && !l.IsDeleted && l.TypeOperation == "Achat");
+
+        // Manual facturée only when no sale lines (otherwise lines are source of truth)
+        if (!hasVentes)
+        {
+            tva.TVACollecteeTotale = Math.Round(tvaFacturee, 2);
+            // Keep rate breakdown coherent for display/EDI when entered as a single total
+            tva.TVA_20 = tva.TVACollecteeTotale;
+            tva.TVA_14 = 0; tva.TVA_10 = 0; tva.TVA_7 = 0;
+            tva.CAHT_20 = tva.TVACollecteeTotale > 0 ? Math.Round(tva.TVACollecteeTotale / 0.20m, 2) : 0;
+            tva.CAHT_14 = 0; tva.CAHT_10 = 0; tva.CAHT_7 = 0; tva.CAExonere = 0;
+        }
+
+        // Manual déductible only when no purchase lines
+        if (!hasAchats)
+        {
+            tva.TVARecuperableCharges = Math.Round(tvaDeductible, 2);
+            tva.TVARecuperableImmobilisations = 0;
+            tva.TVARecuperableTotale = tva.TVARecuperableCharges;
+        }
+
+        tva.CreditPrecedent = Math.Round(creditPrecedent, 2);
+
+        // If lines exist for one side, refresh that side from lines first
+        if (hasVentes || hasAchats)
+            await RecalculateTVATotalsFromLignesAsync(tva.Id, declarationId, cabinetId);
+        else
+            ApplyTvaNetFromTotals(tva, declaration);
+
         await _db.SaveChangesAsync();
-
-        // Recalculate everything from lines (uses the updated Immobilisations + CreditPrecedent)
-        await RecalculateTVATotalsFromLignesAsync(tva.Id, declarationId, cabinetId);
-
-        // Reload to get final calculated values
         await _db.Entry(tva).ReloadAsync();
         var result = _mapper.Map<DeclarationTVADto>(tva);
         result.DeclarationId = declarationId;
-        return ApiResponse<DeclarationTVADto>.Ok(result, "Ajustements TVA enregistrés et totaux recalculés.");
+        return ApiResponse<DeclarationTVADto>.Ok(result, "Ajustements TVA enregistrés.");
+    }
+
+    private static void ApplyTvaNetFromTotals(DeclarationTVA tva, Declaration declaration)
+    {
+        // Maroc: TVA à payer = TVA facturée − TVA déductible − crédit déclaration précédente
+        tva.TVARecuperableTotale = tva.TVARecuperableCharges + tva.TVARecuperableImmobilisations;
+        tva.TVANette = tva.TVACollecteeTotale - tva.TVARecuperableTotale - tva.CreditPrecedent;
+        tva.TVAaPayer = Math.Max(0, tva.TVANette);
+        tva.CreditTVA = Math.Max(0, -tva.TVANette);
+        declaration.MontantDu = tva.TVAaPayer;
+        declaration.MontantCredit = tva.CreditTVA;
     }
 
 
@@ -272,6 +427,8 @@ public class DeclarationService : IDeclarationService
         if (declaration == null) return ApiResponse<TVALigneFactureDto>.Fail("Déclaration non trouvée.");
         if (!await HasActiveContractAsync(declaration.ClientId, cabinetId))
             return ApiResponse<TVALigneFactureDto>.Fail("Modification impossible : aucun contrat actif.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<TVALigneFactureDto>.Fail(lockErr);
 
         var ligne = new TVALigneFacture
         {
@@ -307,6 +464,8 @@ public class DeclarationService : IDeclarationService
     {
         var tva = await _db.DeclarationsTVA.FirstOrDefaultAsync(t => t.DeclarationId == declarationId && t.CabinetId == cabinetId);
         if (tva == null) return ApiResponse<bool>.Fail("Déclaration TVA non trouvée.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<bool>.Fail(lockErr);
 
         var ligne = await _db.Set<TVALigneFacture>().FirstOrDefaultAsync(l => l.Id == ligneId && l.DeclarationTVAId == tva.Id && l.CabinetId == cabinetId);
         if (ligne == null) return ApiResponse<bool>.Fail("Ligne non trouvée.");
@@ -336,26 +495,30 @@ public class DeclarationService : IDeclarationService
             .Where(l => l.DeclarationTVAId == tvaId && l.CabinetId == cabinetId && !l.IsDeleted)
             .ToListAsync();
 
-        // Vente (Collectée) - aggregate by taux
+        // Vente (Facturée) — lines override when present; else keep manual TVACollecteeTotale
         var ventes = lignes.Where(l => l.TypeOperation == "Vente").ToList();
-        tva.CAHT_20 = ventes.Where(l => l.TauxTVA == 20).Sum(l => l.MontantHT);
-        tva.CAHT_14 = ventes.Where(l => l.TauxTVA == 14).Sum(l => l.MontantHT);
-        tva.CAHT_10 = ventes.Where(l => l.TauxTVA == 10).Sum(l => l.MontantHT);
-        tva.CAHT_7  = ventes.Where(l => l.TauxTVA == 7).Sum(l => l.MontantHT);
-        tva.CAExonere = ventes.Where(l => l.TauxTVA == 0).Sum(l => l.MontantHT);
+        if (ventes.Count > 0)
+        {
+            tva.CAHT_20 = ventes.Where(l => l.TauxTVA == 20).Sum(l => l.MontantHT);
+            tva.CAHT_14 = ventes.Where(l => l.TauxTVA == 14).Sum(l => l.MontantHT);
+            tva.CAHT_10 = ventes.Where(l => l.TauxTVA == 10).Sum(l => l.MontantHT);
+            tva.CAHT_7  = ventes.Where(l => l.TauxTVA == 7).Sum(l => l.MontantHT);
+            tva.CAExonere = ventes.Where(l => l.TauxTVA == 0).Sum(l => l.MontantHT);
 
-        tva.TVA_20 = Math.Round(tva.CAHT_20 * 0.20m, 2);
-        tva.TVA_14 = Math.Round(tva.CAHT_14 * 0.14m, 2);
-        tva.TVA_10 = Math.Round(tva.CAHT_10 * 0.10m, 2);
-        tva.TVA_7  = Math.Round(tva.CAHT_7  * 0.07m, 2);
-        tva.TVACollecteeTotale = tva.TVA_20 + tva.TVA_14 + tva.TVA_10 + tva.TVA_7;
+            tva.TVA_20 = Math.Round(tva.CAHT_20 * 0.20m, 2);
+            tva.TVA_14 = Math.Round(tva.CAHT_14 * 0.14m, 2);
+            tva.TVA_10 = Math.Round(tva.CAHT_10 * 0.10m, 2);
+            tva.TVA_7  = Math.Round(tva.CAHT_7  * 0.07m, 2);
+            tva.TVACollecteeTotale = tva.TVA_20 + tva.TVA_14 + tva.TVA_10 + tva.TVA_7;
+        }
 
-        // Achat (Déductible / Récupérable)
+        // Achat (Déductible) — lines override charges when present; else keep manual
         var achats = lignes.Where(l => l.TypeOperation == "Achat").ToList();
-        tva.TVARecuperableCharges = achats.Sum(l => l.MontantTVA);
+        if (achats.Count > 0)
+            tva.TVARecuperableCharges = achats.Sum(l => l.MontantTVA);
         tva.TVARecuperableTotale = tva.TVARecuperableCharges + tva.TVARecuperableImmobilisations;
 
-        // Net calculation
+        // Maroc: Facturée − Déductible − Crédit déclaration précédente
         tva.TVANette = tva.TVACollecteeTotale - tva.TVARecuperableTotale - tva.CreditPrecedent;
         tva.TVAaPayer = Math.Max(0, tva.TVANette);
         tva.CreditTVA = Math.Max(0, -tva.TVANette);
@@ -380,6 +543,8 @@ public class DeclarationService : IDeclarationService
         if (declaration == null) return ApiResponse<List<TVALigneFactureDto>>.Fail("Déclaration non trouvée.");
         if (!await HasActiveContractAsync(declaration.ClientId, cabinetId))
             return ApiResponse<List<TVALigneFactureDto>>.Fail("Modification impossible : aucun contrat actif.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<List<TVALigneFactureDto>>.Fail(lockErr);
 
         var result = new List<TVALigneFacture>();
         foreach (var d in lignes)
@@ -489,6 +654,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationISDto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationISDto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationISDto>.Fail(lockErr);
 
         var calcResult = await CalculateISAsync(dto);
         var calculated = calcResult.Data!;
@@ -595,6 +762,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationIRDto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationIRDto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationIRDto>.Fail(lockErr);
 
         var calcResult = await CalculateIRAsync(dto);
         var calculated = calcResult.Data!;
@@ -706,6 +875,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationCNSSDto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationCNSSDto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationCNSSDto>.Fail(lockErr);
 
         var cnssData = await _db.DeclarationsCNSS.FirstOrDefaultAsync(c => c.DeclarationId == declarationId);
         if (cnssData == null)
@@ -738,24 +909,48 @@ public class DeclarationService : IDeclarationService
         // Contract guard: modifications require an active contract
         if (!await HasActiveContractAsync(dec.ClientId, cabinetId))
             return ApiResponse<bool>.Fail("Impossible de modifier le statut : le client n'a aucun contrat actif ou validé. Consultation uniquement.");
+        var lockErr = await EnsureStepHolderCanEditAsync(id, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<bool>.Fail(lockErr);
 
         var oldStatut = dec.Statut;
+        // Full TVA lifecycle + legacy aliases so old declarations keep working
         var validTransitions = new Dictionary<string, string[]>
         {
-            [RefCodes.StatutDeclaration.Brouillon] = [RefCodes.StatutDeclaration.ACompleter],
-            [RefCodes.StatutDeclaration.ACompleter] = [RefCodes.StatutDeclaration.Completee],
-            [RefCodes.StatutDeclaration.Completee] = [RefCodes.StatutDeclaration.EnRevision, RefCodes.StatutDeclaration.Refusee],
-            [RefCodes.StatutDeclaration.EnRevision] = [RefCodes.StatutDeclaration.Validee, RefCodes.StatutDeclaration.Refusee],
-            [RefCodes.StatutDeclaration.Validee] = [RefCodes.StatutDeclaration.Soumise, RefCodes.StatutDeclaration.Refusee],
-            [RefCodes.StatutDeclaration.Refusee] = [RefCodes.StatutDeclaration.Brouillon, RefCodes.StatutDeclaration.ACompleter],
+            [RefCodes.StatutDeclaration.ACreer] = [RefCodes.StatutDeclaration.CreeeParSysteme, RefCodes.StatutDeclaration.Brouillon],
+            [RefCodes.StatutDeclaration.CreeeParSysteme] = [RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.ACompleter],
+            [RefCodes.StatutDeclaration.Brouillon] = [RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.ACompleter, RefCodes.StatutDeclaration.CreeeParSysteme],
+            [RefCodes.StatutDeclaration.DocumentsDemandes] = [RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.DocumentsRecus, RefCodes.StatutDeclaration.EnAttenteCorrection, RefCodes.StatutDeclaration.ACompleter],
+            [RefCodes.StatutDeclaration.ACompleter] = [RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.DocumentsRecus, RefCodes.StatutDeclaration.Completee, RefCodes.StatutDeclaration.ControleEnCours],
+            [RefCodes.StatutDeclaration.DocumentsRecus] = [RefCodes.StatutDeclaration.ControleEnCours, RefCodes.StatutDeclaration.EnAttenteCorrection, RefCodes.StatutDeclaration.DocumentsDemandes],
+            [RefCodes.StatutDeclaration.ControleEnCours] = [RefCodes.StatutDeclaration.EnAttenteCorrection, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.Completee],
+            [RefCodes.StatutDeclaration.EnCours] = [RefCodes.StatutDeclaration.ControleEnCours, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.Completee, RefCodes.StatutDeclaration.EnAttenteCorrection],
+            [RefCodes.StatutDeclaration.EnPreparation] = [RefCodes.StatutDeclaration.ControleEnCours, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.Completee],
+            [RefCodes.StatutDeclaration.Completee] = [RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.EnRevueSuperviseur, RefCodes.StatutDeclaration.EnRevision, RefCodes.StatutDeclaration.EnAttenteCorrection, RefCodes.StatutDeclaration.Refusee],
+            [RefCodes.StatutDeclaration.EnAttenteCorrection] = [RefCodes.StatutDeclaration.ControleEnCours, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.DocumentsDemandes, RefCodes.StatutDeclaration.DocumentsRecus],
+            [RefCodes.StatutDeclaration.CalculTVA] = [RefCodes.StatutDeclaration.EnRevueSuperviseur, RefCodes.StatutDeclaration.EnRevision, RefCodes.StatutDeclaration.EnAttenteCorrection, RefCodes.StatutDeclaration.ACorriger],
+            [RefCodes.StatutDeclaration.EnRevueSuperviseur] = [RefCodes.StatutDeclaration.Validee, RefCodes.StatutDeclaration.ACorriger, RefCodes.StatutDeclaration.Refusee],
+            [RefCodes.StatutDeclaration.EnRevision] = [RefCodes.StatutDeclaration.Validee, RefCodes.StatutDeclaration.ACorriger, RefCodes.StatutDeclaration.Refusee],
+            [RefCodes.StatutDeclaration.ACorriger] = [RefCodes.StatutDeclaration.EnRevueSuperviseur, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.EnRevision, RefCodes.StatutDeclaration.ControleEnCours],
+            [RefCodes.StatutDeclaration.Refusee] = [RefCodes.StatutDeclaration.ACorriger, RefCodes.StatutDeclaration.Brouillon, RefCodes.StatutDeclaration.ACompleter, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.EnRevueSuperviseur],
+            [RefCodes.StatutDeclaration.Validee] = [RefCodes.StatutDeclaration.EnvoyeeSimplTva, RefCodes.StatutDeclaration.Soumise, RefCodes.StatutDeclaration.ACorriger, RefCodes.StatutDeclaration.Refusee],
+            [RefCodes.StatutDeclaration.EnvoyeeSimplTva] = [RefCodes.StatutDeclaration.Deposee, RefCodes.StatutDeclaration.Rejetee],
+            [RefCodes.StatutDeclaration.Soumise] = [RefCodes.StatutDeclaration.Deposee, RefCodes.StatutDeclaration.Rejetee, RefCodes.StatutDeclaration.Payee, RefCodes.StatutDeclaration.EnvoyeeSimplTva],
+            [RefCodes.StatutDeclaration.Rejetee] = [RefCodes.StatutDeclaration.ACorriger, RefCodes.StatutDeclaration.CalculTVA, RefCodes.StatutDeclaration.EnRevueSuperviseur],
+            [RefCodes.StatutDeclaration.Deposee] = [RefCodes.StatutDeclaration.APayer, RefCodes.StatutDeclaration.Rapprochee, RefCodes.StatutDeclaration.Payee],
+            [RefCodes.StatutDeclaration.APayer] = [RefCodes.StatutDeclaration.Payee],
+            [RefCodes.StatutDeclaration.Payee] = [RefCodes.StatutDeclaration.Rapprochee, RefCodes.StatutDeclaration.Archivee],
+            [RefCodes.StatutDeclaration.Rapprochee] = [RefCodes.StatutDeclaration.Archivee, RefCodes.StatutDeclaration.Cloturee],
+            [RefCodes.StatutDeclaration.Archivee] = [RefCodes.StatutDeclaration.Cloturee],
         };
 
         if (!validTransitions.ContainsKey(oldStatut) || !validTransitions[oldStatut].Contains(newStatut))
             return ApiResponse<bool>.Fail($"Transition de '{oldStatut}' vers '{newStatut}' non autorisée.");
 
         dec.Statut = newStatut;
-        if (newStatut == RefCodes.StatutDeclaration.Soumise) dec.DateSoumission = DateTime.UtcNow;
-        if (newStatut == RefCodes.StatutDeclaration.Refusee) dec.MotifRefus = comment;
+        if (newStatut is RefCodes.StatutDeclaration.Soumise or RefCodes.StatutDeclaration.EnvoyeeSimplTva or RefCodes.StatutDeclaration.Deposee)
+            dec.DateSoumission ??= DateTime.UtcNow;
+        if (newStatut is RefCodes.StatutDeclaration.Refusee or RefCodes.StatutDeclaration.Rejetee or RefCodes.StatutDeclaration.ACorriger)
+            dec.MotifRefus = comment ?? dec.MotifRefus;
 
         _db.DeclarationHistories.Add(new DeclarationHistory
         {
@@ -781,5 +976,35 @@ public class DeclarationService : IDeclarationService
         }
 
         return ApiResponse<bool>.Ok(true, $"Statut changé vers '{newStatut}'.");
+    }
+
+    public async Task<ApiResponse<List<DeclarationHistoryDto>>> GetStatusHistoryAsync(int declarationId, int cabinetId)
+    {
+        var rows = await _db.DeclarationHistories
+            .AsNoTracking()
+            .Where(h => h.DeclarationId == declarationId && h.CabinetId == cabinetId && !h.IsDeleted)
+            .OrderByDescending(h => h.DateChangement)
+            .ToListAsync();
+
+        var userIds = rows.Where(r => !string.IsNullOrEmpty(r.UserId)).Select(r => r.UserId!).Distinct().ToList();
+        var names = await _db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim());
+
+        var dtos = rows.Select(h => new DeclarationHistoryDto
+        {
+            Id = h.Id,
+            DeclarationId = h.DeclarationId,
+            AncienStatut = h.AncienStatut,
+            NouveauStatut = h.NouveauStatut,
+            UserId = h.UserId,
+            UserName = !string.IsNullOrEmpty(h.UserName)
+                ? h.UserName
+                : (h.UserId != null && names.TryGetValue(h.UserId, out var n) ? n : null),
+            Commentaire = h.Commentaire,
+            DateChangement = h.DateChangement
+        }).ToList();
+
+        return ApiResponse<List<DeclarationHistoryDto>>.Ok(dtos);
     }
 }

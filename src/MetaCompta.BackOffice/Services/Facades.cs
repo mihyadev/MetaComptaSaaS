@@ -1,4 +1,4 @@
-﻿using MetaCompta.Application.DTOs;
+using MetaCompta.Application.DTOs;
 
 namespace MetaCompta.BackOffice.Services;
 
@@ -86,6 +86,19 @@ public sealed class ClientFacade : IClientFacade
         }
     }
 
+    public async Task<ContractAccessContextDto> GetContractAccessAsync(int clientId)
+    {
+        try
+        {
+            var result = await _api.GetAsync<ContractAccessContextDto>($"api/clients/{clientId}/contract-access");
+            return result?.Data ?? new ContractAccessContextDto();
+        }
+        catch
+        {
+            return new ContractAccessContextDto();
+        }
+    }
+
     public async Task<List<ServiceContratDto>> GetServiceContratsAsync(int clientId, int? exerciceFiscal = null)
     {
         try
@@ -103,6 +116,27 @@ public sealed class ClientFacade : IClientFacade
 
     public async Task<ApiResponse<GenerateDeclarationsResultDto>?> GenerateDeclarationsAsync(int clientId, GenerateDeclarationsRequestDto request)
         => await _api.PostAsync<GenerateDeclarationsResultDto>($"api/clients/{clientId}/generate-declarations", request);
+
+    // ── Client Users (Extranet) ──────────────────────────────────
+
+    public async Task<List<ClientUserDto>> GetClientUsersAsync(int clientId)
+    {
+        try
+        {
+            var result = await _api.GetAsync<List<ClientUserDto>>($"api/clients/{clientId}/users");
+            return result?.Data ?? new List<ClientUserDto>();
+        }
+        catch { return new List<ClientUserDto>(); }
+    }
+
+    public async Task<ApiResponse<ClientUserDto>?> CreateClientUserAsync(int clientId, ClientUserCreateDto dto)
+        => await _api.PostAsync<ClientUserDto>($"api/clients/{clientId}/users", dto);
+
+    public async Task<ApiResponse<ClientUserDto>?> UpdateClientUserAsync(int clientId, string userId, ClientUserUpdateDto dto)
+        => await _api.PutAsync<ClientUserDto>($"api/clients/{clientId}/users/{userId}", dto);
+
+    public async Task<ApiResponse<bool>?> ToggleClientUserActiveAsync(int clientId, string userId)
+        => await _api.PutAsync<bool>($"api/clients/{clientId}/users/{userId}/toggle", new { });
 }
 
 public sealed class EmployeeFacade : IEmployeeFacade
@@ -180,8 +214,8 @@ public sealed class DeclarationFacade : IDeclarationFacade
     public async Task<ApiResponse<DeclarationTVADto>?> SaveTVADataAsync(int declarationId, DeclarationTVADto dto)
         => await _api.PostAsync<DeclarationTVADto>($"api/declarations/tva/{declarationId}/data", dto);
 
-    public async Task<ApiResponse<DeclarationTVADto>?> SaveTVAAjustementsAsync(int declarationId, decimal immobilisations, decimal creditPrecedent)
-        => await _api.PostAsync<DeclarationTVADto>($"api/declarations/tva/{declarationId}/ajustements", new { TVARecuperableImmobilisations = immobilisations, CreditPrecedent = creditPrecedent });
+    public async Task<ApiResponse<DeclarationTVADto>?> SaveTVAAjustementsAsync(int declarationId, decimal tvaFacturee, decimal tvaDeductible, decimal creditPrecedent)
+        => await _api.PostAsync<DeclarationTVADto>($"api/declarations/tva/{declarationId}/ajustements", new { TVAFacturee = tvaFacturee, TVADeductible = tvaDeductible, CreditPrecedent = creditPrecedent });
 
     // TVA Lignes Factures
     public async Task<ApiResponse<TVALigneFactureDto>?> AddTVALigneAsync(int declarationId, TVALigneFactureDto ligne)
@@ -241,6 +275,12 @@ public sealed class DeclarationFacade : IDeclarationFacade
     // Status
     public async Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut, string? comment = null)
         => await _api.PutAsync<bool>($"api/declarations/{id}/status", new { NewStatut = newStatut, Comment = comment });
+
+    public async Task<List<DeclarationHistoryDto>> GetStatusHistoryAsync(int declarationId)
+    {
+        var result = await _api.GetAsync<List<DeclarationHistoryDto>>($"api/declarations/{declarationId}/history");
+        return result?.Data ?? new List<DeclarationHistoryDto>();
+    }
 }
 
 public sealed class PayrollFacade : IPayrollFacade
@@ -276,6 +316,118 @@ public sealed class PayrollFacade : IPayrollFacade
 
     public async Task<ApiResponse<bool>?> ValidateAsync(int periodId)
         => await _api.PostAsync<bool>($"api/payroll/{periodId}/validate", new { });
+
+    // Engine
+    public async Task<BulletinCompletDto?> GetBulletinAsync(int paySlipId)
+    {
+        var result = await _api.GetAsync<BulletinCompletDto>($"api/payroll/bulletin/{paySlipId}");
+        return result?.Data;
+    }
+
+    public async Task<List<RubriqueDto>> GetRubriquesAsync(int? clientId = null)
+    {
+        var url = QueryBuilder.For("api/payroll/rubriques").Add("clientId", clientId);
+        var result = await _api.GetAsync<List<RubriqueDto>>(url);
+        return result?.Data ?? new List<RubriqueDto>();
+    }
+
+    public async Task<RubriqueDto?> GetRubriqueAsync(int id)
+    {
+        var result = await _api.GetAsync<RubriqueDto>($"api/payroll/rubriques/{id}");
+        return result?.Data;
+    }
+
+    public async Task<ApiResponse<RubriqueDto>?> CreateRubriqueAsync(RubriqueCreateDto dto)
+        => await _api.PostAsync<RubriqueDto>("api/payroll/rubriques", dto);
+
+    public async Task<ApiResponse<RubriqueDto>?> UpdateRubriqueAsync(int id, RubriqueCreateDto dto)
+        => await _api.PutAsync<RubriqueDto>($"api/payroll/rubriques/{id}", dto);
+
+    public async Task<ApiResponse<bool>?> ToggleRubriqueAsync(int id)
+        => await _api.PostAsync<bool>($"api/payroll/rubriques/{id}/toggle", new { });
+
+    public async Task<ApiResponse<bool>?> DeleteRubriqueAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/payroll/rubriques/{id}");
+
+    public async Task<List<ConstanteGlobaleDto>> GetConstantesAsync(string? categorie = null)
+    {
+        var url = QueryBuilder.For("api/payroll/constantes").Add("categorie", categorie);
+        var result = await _api.GetAsync<List<ConstanteGlobaleDto>>(url);
+        return result?.Data ?? new List<ConstanteGlobaleDto>();
+    }
+
+    public async Task<ApiResponse<ConstanteGlobaleDto>?> CreateConstanteAsync(ConstanteGlobaleDto dto)
+        => await _api.PostAsync<ConstanteGlobaleDto>("api/payroll/constantes", dto);
+
+    public async Task<ApiResponse<ConstanteGlobaleDto>?> UpdateConstanteAsync(int id, ConstanteGlobaleDto dto)
+        => await _api.PutAsync<ConstanteGlobaleDto>($"api/payroll/constantes/{id}", dto);
+
+    public async Task<ApiResponse<bool>?> DeleteConstanteAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/payroll/constantes/{id}");
+
+    public async Task<List<VariableEmployeDto>> GetVariablesEmployeAsync(int employeeId)
+    {
+        var result = await _api.GetAsync<List<VariableEmployeDto>>($"api/payroll/variables/{employeeId}");
+        return result?.Data ?? new List<VariableEmployeDto>();
+    }
+
+    public async Task<ApiResponse<VariableEmployeDto>?> CreateVariableAsync(VariableEmployeCreateDto dto)
+        => await _api.PostAsync<VariableEmployeDto>("api/payroll/variables", dto);
+
+    public async Task<ApiResponse<VariableEmployeDto>?> UpdateVariableAsync(int id, VariableEmployeCreateDto dto)
+        => await _api.PutAsync<VariableEmployeDto>($"api/payroll/variables/{id}", dto);
+
+    public async Task<ApiResponse<bool>?> DeleteVariableAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/payroll/variables/{id}");
+
+    public async Task<List<CumulEmployeDto>> GetCumulsAsync(int employeeId, int annee)
+    {
+        var result = await _api.GetAsync<List<CumulEmployeDto>>($"api/payroll/cumuls/{employeeId}/{annee}");
+        return result?.Data ?? new List<CumulEmployeDto>();
+    }
+
+    public async Task<ApiResponse<bool>?> SeedRubriquesAsync()
+        => await _api.PostAsync<bool>("api/payroll/seed/rubriques", new { });
+
+    public async Task<ApiResponse<bool>?> SeedConstantesAsync()
+        => await _api.PostAsync<bool>("api/payroll/seed/constantes", new { });
+
+    public async Task<ApiResponse<bool>?> SeedDemo2025Async(int clientId)
+        => await _api.PostAsync<bool>($"api/payroll/seed/demo-2025/{clientId}", new { });
+
+    // Dynamic employee variables per period
+    public async Task<List<VariableEmployeDto>> GetVariablesForPeriodAsync(int employeeId, int annee, int mois)
+    {
+        var result = await _api.GetAsync<List<VariableEmployeDto>>($"api/payroll/period-variables/{employeeId}/{annee}/{mois}");
+        return result?.Data ?? new List<VariableEmployeDto>();
+    }
+
+    public async Task<ApiResponse<bool>?> UpdateVariablesBulkAsync(int employeeId, int annee, int mois, List<VariableEmployeCreateDto> variables)
+        => await _api.PutAsync<bool>($"api/payroll/period-variables/{employeeId}/{annee}/{mois}", variables);
+
+    // Affectation Rubriques (ERP-style)
+    public async Task<List<AffectationRubriqueDto>> GetAffectationsAsync(int employeeId)
+    {
+        var result = await _api.GetAsync<List<AffectationRubriqueDto>>($"api/payroll/affectations/{employeeId}");
+        return result?.Data ?? new List<AffectationRubriqueDto>();
+    }
+
+    public async Task<List<RubriqueDto>> GetRubriquesDisponiblesAsync(int employeeId, int? clientId = null)
+    {
+        var url = $"api/payroll/affectations/{employeeId}/disponibles";
+        if (clientId.HasValue) url += $"?clientId={clientId}";
+        var result = await _api.GetAsync<List<RubriqueDto>>(url);
+        return result?.Data ?? new List<RubriqueDto>();
+    }
+
+    public async Task<ApiResponse<AffectationRubriqueDto>?> AddAffectationAsync(AffectationRubriqueCreateDto dto)
+        => await _api.PostAsync<AffectationRubriqueDto>("api/payroll/affectations", dto);
+
+    public async Task<ApiResponse<AffectationRubriqueDto>?> UpdateAffectationAsync(int id, AffectationRubriqueCreateDto dto)
+        => await _api.PutAsync<AffectationRubriqueDto>($"api/payroll/affectations/{id}", dto);
+
+    public async Task<ApiResponse<bool>?> RemoveAffectationAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/payroll/affectations/{id}");
 }
 
 public sealed class DashboardFacade : IDashboardFacade
@@ -298,7 +450,15 @@ public sealed class DashboardFacade : IDashboardFacade
 public sealed class DocumentFacade : IDocumentFacade
 {
     private readonly IApiClient _api;
-    public DocumentFacade(IApiClient api) => _api = api;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpContextAccessor _contextAccessor;
+
+    public DocumentFacade(IApiClient api, IHttpClientFactory httpClientFactory, IHttpContextAccessor contextAccessor)
+    {
+        _api = api;
+        _httpClientFactory = httpClientFactory;
+        _contextAccessor = contextAccessor;
+    }
 
     public async Task<PagedResult<DocumentDto>?> GetAllAsync(int? clientId = null, string? categorie = null, int page = 1, string? search = null)
     {
@@ -308,14 +468,38 @@ public sealed class DocumentFacade : IDocumentFacade
         return result?.Data;
     }
 
+    public async Task<List<DocumentDto>?> GetByDeclarationIdAsync(int declarationId)
+    {
+        var result = await _api.GetAsync<List<DocumentDto>>($"api/documents/declaration/{declarationId}");
+        return result?.Data;
+    }
+
     public async Task<DocumentDto?> GetByIdAsync(int id)
     {
         var result = await _api.GetAsync<DocumentDto>($"api/documents/{id}");
         return result?.Data;
     }
 
-    public async Task<ApiResponse<DocumentDto>?> UploadAsync(Stream stream, string fileName, string contentType, long size, string titre, string categorie, int? clientId)
-        => await _api.PostAsync<DocumentDto>("api/documents/upload", new { FileName = fileName, Titre = titre, Categorie = categorie, ClientId = clientId });
+    public async Task<ApiResponse<DocumentDto>?> UploadAsync(Stream stream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int? declarationId = null)
+    {
+        var client = _httpClientFactory.CreateClient("MetaComptaAPI");
+        var token = _contextAccessor.HttpContext?.Session.GetString("JwtToken");
+        if (!string.IsNullOrEmpty(token))
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        using var content = new MultipartFormDataContent();
+        var streamContent = new StreamContent(stream);
+        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        content.Add(streamContent, "file", fileName);
+        content.Add(new StringContent(titre), "titre");
+        content.Add(new StringContent(categorie), "categorie");
+        if (clientId.HasValue) content.Add(new StringContent(clientId.Value.ToString()), "clientId");
+        if (declarationId.HasValue) content.Add(new StringContent(declarationId.Value.ToString()), "declarationId");
+
+        var response = await client.PostAsync("api/documents/upload", content);
+        var json = await response.Content.ReadAsStringAsync();
+        return System.Text.Json.JsonSerializer.Deserialize<ApiResponse<DocumentDto>>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
 
     public async Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut, string? motif = null)
         => await _api.PutAsync<bool>($"api/documents/{id}/status", new { NewStatut = newStatut, Motif = motif });
@@ -329,10 +513,10 @@ public sealed class TaskFacade : ITaskFacade
     private readonly IApiClient _api;
     public TaskFacade(IApiClient api) => _api = api;
 
-    public async Task<PagedResult<TaskItemDto>?> GetAllAsync(string? assignedTo = null, string? statut = null, int? clientId = null, int page = 1)
+    public async Task<PagedResult<TaskItemDto>?> GetAllAsync(string? assignedTo = null, string? statut = null, int? clientId = null, int page = 1, string? assignedToKind = null)
     {
         var url = QueryBuilder.For("api/tasks")
-            .Add("page", page).Add("assignedTo", assignedTo).Add("statut", statut).Add("clientId", clientId);
+            .Add("page", page).Add("assignedTo", assignedTo).Add("statut", statut).Add("clientId", clientId).Add("assignedToKind", assignedToKind);
         var result = await _api.GetAsync<PagedResult<TaskItemDto>>(url);
         return result?.Data;
     }
@@ -350,7 +534,13 @@ public sealed class TaskFacade : ITaskFacade
         => await _api.PutAsync<TaskItemDto>($"api/tasks/{id}", dto);
 
     public async Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut)
-        => await _api.PutAsync<bool>($"api/tasks/{id}/status", new { NewStatut = newStatut });
+        => await _api.PutAsync<bool>($"api/tasks/{id}/status", new { Statut = newStatut });
+
+    public async Task<ApiResponse<WorkflowStepInstanceDto>?> CompleteWorkflowStepAsync(int instanceId, string? notes = null)
+        => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/advance", new { Notes = notes });
+
+    public async Task<ApiResponse<TaskCommentDto>?> AddCommentAsync(int taskId, string contenu)
+        => await _api.PostAsync<TaskCommentDto>($"api/tasks/{taskId}/comments", new { Contenu = contenu });
 }
 
 public sealed class ComptabiliteFacade : IComptabiliteFacade
@@ -487,10 +677,10 @@ public sealed class CabinetFacade : ICabinetFacade
 
     // ── Employees ─────────────────────────────────────────────
 
-    public async Task<PagedResult<CabinetEmployeeDto>?> GetEmployeesAsync(string? departement = null, int page = 1, string? search = null)
+    public async Task<PagedResult<CabinetEmployeeDto>?> GetEmployeesAsync(string? departement = null, int page = 1, string? search = null, int pageSize = 20)
     {
         var url = QueryBuilder.For("api/cabinet/employees")
-            .Add("page", page).Add("departement", departement).Add("search", search);
+            .Add("page", page).Add("pageSize", pageSize).Add("departement", departement).Add("search", search);
         var result = await _api.GetAsync<PagedResult<CabinetEmployeeDto>>(url);
         return result?.Data;
     }
@@ -763,6 +953,9 @@ public sealed class WorkflowFacade : IWorkflowFacade
     public async Task<ApiResponse<WorkflowStepInstanceDto>?> AdvanceStepAsync(int instanceId, AdvanceStepDto dto)
         => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/advance", dto);
 
+    public async Task<ApiResponse<WorkflowStepInstanceDto>?> ClaimStepAsync(int instanceId, bool forceOverride = false, string? reason = null)
+        => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/claim", new { ForceOverride = forceOverride, Reason = reason });
+
     public async Task<ApiResponse<bool>?> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto)
         => await _api.PostAsync<bool>($"api/workflow/steps/{stepInstanceId}/reassign", dto);
 
@@ -913,6 +1106,9 @@ public sealed class CommercialFacade : ICommercialFacade
     public async Task<ApiResponse<ContratCommercialDto>?> UpdateContratAsync(int id, ContratCommercialCreateDto dto)
         => await _api.PutAsync<ContratCommercialDto>($"api/contrats/{id}", dto);
 
+    public async Task<ApiResponse<ContratCommercialDto>?> UpdateContratEquipeAsync(int id, ContratEquipeUpdateDto dto)
+        => await _api.PutAsync<ContratCommercialDto>($"api/contrats/{id}/equipe", dto);
+
     public async Task<ApiResponse<ContratCommercialDto>?> SignerContratAsync(int id, ContratSignatureDto dto)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/signer", dto);
 
@@ -921,6 +1117,9 @@ public sealed class CommercialFacade : ICommercialFacade
 
     public async Task<ApiResponse<ContratCommercialDto>?> SuspendreContratAsync(int id)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/suspendre", new { });
+
+    public async Task<ApiResponse<ContratCommercialDto>?> ReactiverContratAsync(int id)
+        => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/reactiver", new { });
 
     public async Task<ApiResponse<ContratCommercialDto>?> TerminerContratAsync(int id)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/terminer", new { });
@@ -981,5 +1180,37 @@ public sealed class CommercialFacade : ICommercialFacade
     {
         var result = await _api.GetAsync<DashboardCommercialDto>("api/commercial/dashboard");
         return result?.Data;
+    }
+}
+
+// ============================================================================
+// MESSAGE FACADE
+// ============================================================================
+
+public sealed class MessageFacade : IMessageFacade
+{
+    private readonly IApiClient _api;
+    public MessageFacade(IApiClient api) => _api = api;
+
+    public async Task<List<MessageDto>?> GetByDeclarationAsync(int declarationId)
+    {
+        var result = await _api.GetAsync<List<MessageDto>>($"api/messages/declaration/{declarationId}");
+        return result?.Data;
+    }
+
+    public async Task<List<MessageDto>?> GetConversationsAsync()
+    {
+        var result = await _api.GetAsync<List<MessageDto>>("api/messages/conversations");
+        return result?.Data;
+    }
+
+    public async Task<ApiResponse<MessageDto>?> SendAsync(SendMessageDto dto)
+        => await _api.PostAsync<MessageDto>("api/messages", dto);
+
+    public async Task<int> GetUnreadCountAsync(int? clientId = null)
+    {
+        var url = clientId.HasValue ? $"api/messages/unread-count?clientId={clientId}" : "api/messages/unread-count";
+        var result = await _api.GetAsync<int>(url);
+        return result?.Data ?? 0;
     }
 }

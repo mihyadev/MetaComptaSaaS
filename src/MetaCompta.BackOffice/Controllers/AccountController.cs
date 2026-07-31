@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using MetaCompta.Application.DTOs;
 using Microsoft.AspNetCore.Mvc;
@@ -45,6 +45,9 @@ public class AccountController : Controller
             HttpContext.Session.SetString("CabinetName", result.Data.User.CabinetName ?? "");
             HttpContext.Session.SetString("ProfileImage", result.Data.User.ProfileImageUrl ?? "");
             HttpContext.Session.SetString("Language", result.Data.User.PreferredLanguage);
+
+            var perms = Helpers.PermissionHelper.ParseFromJwt(result.Data.AccessToken);
+            HttpContext.Session.SetString("UserPermissions", System.Text.Json.JsonSerializer.Serialize(perms.ToList()));
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);

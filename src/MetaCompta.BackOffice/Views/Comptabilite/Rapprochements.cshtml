@@ -1,4 +1,4 @@
-﻿@model IEnumerable<MetaCompta.Application.DTOs.RapprochementBancaireDto>
+@model IEnumerable<MetaCompta.Application.DTOs.RapprochementBancaireDto>
 @{
     ViewData["Title"] = "Rapprochements bancaires";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
@@ -15,9 +15,12 @@
             </ol>
         </nav>
     </div>
-    <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalNouveauRapprochement">
-        <i class="bi bi-plus-circle me-1"></i> Nouveau rapprochement
-    </button>
+    @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNouveauRapprochement">
+            <i class="bi bi-plus-circle me-1"></i> Nouveau rapprochement
+        </button>
+    }
 </div>
 
 @if (client != null)
@@ -97,7 +100,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Créer</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check me-1"></i> Créer</button>
                 </div>
             </form>
         </div>

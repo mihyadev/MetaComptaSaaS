@@ -1,0 +1,127 @@
+﻿@using MetaCompta.Application.DTOs
+@{
+    ViewData["Title"] = "Tableau de bord";
+    var dashboard = ViewBag.Dashboard as ExtranetDashboardDto;
+    var clientName = ViewBag.ClientName as string ?? dashboard?.ClientName ?? "—";
+    var userName = ViewBag.UserName as string ?? "—";
+    var tasksPending = dashboard?.TachesEnAttente ?? 0;
+    var msgsUnread = dashboard?.MessagesNonLus ?? 0;
+}
+
+<div class="ex-page-hero">
+    <div>
+        <h4>Bienvenue, @userName</h4>
+        <p class="ex-sub">
+            <i class="bi bi-building me-1"></i>@clientName
+            @if (!string.IsNullOrEmpty(dashboard?.ICE)) { <span class="mx-1">·</span><span>ICE @dashboard.ICE</span> }
+            @if (!string.IsNullOrEmpty(dashboard?.FormeJuridique)) { <span class="mx-1">·</span><span>@dashboard.FormeJuridique</span> }
+            <span class="mx-1">·</span>
+            @DateTime.Now.ToString("dddd dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+        </p>
+    </div>
+    <a href="/Profile" class="btn btn-primary btn-sm d-none d-md-inline-flex align-items-center gap-1">
+        <i class="bi bi-building"></i>Mon entreprise
+    </a>
+</div>
+
+@if (tasksPending > 0)
+{
+    <div class="ex-action-strip">
+        <div>
+            <div class="fw-bold"><i class="bi bi-bell-fill text-warning me-1"></i>@tasksPending action(s) requise(s)</div>
+            <div class="small text-muted">Votre cabinet attend des documents ou une validation de votre part.</div>
+        </div>
+        <a href="/Tasks" class="btn btn-warning btn-sm text-dark fw-semibold">Voir mes tâches</a>
+    </div>
+}
+
+<div class="ex-kpi-grid">
+    <div class="ex-kpi">
+        <div><div class="ex-kpi-label">Déclarations en cours</div><div class="ex-kpi-value">@(dashboard?.DeclarationsEnCours ?? 0)</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+    </div>
+    <div class="ex-kpi success">
+        <div><div class="ex-kpi-label">Soumises / clôturées</div><div class="ex-kpi-value">@(dashboard?.DeclarationsSoumises ?? 0)</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+    </div>
+    <div class="ex-kpi warning">
+        <div><div class="ex-kpi-label">Tâches en attente</div><div class="ex-kpi-value">@tasksPending</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-list-task"></i></div>
+    </div>
+    <div class="ex-kpi purple">
+        <div><div class="ex-kpi-label">Messages non lus</div><div class="ex-kpi-value">@msgsUnread</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-chat-dots"></i></div>
+    </div>
+</div>
+
+<div class="ex-kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="ex-kpi">
+        <div><div class="ex-kpi-label">Employés</div><div class="ex-kpi-value">@(dashboard?.EmployeeCount ?? 0)</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-people"></i></div>
+    </div>
+    <div class="ex-kpi warning">
+        <div><div class="ex-kpi-label">Documents partagés</div><div class="ex-kpi-value">@(dashboard?.DocumentCount ?? 0)</div></div>
+        <div class="ex-kpi-icon"><i class="bi bi-folder"></i></div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="ex-board-card h-100">
+            <div class="fw-bold mb-3"><i class="bi bi-calendar-event text-danger me-2"></i>Prochains délais</div>
+            @if (dashboard?.ProchainsDelais != null && dashboard.ProchainsDelais.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light"><tr><th>Déclaration</th><th>Période</th><th>Échéance</th><th>Délai</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var d in dashboard.ProchainsDelais)
+                            {
+                                var bc = d.JoursRestants <= 0 ? "bg-danger" : d.JoursRestants <= 7 ? "bg-warning text-dark" : "bg-primary";
+                                var bt = d.JoursRestants <= 0 ? $"{Math.Abs(d.JoursRestants)}j retard" : $"{d.JoursRestants}j";
+                                <tr>
+                                    <td><span class="badge bg-primary rounded-pill">@d.Type</span></td>
+                                    <td class="fw-medium">@d.Periode</td>
+                                    <td>@d.DateLimite.ToString("dd/MM/yyyy")</td>
+                                    <td><span class="badge @bc rounded-pill">@bt</span></td>
+                                    <td><a class="btn btn-sm btn-outline-primary" href="/Declarations/Details/@d.Id">Ouvrir</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted mb-0 small">Aucun délai à venir.</p>
+            }
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="ex-board-card h-100">
+            <div class="fw-bold mb-3"><i class="bi bi-activity text-primary me-2"></i>Activité récente</div>
+            @if (dashboard?.DernieresDeclarations != null && dashboard.DernieresDeclarations.Any())
+            {
+                @foreach (var r in dashboard.DernieresDeclarations)
+                {
+                    <a href="/Declarations/Details/@r.Id" class="d-flex justify-content-between align-items-center py-2 border-bottom text-decoration-none text-dark">
+                        <div>
+                            <div class="fw-semibold small">@r.Type — @r.Periode</div>
+                            <div class="text-muted" style="font-size:0.72rem;">@r.Statut</div>
+                        </div>
+                        <span class="small text-muted">@r.MontantDu.ToString("N0") MAD</span>
+                    </a>
+                }
+            }
+            else
+            {
+                <p class="text-muted mb-0 small">Aucune activité récente.</p>
+            }
+            <div class="d-grid gap-2 mt-3">
+                <a href="/Tasks" class="btn btn-outline-warning btn-sm">Mes tâches @(tasksPending > 0 ? $"({tasksPending})" : "")</a>
+                <a href="/MessagesExtranet" class="btn btn-outline-primary btn-sm">Messages @(msgsUnread > 0 ? $"({msgsUnread})" : "")</a>
+                <a href="/Documents" class="btn btn-outline-secondary btn-sm">Documents</a>
+            </div>
+        </div>
+    </div>
+</div>

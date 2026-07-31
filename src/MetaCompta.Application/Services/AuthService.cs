@@ -19,13 +19,20 @@ public class AuthService : IAuthService
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly MetaComptaDbContext _db;
     private readonly IConfiguration _config;
+    private readonly IEffectivePermissionService _permissions;
 
-    public AuthService(UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager, MetaComptaDbContext db, IConfiguration config)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        RoleManager<ApplicationRole> roleManager,
+        MetaComptaDbContext db,
+        IConfiguration config,
+        IEffectivePermissionService permissions)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _db = db;
         _config = config;
+        _permissions = permissions;
     }
 
     public async Task<ApiResponse<TokenDto>> LoginAsync(LoginDto dto)
@@ -121,22 +128,10 @@ public class AuthService : IAuthService
     {
         var roles = await _userManager.GetRolesAsync(user);
         var cabinet = user.CabinetId.HasValue ? await _db.Cabinets.FindAsync(user.CabinetId) : null;
+        var client = user.ClientId.HasValue ? await _db.Clients.FindAsync(user.ClientId) : null;
 
-        // Get permissions from role
-        var permissions = new List<string>();
-        foreach (var role in roles)
-        {
-            var appRole = await _roleManager.FindByNameAsync(role);
-            if (appRole != null)
-            {
-                var rolePerms = await _db.RolePermissions
-                    .Where(rp => rp.RoleId == appRole.Id)
-                    .Include(rp => rp.Permission)
-                    .Select(rp => rp.Permission!.Name)
-                    .ToListAsync();
-                permissions.AddRange(rolePerms);
-            }
-        }
+        // Live effective permissions from DB (employee override or role fallback)
+        var permissions = await _permissions.GetEffectivePermissionsAsync(user.Id);
 
         var claims = new List<Claim>
         {
@@ -172,7 +167,7 @@ public class AuthService : IAuthService
             new JwtSecurityTokenHandler().WriteToken(token),
             refreshToken,
             expiration,
-            new UserInfoDto(user.Id, user.Email!, user.FullName, roles.FirstOrDefault(), user.CabinetId, cabinet?.Name, user.ProfileImageUrl, user.PreferredLanguage)
+            new UserInfoDto(user.Id, user.Email!, user.FullName, roles.FirstOrDefault(), user.CabinetId, cabinet?.Name, user.ProfileImageUrl, user.PreferredLanguage, user.ClientId, client?.RaisonSociale)
         );
     }
 }

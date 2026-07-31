@@ -1,6 +1,11 @@
 ﻿@model DevisDto
 @{
     ViewData["Title"] = $"Devis {Model.Reference}";
+    var canCommercialEdit = ViewBag.CanCommercialEdit as bool? ?? false;
+    var canCommercialDelete = ViewBag.CanCommercialDelete as bool? ?? false;
+    var canCommercialValidate = ViewBag.CanCommercialValidate as bool? ?? false;
+    var canCommercialConvert = ViewBag.CanCommercialConvert as bool? ?? false;
+    var canCommercialCreate = ViewBag.CanCommercialCreate as bool? ?? false;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -11,18 +16,24 @@
     <div class="d-flex gap-2">
         @if (Model.Statut == RefCodes.StatutDevis.Brouillon)
         {
-            <a asp-action="DevisEdit" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill"><i
-                    class="bi bi-pencil me-1"></i>Modifier</a>
-            <form asp-action="DevisSoumettre" asp-route-id="@Model.Id" method="post" class="d-inline">
-                <button type="submit" class="btn btn-warning rounded-pill"><i class="bi bi-send me-1"></i>Soumettre</button>
-            </form>
-            <form asp-action="DevisSupprimer" asp-route-id="@Model.Id" method="post" class="d-inline"
-                onsubmit="return confirm('Supprimer ce devis ?')">
-                <button type="submit" class="btn btn-outline-danger rounded-pill"><i
-                        class="bi bi-trash me-1"></i>Supprimer</button>
-            </form>
+            @if (canCommercialEdit)
+            {
+                <a asp-action="DevisEdit" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill"><i
+                        class="bi bi-pencil me-1"></i>Modifier</a>
+                <form asp-action="DevisSoumettre" asp-route-id="@Model.Id" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-warning rounded-pill"><i class="bi bi-send me-1"></i>Soumettre</button>
+                </form>
+            }
+            @if (canCommercialDelete)
+            {
+                <form asp-action="DevisSupprimer" asp-route-id="@Model.Id" method="post" class="d-inline"
+                    onsubmit="return confirm('Supprimer ce devis ?')">
+                    <button type="submit" class="btn btn-outline-danger rounded-pill"><i
+                            class="bi bi-trash me-1"></i>Supprimer</button>
+                </form>
+            }
         }
-        @if (Model.Statut == "Soumis")
+        @if (Model.Statut == "Soumis" && canCommercialValidate)
         {
             <form asp-action="DevisApprouver" asp-route-id="@Model.Id" method="post" class="d-inline">
                 <button type="submit" class="btn btn-success rounded-pill"><i
@@ -31,7 +42,7 @@
             <button type="button" class="btn btn-danger rounded-pill" data-bs-toggle="modal" data-bs-target="#rejetModal"><i
                     class="bi bi-x-circle me-1"></i>Rejeter</button>
         }
-        @if (Model.PeutConvertir)
+        @if (Model.PeutConvertir && canCommercialConvert)
         {
             <form asp-action="DevisConvertir" asp-route-id="@Model.Id" method="post" class="d-inline">
                 <button type="submit" class="btn btn-info rounded-pill text-white"><i
@@ -40,10 +51,13 @@
             <a asp-action="DevisConvertirEnContrat" asp-route-id="@Model.Id" class="btn btn-success rounded-pill"><i
                     class="bi bi-file-earmark-check me-1"></i>Convertir en Contrat</a>
         }
-        <form asp-action="DevisDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
-            <button type="submit" class="btn btn-outline-info rounded-pill"><i
-                    class="bi bi-copy me-1"></i>Dupliquer</button>
-        </form>
+        @if (canCommercialCreate)
+        {
+            <form asp-action="DevisDupliquer" asp-route-id="@Model.Id" method="post" class="d-inline">
+                <button type="submit" class="btn btn-outline-info rounded-pill"><i
+                        class="bi bi-copy me-1"></i>Dupliquer</button>
+            </form>
+        }
         <a asp-action="Devis" class="btn btn-outline-secondary rounded-pill"><i
                 class="bi bi-arrow-left me-1"></i>Retour</a>
     </div>

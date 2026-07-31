@@ -1,38 +1,110 @@
 ﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EtatFiscalDto>
 @{
     var type = ViewBag.TypeEtat as string;
+    var exercice = ViewBag.Exercice as int?;
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var clientId = ViewBag.ClientId as int?;
+
     var typeName = type switch
     {
-        "Etat9421" => "État 9421 (salaires)",
-        "LiasseFiscale" => "Liasse fiscale",
-        "Bilan" => "Bilan fiscal",
+        "BILAN" => "Bilan Comptable",
+        "LIASSEFISCALE" => "Liasse Fiscale",
         "CPC" => "Compte de Produits et Charges",
-        "Amortissements" => "Tableau des amortissements",
-        "EtatsSynthese" => "États de synthèse",
-        _ => "Déclarations & États fiscaux"
+        "AMORTISSEMENTS" => "Tableau des Amortissements",
+        "ETATSSYNTHESE" => "États de Synthèse",
+        "ETAT9421" => "État 9421 (Salaires)",
+        _ => "Bilans & États Fiscaux"
     };
     ViewData["Title"] = typeName;
-    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+
+    // Group items by exercice for paired Bilan + États de Synthèse display
+    var allItems = Model?.Items ?? new List<MetaCompta.Application.DTOs.EtatFiscalDto>();
+    var byExercice = allItems
+        .GroupBy(e => e.Exercice)
+        .OrderByDescending(g => g.Key)
+        .ToList();
+
+    static string StatutBadge(string? s) => s switch
+    {
+        "Validee" => "bg-success",
+        "Brouillon" => "bg-secondary",
+        "EnCours" => "bg-warning text-dark",
+        "Completee" => "bg-info text-dark",
+        "Soumise" => "bg-primary",
+        "Refusee" or "Rejetee" => "bg-danger",
+        _ => "bg-light text-dark border"
+    };
+
+    static string TypeIcon(string t) => t?.ToUpperInvariant() switch
+    {
+        "BILAN" => "bi-clipboard-data",
+        "LIASSEFISCALE" => "bi-files",
+        "CPC" => "bi-bar-chart-line",
+        "AMORTISSEMENTS" => "bi-graph-down-arrow",
+        "ETATSSYNTHESE" => "bi-file-earmark-check",
+        "ETAT9421" => "bi-file-text",
+        _ => "bi-file-earmark"
+    };
+
+    static string TypeColor(string t) => t?.ToUpperInvariant() switch
+    {
+        "BILAN" => "#0d6efd",
+        "LIASSEFISCALE" => "#6610f2",
+        "CPC" => "#fd7e14",
+        "AMORTISSEMENTS" => "#0dcaf0",
+        "ETATSSYNTHESE" => "#198754",
+        "ETAT9421" => "#dc3545",
+        _ => "#6c757d"
+    };
+
+    static string TypeLabel(string t) => t?.ToUpperInvariant() switch
+    {
+        "BILAN" => "Bilan",
+        "LIASSEFISCALE" => "Liasse",
+        "CPC" => "CPC",
+        "AMORTISSEMENTS" => "Amortis.",
+        "ETATSSYNTHESE" => "Synthèse",
+        "ETAT9421" => "9421",
+        _ => t ?? ""
+    };
 }
 
 <div class="page-header">
     <div>
-        <h2><i class="bi bi-file-earmark-text me-2"></i>@typeName</h2>
+        <h2><i class="bi bi-clipboard-data me-2 text-primary"></i>@typeName</h2>
         <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
+            <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
                 <li class="breadcrumb-item active">États Fiscaux</li>
             </ol>
         </nav>
     </div>
-    <button class="btn btn-mc-primary" data-bs-toggle="modal" data-bs-target="#modalGenerate">
-        <i class="bi bi-file-earmark-plus me-1"></i> Générer un état
-    </button>
+    @if (ViewBag.CanReportExport as bool? ?? false)
+    {
+        <button class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalGenerate">
+            <i class="bi bi-file-earmark-plus me-2"></i>Générer un état
+        </button>
+    }
 </div>
+
+@if (!string.IsNullOrEmpty(TempData["Success"]?.ToString()))
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-3 mb-3" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (!string.IsNullOrEmpty(TempData["Error"]?.ToString()))
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
 
 @if (client != null)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3">
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 rounded-3 py-2">
         <i class="bi bi-building fs-5"></i>
         <div>
             <strong>@client.RaisonSociale</strong>
@@ -41,150 +113,265 @@
     </div>
 }
 
-<!-- Type Cards -->
-<div class="row g-3 mb-4">
+<!-- Type quick-filter tabs -->
+<div class="d-flex flex-wrap gap-2 mb-4">
     @{
-        var types = new[] {
-            ("Etat9421", "9421", "bi-file-text", "danger"),
-            ("LiasseFiscale", "Liasse", "bi-files", "primary"),
-            ("Bilan", "Bilan", "bi-clipboard-data", "success"),
-            ("CPC", "CPC", "bi-bar-chart-line", "warning"),
-            ("Amortissements", "Amortis.", "bi-graph-down-arrow", "info"),
-            ("EtatsSynthese", "Synthèse", "bi-file-earmark-check", "secondary")
+        var typeTabs = new[]
+        {
+            ("", "Tous", "bi-grid"),
+            ("BILAN", "Bilan", "bi-clipboard-data"),
+            ("LIASSEFISCALE", "Liasse", "bi-files"),
+            ("CPC", "CPC", "bi-bar-chart-line"),
+            ("AMORTISSEMENTS", "Amortissements", "bi-graph-down-arrow"),
+            ("ETATSSYNTHESE", "États de Synthèse", "bi-file-earmark-check"),
+            ("ETAT9421", "État 9421", "bi-file-text"),
         };
     }
-    @foreach (var (t, label, icon, color) in types)
+    @foreach (var (t, label, icon) in typeTabs)
     {
-        <div class="col-md-2">
-            <a href="@Url.Action("Index", "EtatsFiscaux", new { type = t })"
-               class="mc-card d-block text-decoration-none p-3 @(type == t ? "border-primary border-2" : "")">
-                <div class="text-center">
-                    <i class="bi @icon text-@color fs-4 d-block"></i>
-                    <span class="small fw-semibold text-dark">@label</span>
-                </div>
-            </a>
-        </div>
+        var isActive = (string.IsNullOrEmpty(t) && string.IsNullOrEmpty(type)) || t == type?.ToUpperInvariant();
+        <a href="@Url.Action("Index", "EtatsFiscaux", new { type = t, clientId })"
+           class="btn @(isActive ? "btn-primary" : "btn-outline-secondary") btn-sm rounded-pill px-3">
+            <i class="bi @icon me-1"></i>@label
+        </a>
     }
 </div>
 
 <!-- Filters -->
 <div class="mc-card mb-4">
     <div class="card-body p-3">
-        <form method="get" class="row g-3 align-items-end">
+        <form method="get" class="row g-2 align-items-end">
+            <input type="hidden" name="type" value="@type" />
+            <input type="hidden" name="clientId" value="@clientId" />
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Exercice</label>
+                <select name="exercice" class="form-select form-select-sm">
+                    <option value="">Tous les exercices</option>
+                    @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 6; y--)
+                    {
+                        <option value="@y" selected="@(exercice == y)">@y</option>
+                    }
+                </select>
+            </div>
             <div class="col-md-3">
-                <label class="form-label">Type</label>
-                <select name="type" class="form-select">
-                    <option value="">Tous</option>
-                    @foreach (var (t, label, _, _) in types)
-                    {
-                        <option value="@t" selected="@(type == t)">@label</option>
-                    }
-                </select>
+                <label class="form-label small fw-semibold">Recherche client</label>
+                <input type="text" name="search" class="form-control form-control-sm" value="@ViewBag.Search" placeholder="Nom du client..." />
             </div>
             <div class="col-md-2">
-                <label class="form-label">Exercice</label>
-                <select name="exercice" class="form-select">
-                    <option value="">Tous</option>
-                    @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 5; y--)
-                    {
-                        <option value="@y" selected="@(ViewBag.Exercice?.ToString() == y.ToString())">@y</option>
-                    }
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Recherche</label>
-                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Référence..." />
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-sm btn-primary w-100">
+                    <i class="bi bi-search me-1"></i>Filtrer
+                </button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Table -->
-<div class="mc-card">
-    <div class="card-header"><i class="bi bi-table me-2"></i>États fiscaux (@(Model?.TotalCount ?? 0))</div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table mc-table mb-0">
-                <thead>
-                    <tr>
-                        <th>Référence</th>
-                        <th>Type</th>
-                        <th>Exercice</th>
-                        <th>Statut</th>
-                        <th>Date génération</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model?.Items != null && Model.Items.Any())
-                    {
-                        foreach (var e in Model.Items)
+@if (!allItems.Any())
+{
+    <div class="mc-card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-file-earmark-x fs-1 text-muted d-block mb-3"></i>
+            <h5 class="text-muted">Aucun état fiscal trouvé</h5>
+            @if (clientId.HasValue)
+            {
+                <p class="text-muted small mb-3">
+                    Aucun bilan ou état de synthèse n'a encore été généré pour ce client.<br/>
+                    Vérifiez que le service <strong>BILAN</strong> est actif dans le contrat, puis cliquez sur <em>Générer un état</em>.
+                </p>
+            }
+            else
+            {
+                <p class="text-muted small">Sélectionnez un client ou cliquez sur <em>Générer un état</em>.</p>
+            }
+            @if (ViewBag.CanReportExport as bool? ?? false)
+            {
+                <button class="btn btn-primary rounded-pill px-4 mt-2" data-bs-toggle="modal" data-bs-target="#modalGenerate">
+                    <i class="bi bi-file-earmark-plus me-2"></i>Générer un bilan
+                </button>
+            }
+        </div>
+    </div>
+}
+else if (string.IsNullOrEmpty(type) || type.Equals("BILAN", StringComparison.OrdinalIgnoreCase) || type.Equals("ETATSSYNTHESE", StringComparison.OrdinalIgnoreCase))
+{
+    <!-- Hierarchical view: exercice → Bilan + États de Synthèse paired cards -->
+    @foreach (var group in byExercice)
+    {
+        var bilans = group.Where(e => e.Type.Equals("BILAN", StringComparison.OrdinalIgnoreCase)).ToList();
+        var etats = group.Where(e => e.Type.Equals("ETATSSYNTHESE", StringComparison.OrdinalIgnoreCase)).ToList();
+        var others = group.Where(e => !e.Type.Equals("BILAN", StringComparison.OrdinalIgnoreCase) && !e.Type.Equals("ETATSSYNTHESE", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        <div class="mb-4">
+            <!-- Exercice header -->
+            <div class="d-flex align-items-center mb-3">
+                <div class="badge bg-dark fs-6 px-3 py-2 rounded-pill me-3">
+                    <i class="bi bi-calendar2 me-1"></i>Exercice @group.Key
+                </div>
+                <hr class="flex-grow-1 m-0" />
+                <span class="ms-3 text-muted small">@group.Count() état(s)</span>
+            </div>
+
+            <div class="row g-3">
+                @foreach (var e in group.OrderBy(x => x.Type))
+                {
+                    var tColor = TypeColor(e.Type);
+                    var tIcon = TypeIcon(e.Type);
+                    var tLabel = TypeLabel(e.Type);
+                    <div class="col-md-4">
+                        <div class="mc-card h-100 border-0 shadow-sm" style="border-left: 4px solid @tColor !important; border-radius: 10px; overflow:hidden;">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-start justify-content-between mb-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                             style="width:38px;height:38px;background:@(tColor)22">
+                                            <i class="bi @tIcon" style="color:@tColor;font-size:1.1rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold text-dark" style="font-size:.95rem;">@tLabel</div>
+                                            <div class="text-muted" style="font-size:.78rem;">@e.ClientName</div>
+                                        </div>
+                                    </div>
+                                    <span class="badge @StatutBadge(e.Statut)" style="font-size:.72rem;">@e.Statut</span>
+                                </div>
+
+                                <div class="row g-1 text-muted small mb-3">
+                                    <div class="col-6">
+                                        <i class="bi bi-calendar3 me-1"></i>
+                                        @(e.DateGeneration?.ToString("dd/MM/yyyy") ?? "—")
+                                    </div>
+                                    @if (e.MontantTotal.HasValue && e.MontantTotal > 0)
+                                    {
+                                        <div class="col-6 text-end fw-semibold" style="color:@tColor">
+                                            @e.MontantTotal?.ToString("N0") MAD
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(e.Reference))
+                                    {
+                                        <div class="col-12 mt-1">
+                                            <i class="bi bi-hash me-1"></i><span class="font-monospace small">@e.Reference</span>
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="d-flex gap-2">
+                                    <a href="@Url.Action("Details", "EtatsFiscaux", new { id = e.Id })"
+                                       class="btn btn-sm rounded-pill px-3 flex-grow-1"
+                                       style="border-color:@tColor;color:@tColor;">
+                                        <i class="bi bi-eye me-1"></i>Détails
+                                    </a>
+                                    @if (e.Statut != "Validee" && (ViewBag.CanDeclarationValidatePerm as bool? ?? false))
+                                    {
+                                        <form method="post" action="@Url.Action("Validate", "EtatsFiscaux")" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@e.Id" />
+                                            <button type="submit" class="btn btn-sm btn-success rounded-pill px-3"
+                                                    onclick="return confirm('Valider cet état ?')">
+                                                <i class="bi bi-check2"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+else
+{
+    <!-- Standard table view for single type -->
+    <div class="mc-card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <span><i class="bi bi-table me-2"></i>@typeName (@(Model?.TotalCount ?? 0))</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table mc-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Type</th>
+                            <th>Exercice</th>
+                            <th>Statut</th>
+                            <th>Généré le</th>
+                            <th>Validé le</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in allItems)
                         {
                             <tr>
-                                <td class="fw-medium">@e.Reference</td>
-                                <td><span class="badge bg-light text-dark">@e.TypeEtat</span></td>
-                                <td>@e.Exercice</td>
-                                <td><span class="badge badge-@e.Statut?.ToLower()">@e.Statut</span></td>
-                                <td>@(e.DateGeneration?.ToString("dd/MM/yyyy"))</td>
+                                <td class="fw-medium">@e.ClientName</td>
                                 <td>
-                                    <a href="@Url.Action("Details", "EtatsFiscaux", new { id = e.Id })" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                    <span class="badge rounded-pill" style="background:@TypeColor(e.Type);font-size:.75rem;">
+                                        <i class="bi @TypeIcon(e.Type) me-1"></i>@TypeLabel(e.Type)
+                                    </span>
+                                </td>
+                                <td class="fw-semibold">@e.Exercice</td>
+                                <td><span class="badge @StatutBadge(e.Statut)">@e.Statut</span></td>
+                                <td class="text-muted small">@(e.DateGeneration?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td class="text-muted small">@(e.DateValidation?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td class="text-end">
+                                    <a href="@Url.Action("Details", "EtatsFiscaux", new { id = e.Id })"
+                                       class="btn btn-sm btn-outline-primary rounded-pill">
+                                        <i class="bi bi-eye me-1"></i>Voir
+                                    </a>
                                 </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">
-                                <i class="bi bi-file-earmark fs-1 d-block mb-2"></i>
-                                Aucun état fiscal trouvé pour ce client.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-</div>
+}
 
-<!-- Modal Générer -->
+<!-- Generate Modal -->
 <div class="modal fade" id="modalGenerate" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="post" action="@Url.Action("Generate", "EtatsFiscaux")">
                 @Html.AntiForgeryToken()
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-1"></i>Générer un état fiscal</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-semibold">
+                        <i class="bi bi-file-earmark-plus me-2"></i>Générer un état fiscal
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <input type="hidden" name="clientId" value="@(clientId ?? 0)" />
+
                     <div class="mb-3">
-                        <label class="form-label">Type d'état <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Type d'état <span class="text-danger">*</span></label>
                         <select name="type" class="form-select" required>
-                            <option value="Etat9421">État 9421 (salaires)</option>
-                            <option value="LiasseFiscale">Liasse fiscale</option>
-                            <option value="Bilan">Bilan fiscal</option>
-                            <option value="CPC">CPC</option>
-                            <option value="Amortissements">Amortissements</option>
-                            <option value="EtatsSynthese">États de synthèse</option>
+                            <option value="BILAN" selected="@(type == "BILAN")">📊 Bilan Comptable</option>
+                            <option value="ETATSSYNTHESE" selected="@(type == "ETATSSYNTHESE")">📋 États de Synthèse</option>
+                            <option value="LIASSEFISCALE" selected="@(type == "LIASSEFISCALE")">📁 Liasse Fiscale</option>
+                            <option value="CPC" selected="@(type == "CPC")">📈 CPC (Compte de Produits et Charges)</option>
+                            <option value="AMORTISSEMENTS" selected="@(type == "AMORTISSEMENTS")">📉 Tableau des Amortissements</option>
+                            <option value="ETAT9421" selected="@(type == "ETAT9421")">📄 État 9421 (Salaires)</option>
                         </select>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">Exercice <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Exercice fiscal <span class="text-danger">*</span></label>
                         <select name="exercice" class="form-select" required>
-                            @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 5; y--)
+                            @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 6; y--)
                             {
-                                <option value="@y">@y</option>
+                                <option value="@y" selected="@(exercice == y || (exercice == null && y == DateTime.Now.Year - 1))">@y</option>
                             }
                         </select>
+                        <div class="form-text">L'exercice pour lequel générer cet état.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check me-1"></i> Générer</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">
+                        <i class="bi bi-check2 me-1"></i>Générer
+                    </button>
                 </div>
             </form>
         </div>

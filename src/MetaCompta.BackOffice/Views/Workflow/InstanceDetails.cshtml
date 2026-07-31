@@ -1,0 +1,312 @@
+@model MetaCompta.Application.DTOs.WorkflowInstanceDto
+@{
+    ViewData["Title"] = "Details du workflow";
+    var history = ViewBag.History as List<MetaCompta.Application.DTOs.WorkflowHistoryDto> ?? new();
+    var statusClass = Model.Status switch
+    {
+        "Active" => "primary",
+        "Completed" => "success",
+        "Paused" => "warning",
+        "Cancelled" => "secondary",
+        _ => "dark"
+    };
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-diagram-3 me-2"></i>Workflow #@Model.Id</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Instances", "Workflow")">Instances</a></li>
+                <li class="breadcrumb-item active">Details</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Model.Status == "Active" && (ViewBag.CanWorkflowCancel as bool? ?? false))
+        {
+            <form method="post" action="@Url.Action("PauseWorkflow", "Workflow")" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="instanceId" value="@Model.Id" />
+                <button type="submit" class="btn btn-warning"><i class="bi bi-pause-circle me-1"></i>Pause</button>
+            </form>
+            <form method="post" action="@Url.Action("CancelWorkflow", "Workflow")" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="instanceId" value="@Model.Id" />
+                <input type="hidden" name="reason" value="Annulation manuelle" />
+                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Annuler</button>
+            </form>
+        }
+        @if (Model.Status == "Paused" && (ViewBag.CanWorkflowAdvance as bool? ?? false))
+        {
+            <form method="post" action="@Url.Action("ResumeWorkflow", "Workflow")" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="instanceId" value="@Model.Id" />
+                <button type="submit" class="btn btn-success"><i class="bi bi-play-circle me-1"></i>Reprendre</button>
+            </form>
+        }
+        <a href="@Url.Action("Instances", "Workflow")" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+</div>
+
+<!-- Header Card -->
+<div class="mc-card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="text-muted small d-block">Client</label>
+                <span class="fw-medium fs-5">@Model.ClientName</span>
+            </div>
+            <div class="col-md-2">
+                <label class="text-muted small d-block">Type</label>
+                <span class="badge bg-info bg-opacity-10 text-info fs-6">@Model.DeclarationType</span>
+            </div>
+            <div class="col-md-2">
+                <label class="text-muted small d-block">Periode</label>
+                <span>@Model.DeclarationPeriode</span>
+            </div>
+            <div class="col-md-2">
+                <label class="text-muted small d-block">Demarre le</label>
+                <span>@Model.StartedAt.ToString("dd/MM/yyyy")</span>
+            </div>
+            <div class="col-md-3">
+                <label class="text-muted small d-block">Statut</label>
+                <span class="badge bg-@statusClass fs-6">@Model.Status</span>
+                <span class="ms-2 text-muted">@Model.ProgressPercent% termine</span>
+            </div>
+        </div>
+        <!-- Progress bar -->
+        <div class="mt-3">
+            <div class="progress" style="height: 12px;">
+                <div class="progress-bar bg-@statusClass progress-bar-striped @(Model.Status == "Active" ? "progress-bar-animated" : "")" style="width: @Model.ProgressPercent%"></div>
+            </div>
+            <small class="text-muted">@Model.CompletedSteps / @Model.TotalSteps etapes completees</small>
+        </div>
+    </div>
+</div>
+
+<!-- Step Timeline -->
+<div class="mc-card mb-4">
+    <div class="card-header"><i class="bi bi-signpost-2 me-2"></i>Etapes du workflow</div>
+    <div class="card-body p-4">
+        @if (Model.StepInstances != null && Model.StepInstances.Any())
+        {
+            <div class="position-relative">
+                <!-- Timeline line -->
+                <div style="position: absolute; left: 24px; top: 0; bottom: 0; width: 3px; background: linear-gradient(to bottom, #0d6efd, #e9ecef);"></div>
+
+                @foreach (var step in Model.StepInstances.OrderBy(s => s.StepOrder))
+                {
+                    var stepStatusClass = step.Status switch
+                    {
+                        "Completed" => "success",
+                        "InProgress" => "primary",
+                        "Failed" => "danger",
+                        "Skipped" => "secondary",
+                        "Blocked" => "dark",
+                        "WaitingForClient" => "warning",
+                        "WaitingForValidation" => "info",
+                        _ => "light"
+                    };
+                    var stepIcon = step.Status switch
+                    {
+                        "Completed" => "bi-check-circle-fill",
+                        "InProgress" => "bi-arrow-right-circle-fill",
+                        "Failed" => "bi-x-circle-fill",
+                        "Skipped" => "bi-dash-circle-fill",
+                        "Blocked" => "bi-lock-fill",
+                        "WaitingForClient" => "bi-hourglass-split",
+                        "WaitingForValidation" => "bi-shield-check",
+                        _ => "bi-circle"
+                    };
+                    var isCurrent = step.Status == "InProgress" || step.Status == "WaitingForClient" || step.Status == "WaitingForValidation";
+
+                    <div class="d-flex mb-4 position-relative @(isCurrent ? "fw-medium" : "")">
+                        <!-- Icon -->
+                        <div class="rounded-circle bg-white d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; z-index: 1; border: 3px solid var(--bs-@stepStatusClass); flex-shrink: 0;">
+                            <i class="bi @stepIcon text-@stepStatusClass fs-5"></i>
+                        </div>
+                        <!-- Content -->
+                        <div class="ms-3 flex-grow-1">
+                            <div class="mc-card @(isCurrent ? "border-" + stepStatusClass : "") mb-0">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <span class="badge bg-@stepStatusClass bg-opacity-10 text-@stepStatusClass me-2">Etape @step.StepOrder</span>
+                                            <strong>@step.StepName</strong>
+                                            @if (step.IsClientStep)
+                                            {
+                                                <span class="badge bg-warning text-dark ms-1"><i class="bi bi-person me-1"></i>Client</span>
+                                            }
+                                        </div>
+                                        <span class="badge bg-@stepStatusClass">@step.Status</span>
+                                    </div>
+                                    <div class="row mt-2 small text-muted">
+                                        <div class="col-md-3">
+                                            <i class="bi bi-person me-1"></i>@(step.AssignedToUserName ?? "Non assigne")
+                                        </div>
+                                        <div class="col-md-3">
+                                            <i class="bi bi-calendar3 me-1"></i>
+                                            @if (step.ActivatedAt.HasValue) { @step.ActivatedAt.Value.ToString("dd/MM HH:mm") }
+                                            else { <span>—</span> }
+                                        </div>
+                                        <div class="col-md-3">
+                                            @if (step.CompletedAt.HasValue)
+                                            {
+                                                <i class="bi bi-check me-1"></i>@step.CompletedAt.Value.ToString("dd/MM HH:mm")
+                                            }
+                                            @if (step.DueDate.HasValue)
+                                            {
+                                                <i class="bi bi-alarm me-1"></i>
+                                                <span class="@(step.IsOverdue ? "text-danger fw-bold" : "")">
+                                                    Echeance: @step.DueDate.Value.ToString("dd/MM")
+                                                    @if (step.IsOverdue) { <i class="bi bi-exclamation-triangle-fill"></i> }
+                                                </span>
+                                            }
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge bg-light text-dark border">@step.StepType</span>
+                                        </div>
+                                    </div>
+                                    @if (isCurrent && Model.Status == "Active")
+                                    {
+                                        <div class="mt-2 pt-2 border-top">
+                                            @if ((ViewBag.CanWorkflowValidate as bool? ?? false) || (ViewBag.CanWorkflowAdvance as bool? ?? false))
+                                            {
+                                                <form method="post" action="@Url.Action("AdvanceStep", "Workflow")" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="instanceId" value="@Model.Id" />
+                                                    <input type="hidden" name="stepInstanceId" value="@step.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-success me-1">
+                                                        <i class="bi bi-check-circle me-1"></i>Valider et avancer
+                                                    </button>
+                                                </form>
+                                            }
+                                            @if ((ViewBag.CanWorkflowReassign as bool? ?? false) || (ViewBag.CanTaskAssign as bool? ?? false))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reassignModal-@step.Id">
+                                                    <i class="bi bi-person-gear me-1"></i>Réassigner
+                                                </button>
+                                            }
+                                        </div>
+
+                                        @if ((ViewBag.CanWorkflowReassign as bool? ?? false) || (ViewBag.CanTaskAssign as bool? ?? false))
+                                        {
+                                            var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new List<CabinetEmployeeDto>();
+                                            <!-- Reassign Modal -->
+                                            <div class="modal fade" id="reassignModal-@step.Id" tabindex="-1">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <form method="post" action="@Url.Action("ReassignStep", "Workflow")">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="stepInstanceId" value="@step.Id" />
+                                                            <input type="hidden" name="returnInstanceId" value="@Model.Id" />
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Réassigner l'étape</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Nouveau collaborateur</label>
+                                                                    <select name="newAssigneeUserId" class="form-select" required>
+                                                                        <option value="">— Choisir un employé —</option>
+                                                                        @foreach (var emp in employees.OrderBy(e => e.NomComplet))
+                                                                        {
+                                                                            if (emp.Id == step.AssignedToUserId)
+                                                                            {
+                                                                                <option value="@emp.Id" selected>@emp.NomComplet@(!string.IsNullOrEmpty(emp.Role) ? $" ({emp.Role})" : "")</option>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                <option value="@emp.Id">@emp.NomComplet@(!string.IsNullOrEmpty(emp.Role) ? $" ({emp.Role})" : "")</option>
+                                                                            }
+                                                                        }
+                                                                    </select>
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Raison (optionnel)</label>
+                                                                    <textarea name="reason" class="form-control" rows="2" placeholder="Indisponible, charge de travail, spécialité…"></textarea>
+                                                                </div>
+                                                            </div>
+                                                            <div class="modal-footer">
+                                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                                                                <button type="submit" class="btn btn-primary">Réassigner</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                    @if (!string.IsNullOrEmpty(step.Notes))
+                                    {
+                                        <div class="mt-2 small"><i class="bi bi-sticky me-1"></i>@step.Notes</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(step.BlockReason))
+                                    {
+                                        <div class="mt-2 small text-danger"><i class="bi bi-exclamation-triangle me-1"></i>@step.BlockReason</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-signpost-2 fs-1 d-block mb-2"></i>
+                Aucune etape dans ce workflow.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- History -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-clock-history me-2"></i>Historique (@history.Count)</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Action</th>
+                        <th>Etape</th>
+                        <th>De</th>
+                        <th>Vers</th>
+                        <th>Par</th>
+                        <th>Commentaire</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (history.Any())
+                    {
+                        foreach (var h in history.OrderByDescending(x => x.ActionDate))
+                        {
+                            <tr>
+                                <td class="small">@h.ActionDate.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td><span class="badge bg-info bg-opacity-10 text-info">@h.Action</span></td>
+                                <td>@(h.StepName ?? "—")</td>
+                                <td><span class="badge bg-light text-dark border">@(h.PreviousStatus ?? "—")</span></td>
+                                <td><span class="badge bg-light text-dark border">@(h.NewStatus ?? "—")</span></td>
+                                <td class="small">@(h.UserName ?? "Systeme")</td>
+                                <td class="small text-muted">@(h.Comment ?? "—")</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-3 text-muted">Aucun historique.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

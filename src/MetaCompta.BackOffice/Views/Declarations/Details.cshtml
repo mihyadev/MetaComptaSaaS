@@ -1,4 +1,4 @@
-﻿@using MetaCompta.Application.DTOs
+@using MetaCompta.Application.DTOs
 @model DeclarationDto
 @{
     ViewData["Title"] = "Déclaration - " + Model.Type + " " + Model.Periode;
@@ -10,6 +10,8 @@
     var wfCurrentStep = ViewBag.WorkflowCurrentStep as WorkflowStepInstanceDto;
     var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
     var hasActiveWorkflow = wfInstance != null && (wfInstance.Status == "Active" || wfInstance.Status == "Paused");
+    var wfHistory = ViewBag.WorkflowHistory as List<WorkflowHistoryDto> ?? new List<WorkflowHistoryDto>();
+    var statusHistory = ViewBag.DeclarationStatusHistory as List<DeclarationHistoryDto> ?? new List<DeclarationHistoryDto>();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -33,26 +35,26 @@
 <!-- Summary Cards -->
 <div class="row g-3 mb-4">
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-primary);">
+        <div class="stat-card" style="border-left:4px solid var(--primary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div><div class="stat-label">Client</div><div class="stat-value" style="font-size:1rem;">@Model.ClientName</div></div>
-                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:var(--mc-primary);"><i class="bi bi-building"></i></div>
+                <div class="stat-icon" style="background:rgba(14,165,233,0.1);color:var(--primary);"><i class="bi bi-building"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-accent);">
+        <div class="stat-card" style="border-left:4px solid var(--warning);">
             <div class="d-flex align-items-center justify-content-between">
                 <div><div class="stat-label">Date Limite</div><div class="stat-value" style="font-size:1rem;">@(Model.DateLimite.ToString("dd/MM/yyyy"))</div></div>
-                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--mc-accent);"><i class="bi bi-calendar"></i></div>
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1);color:var(--warning);"><i class="bi bi-calendar"></i></div>
             </div>
         </div>
     </div>
     <div class="col-xl-3 col-md-6">
-        <div class="stat-card" style="border-left:4px solid var(--mc-secondary);">
+        <div class="stat-card" style="border-left:4px solid var(--secondary);">
             <div class="d-flex align-items-center justify-content-between">
                 <div><div class="stat-label">Montant Dû</div><div class="stat-value">@(Model.MontantDu.HasValue ? Model.MontantDu.Value.ToString("N0") : "0") MAD</div></div>
-                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:var(--mc-secondary);"><i class="bi bi-cash"></i></div>
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1);color:var(--secondary);"><i class="bi bi-cash"></i></div>
             </div>
         </div>
     </div>
@@ -115,10 +117,29 @@
                 <div class="col-md-2"><label class="form-label text-muted small">CA HT 7%</label><div class="fw-semibold">@tvaData.CAHT_7.ToString("N2")</div></div>
                 <div class="col-md-2"><label class="form-label text-muted small">CA Exonéré</label><div class="fw-semibold">@tvaData.CAExonere.ToString("N2")</div></div>
                 <div class="col-12"><hr/></div>
-                <div class="col-md-3"><label class="form-label text-muted small">TVA Collectée</label><div class="fw-bold text-danger">@tvaData.TVACollecteeTotale.ToString("N2") MAD</div></div>
-                <div class="col-md-3"><label class="form-label text-muted small">TVA Récupérable</label><div class="fw-bold text-success">@tvaData.TVARecuperableTotale.ToString("N2") MAD</div></div>
-                <div class="col-md-3"><label class="form-label text-muted small">TVA à Payer</label><div class="fw-bold text-danger fs-5">@tvaData.TVAaPayer.ToString("N2") MAD</div></div>
-                <div class="col-md-3"><label class="form-label text-muted small">Crédit TVA</label><div class="fw-bold text-success fs-5">@tvaData.CreditTVA.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">TVA Facturée (Ventes)</label><div class="fw-bold text-danger">@tvaData.TVACollecteeTotale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">TVA Déductible (Achats)</label><div class="fw-bold text-success">@tvaData.TVARecuperableTotale.ToString("N2") MAD</div></div>
+                @if (tvaData.TVANette > 0)
+                {
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">TVA à payer = Facturée − Déductible</label>
+                        <div class="fw-bold text-danger fs-5">@tvaData.TVAaPayer.ToString("N2") MAD</div>
+                    </div>
+                }
+                else if (tvaData.TVANette < 0)
+                {
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Crédit de TVA (déductible &gt; facturée)</label>
+                        <div class="fw-bold text-success fs-5">@tvaData.CreditTVA.ToString("N2") MAD</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Solde</label>
+                        <div class="fw-bold text-secondary fs-5">0,00 MAD — rien à payer</div>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -150,7 +171,7 @@
                             <td><span class="badge bg-secondary-subtle text-secondary rounded-pill">@l.TauxTVA%</span></td>
                             <td class="text-end">@l.MontantTVA.ToString("N2")</td>
                             <td class="text-end fw-bold">@l.MontantTTC.ToString("N2")</td>
-                            <td>@(l.TypeOperation == "Vente" ? "Collectée" : "Déductible")</td>
+                            <td>@(l.TypeOperation == "Vente" ? "Facturée (Vente)" : "Déductible (Achat)")</td>
                         </tr>
                         }
                     </tbody>
@@ -161,8 +182,16 @@
     }
     else
     {
-    <div class="d-flex justify-content-end mb-4">
-        <a asp-action="ExportTVAXml" asp-route-id="@Model.Id" class="btn btn-outline-success rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>Export XML EDI</a>
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body py-4 text-center">
+            <i class="bi bi-inbox fs-2 text-muted opacity-50 d-block mb-2"></i>
+            <div class="fw-semibold mb-1">Aucune ligne de facture saisie</div>
+            <p class="text-muted small mb-3 mb-md-3">Importez ou saisissez les pièces pour calculer la TVA.</p>
+            <a asp-action="EditTVA" asp-route-id="@Model.Id" class="btn btn-success rounded-pill px-4">
+                <i class="bi bi-calculator me-1"></i>Saisie / Calcul TVA
+            </a>
+            <a asp-action="ExportTVAXml" asp-route-id="@Model.Id" class="btn btn-outline-success rounded-pill px-3 ms-2"><i class="bi bi-filetype-xml me-1"></i>Export XML</a>
+        </div>
     </div>
     }
 }
@@ -224,7 +253,7 @@
     </div>
 }
 
-<!-- ═══════ WORKFLOW PROGRESS ═══════ -->
+<!-- ------- WORKFLOW PROGRESS ------- -->
 @if (hasActiveWorkflow && wfInstance != null)
 {
     <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #7c3aed !important;">
@@ -317,7 +346,7 @@
                             }
                             @if (wfCurrentStep.DueDate.HasValue)
                             {
-                                <div style="font-size:0.75rem; color:@(wfCurrentStep.IsOverdue ? "#ef4444" : "#64748b");"><i class="bi bi-clock me-1"></i>Échéance: @wfCurrentStep.DueDate.Value.ToString("dd/MM/yyyy HH:mm") @(wfCurrentStep.IsOverdue ? "⚠️ EN RETARD" : "")</div>
+                                <div style="font-size:0.75rem; color:@(wfCurrentStep.IsOverdue ? "#ef4444" : "#64748b");"><i class="bi bi-clock me-1"></i>Échéance: @wfCurrentStep.DueDate.Value.ToString("dd/MM/yyyy HH:mm") @(wfCurrentStep.IsOverdue ? "?? EN RETARD" : "")</div>
                             }
                         </div>
                         <div class="d-flex flex-column gap-1">
@@ -366,7 +395,57 @@
         </div>
     </div>
 }
-else if (wfInstance != null && wfInstance.Status == "Completed")
+
+<!-- ------- TIMELINE (WF + statut) ------- -->
+@{
+    var timelineItems = new List<(DateTime At, string Kind, string Title, string? Detail, string? User)>();
+    foreach (var h in wfHistory)
+        timelineItems.Add((h.ActionDate, "WF", h.Action + (string.IsNullOrEmpty(h.StepName) ? "" : " — " + h.StepName), h.Comment, h.UserName));
+    foreach (var h in statusHistory)
+        timelineItems.Add((h.DateChangement, "STATUT", $"{h.AncienStatut} → {h.NouveauStatut}", h.Commentaire, h.UserName));
+    if (wfCurrentStep != null && !string.IsNullOrEmpty(wfCurrentStep.Notes))
+        timelineItems.Add((wfCurrentStep.CompletedAt ?? wfCurrentStep.StartedAt ?? DateTime.UtcNow, "NOTE", "Notes étape: " + wfCurrentStep.StepName, wfCurrentStep.Notes, wfCurrentStep.CompletedByUserName ?? wfCurrentStep.AssignedToUserName));
+}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-primary me-2"></i>Historique &amp; timeline</h6>
+        @if (wfInstance != null)
+        {
+            <a href="@Url.Action("InstanceDetails", "Workflow", new { id = wfInstance.Id })" class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="font-size:0.72rem;">Workflow détaillé</a>
+        }
+    </div>
+    <div class="card-body pt-2">
+        @if (!timelineItems.Any())
+        {
+            <p class="text-muted small mb-0">Aucun événement pour le moment.</p>
+        }
+        else
+        {
+            <div class="timeline-list" style="max-height:360px;overflow:auto;">
+                @foreach (var item in timelineItems.OrderByDescending(x => x.At).Take(40))
+                {
+                    var badge = item.Kind switch { "WF" => "bg-primary", "STATUT" => "bg-success", _ => "bg-secondary" };
+                    <div class="d-flex gap-2 align-items-start py-2 border-bottom" style="font-size:0.82rem;">
+                        <span class="badge @badge rounded-pill" style="font-size:0.65rem;min-width:52px;">@item.Kind</span>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">@item.Title</div>
+                            @if (!string.IsNullOrEmpty(item.Detail))
+                            {
+                                <div class="text-muted">@item.Detail</div>
+                            }
+                            <div class="text-muted" style="font-size:0.72rem;">
+                                @item.At.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                @if (!string.IsNullOrEmpty(item.User)) { <span>· @item.User</span> }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (wfInstance != null && wfInstance.Status == "Completed")
 {
     <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #22c55e !important;">
         <div class="card-body py-3 d-flex align-items-center gap-3">
@@ -379,7 +458,7 @@ else if (wfInstance != null && wfInstance.Status == "Completed")
         </div>
     </div>
 }
-else
+else if (!hasActiveWorkflow)
 {
     <!-- No workflow — offer to start one -->
     <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #94a3b8 !important;">
@@ -430,17 +509,228 @@ else
     }
 </style>
 
+<!-- ------- DOCUMENTS / PIÈCES JOINTES ------- -->
+@{
+    var documents = ViewBag.Documents as List<DocumentDto> ?? new List<DocumentDto>();
+    var canDocumentUpload = ViewBag.CanDocumentUpload as bool? ?? false;
+}
+<div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #0ea5e9 !important;">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0"><i class="bi bi-paperclip text-info me-2"></i>Documents & Pièces jointes <span class="badge bg-info rounded-pill ms-1">@documents.Count</span></h6>
+            @if (canDocumentUpload)
+            {
+                <button class="btn btn-sm btn-outline-info rounded-pill px-3" type="button" data-bs-toggle="collapse" data-bs-target="#uploadForm">
+                    <i class="bi bi-cloud-upload me-1"></i>Ajouter un document
+                </button>
+            }
+        </div>
+
+        <!-- Upload Form (collapsed) -->
+        @if (canDocumentUpload)
+        {
+        <div class="collapse mb-3" id="uploadForm">
+            <div class="card card-body border-info border-opacity-25 rounded-3">
+                <form asp-action="UploadDocument" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="declarationId" value="@Model.Id" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Fichier <span class="text-danger">*</span></label>
+                            <input type="file" name="file" class="form-control form-control-sm" required accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv,.doc,.docx" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Titre</label>
+                            <input type="text" name="titre" class="form-control form-control-sm" placeholder="Nom du document" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Catégorie</label>
+                            <select name="categorie" class="form-select form-select-sm">
+                                <option value="Fiscal">Fiscal</option>
+                                <option value="Comptable">Comptable</option>
+                                <option value="Legal">Légal</option>
+                                <option value="Social">Social</option>
+                                <option value="Admin">Administratif</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-info btn-sm w-100 rounded-pill">
+                                <i class="bi bi-upload me-1"></i>Uploader
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-text mt-1">Formats acceptés: PDF, images, Excel, Word. Max 20 Mo.</div>
+                </form>
+            </div>
+        </div>
+        }
+
+        <!-- Documents List -->
+        @if (documents.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0" style="font-size:0.82rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nom</th>
+                            <th>Catégorie</th>
+                            <th>Taille</th>
+                            <th>Uploadé par</th>
+                            <th>Date</th>
+                            <th>Statut</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var doc in documents)
+                        {
+                            var iconClass = (doc.ContentType ?? "") switch {
+                                var ct when ct.Contains("pdf") => "bi-file-earmark-pdf text-danger",
+                                var ct when ct.Contains("image") => "bi-file-earmark-image text-success",
+                                var ct when ct.Contains("excel") || ct.Contains("spreadsheet") => "bi-file-earmark-excel text-success",
+                                var ct when ct.Contains("word") || ct.Contains("document") => "bi-file-earmark-word text-primary",
+                                _ => "bi-file-earmark text-secondary"
+                            };
+                            var statutBadge = doc.Statut switch {
+                                "Valide" => "bg-success",
+                                "Rejete" => "bg-danger",
+                                "Archive" => "bg-secondary",
+                                _ => "bg-warning text-dark"
+                            };
+                            <tr>
+                                <td><i class="bi @iconClass me-1"></i>@doc.NomFichier</td>
+                                <td><span class="badge bg-light text-dark border">@doc.Categorie</span></td>
+                                <td>@doc.TailleFichier</td>
+                                <td>@(doc.UploadePar ?? "—")</td>
+                                <td>@doc.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td><span class="badge @statutBadge rounded-pill">@doc.Statut</span></td>
+                                <td class="text-end">
+                                    <a href="@Url.Action("DownloadDocument", "Declarations", new { id = doc.Id })" class="btn btn-sm btn-outline-primary rounded-pill px-2" title="Télécharger">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-3 text-muted">
+                <i class="bi bi-folder2-open" style="font-size:2rem;"></i>
+                <p class="mb-0 mt-1">Aucun document. Cliquez sur "Ajouter un document" pour uploader.</p>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Messages / Communication -->
+@{
+    var messages = (ViewBag.Messages as List<MetaCompta.Application.DTOs.MessageDto>) ?? new List<MetaCompta.Application.DTOs.MessageDto>();
+    var canSendMessage = (ViewBag.CanEditDeclaration as bool? ?? false)
+        || (ViewBag.CanDeclarationEditPerm as bool? ?? false)
+        || (ViewBag.CanDeclarationView as bool? ?? false);
+}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0 py-3 d-flex align-items-center justify-content-between">
+        <h6 class="fw-bold mb-0"><i class="bi bi-chat-dots text-info me-2"></i>Messages (@messages.Count)</h6>
+        @if (canSendMessage)
+        {
+            <button class="btn btn-sm btn-outline-info rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#newMessageForm">
+                <i class="bi bi-plus-lg me-1"></i>Nouveau message
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        <!-- Send message form (collapsed) -->
+        @if (canSendMessage)
+        {
+        <div class="collapse mb-3" id="newMessageForm">
+            <form asp-action="SendMessage" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@Model.Id" />
+                <input type="hidden" name="clientId" value="@Model.ClientId" />
+                <div class="mb-2">
+                    <input type="text" name="sujet" class="form-control form-control-sm rounded-3" placeholder="Sujet (optionnel)" />
+                </div>
+                <div class="mb-2">
+                    <textarea name="contenu" class="form-control form-control-sm rounded-3" rows="3" placeholder="Votre message..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-info rounded-pill px-3"><i class="bi bi-send me-1"></i>Envoyer</button>
+            </form>
+        </div>
+        }
+
+        @if (messages.Any())
+        {
+            <div style="max-height:400px; overflow-y:auto;" class="pe-2">
+                @foreach (var msg in messages)
+                {
+                    var isCabinet = msg.SenderRole == "Cabinet";
+                    <div class="d-flex mb-3 @(isCabinet ? "justify-content-end" : "justify-content-start")">
+                        <div class="@(isCabinet ? "bg-info bg-opacity-10 border-info" : "bg-light border-secondary") border rounded-3 p-3" style="max-width:75%;">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="fw-semibold @(isCabinet ? "text-info" : "text-dark")">
+                                    <i class="bi @(isCabinet ? "bi-building" : "bi-person") me-1"></i>@msg.SenderName
+                                </small>
+                                <small class="text-muted ms-3">@msg.CreatedAt.ToString("dd/MM HH:mm")</small>
+                            </div>
+                            @if (!string.IsNullOrEmpty(msg.Sujet))
+                            {
+                                <div class="fw-semibold small mb-1">@msg.Sujet</div>
+                            }
+                            <div class="small">@msg.Contenu</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-3 text-muted">
+                <i class="bi bi-chat-square-text" style="font-size:2rem;"></i>
+                <p class="mb-0 mt-1">Aucun message. Cliquez sur "Nouveau message" pour communiquer avec le client.</p>
+            </div>
+        }
+    </div>
+</div>
+
 <!-- Actions -->
+@{
+    var canEditDecl = ViewBag.CanEditDeclaration as bool? ?? false;
+    var canValidateDecl = ViewBag.CanValidateDeclaration as bool? ?? false;
+    var canSubmitDecl = ViewBag.CanSubmitDeclaration as bool? ?? false;
+    var canDeleteDecl = ViewBag.CanDeleteDeclaration as bool? ?? false;
+    var isConsultMode = ViewBag.IsConsultMode as bool? ?? false;
+    var accessReason = ViewBag.ContractAccessReasonLabel as string;
+}
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body">
         <h6 class="fw-bold mb-3"><i class="bi bi-gear text-warning me-2"></i>Actions</h6>
+        @if (isConsultMode)
+        {
+            <div class="alert alert-warning py-2 mb-3">
+                <i class="bi bi-lock me-1"></i>@(accessReason ?? "Mode consultation — modifications désactivées.")
+            </div>
+        }
         <div class="d-flex flex-wrap gap-2">
-            @if (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnCours)
+            @if (canEditDecl && (
+                Model.Statut == RefCodes.StatutDeclaration.Brouillon
+                || Model.Statut == RefCodes.StatutDeclaration.ACompleter
+                || Model.Statut == RefCodes.StatutDeclaration.EnCours
+                || Model.Statut == RefCodes.StatutDeclaration.EnPreparation
+                || Model.Statut == RefCodes.StatutDeclaration.CreeeParSysteme
+                || Model.Statut == RefCodes.StatutDeclaration.DocumentsDemandes
+                || Model.Statut == RefCodes.StatutDeclaration.DocumentsRecus
+                || Model.Statut == RefCodes.StatutDeclaration.ControleEnCours
+                || Model.Statut == RefCodes.StatutDeclaration.CalculTVA
+                || Model.Statut == RefCodes.StatutDeclaration.EnAttenteCorrection
+                || Model.Statut == RefCodes.StatutDeclaration.ACorriger))
             {
                 @switch (Model.Type)
                 {
                     case "TVA":
-                        <a asp-action="EditTVA" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier TVA</a>
+                        <a asp-action="EditTVA" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Saisie / Calcul TVA</a>
                         break;
                     case "IS":
                         <a asp-action="EditIS" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier IS</a>
@@ -453,7 +743,7 @@ else
                         break;
                 }
             }
-            @if (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnPreparation)
+            @if (canEditDecl && (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnPreparation))
             {
                 <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
@@ -461,7 +751,7 @@ else
                     <button type="submit" class="btn btn-info rounded-pill px-3"><i class="bi bi-check2-circle me-1"></i>Marquer Complétée</button>
                 </form>
             }
-            @if (Model.Statut == RefCodes.StatutDeclaration.Completee || Model.Statut == RefCodes.StatutDeclaration.EnRevision)
+            @if ((canValidateDecl || canEditDecl) && (Model.Statut == RefCodes.StatutDeclaration.Completee || Model.Statut == RefCodes.StatutDeclaration.EnRevision))
             {
                 <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
@@ -469,7 +759,7 @@ else
                     <button type="submit" class="btn btn-primary rounded-pill px-3"><i class="bi bi-check-lg me-1"></i>Valider</button>
                 </form>
             }
-            @if (Model.Statut == RefCodes.StatutDeclaration.Validee)
+            @if ((canSubmitDecl || canEditDecl) && Model.Statut == RefCodes.StatutDeclaration.Validee)
             {
                 <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
@@ -477,7 +767,7 @@ else
                     <button type="submit" class="btn btn-success rounded-pill px-3"><i class="bi bi-send me-1"></i>Soumettre</button>
                 </form>
             }
-            @if (Model.Statut != RefCodes.StatutDeclaration.Soumise && Model.Statut != RefCodes.StatutDeclaration.Validee && Model.Statut != RefCodes.StatutDeclaration.Payee)
+            @if (canDeleteDecl && Model.Statut != RefCodes.StatutDeclaration.Soumise && Model.Statut != RefCodes.StatutDeclaration.Validee && Model.Statut != RefCodes.StatutDeclaration.Payee)
             {
                 <form asp-action="Delete" asp-route-id="@Model.Id" method="post" class="d-inline"
                       onsubmit="return confirm('Supprimer cette déclaration ?');">

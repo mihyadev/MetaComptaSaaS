@@ -1,0 +1,94 @@
+@using MetaCompta.Admin.Controllers
+@{
+    ViewData["Title"] = "Modifier l'Entrée";
+    var item = ViewBag.RefItem as RefDataItem;
+    var categoryLabels = new Dictionary<string, string> {
+        {"TVA_RATE", "Taux TVA"}, {"CNSS_RATE", "Taux CNSS"}, {"AMO_RATE", "Taux AMO"},
+        {"BAREME_IR", "Barème IR"}, {"TAUX_IS", "Taux IS"}, {"DEDUCTIONS_IR", "Déductions IR"},
+        {"CATEGORIE_DOCUMENT", "Catégories Documents"}, {"FORME_JURIDIQUE", "Formes Juridiques"},
+        {"TYPE_CONTRAT", "Types Contrat"}, {"SECTEUR_ACTIVITE", "Secteurs Activité"},
+        {"SITUATION_FAMILIALE", "Situation Familiale"}, {"SEXE", "Sexe"},
+        {"MODE_PAIEMENT", "Mode de Paiement"}, {"STATUT_CLIENT", "Statut Client"},
+        {"STATUT_EMPLOYE", "Statut Employé"}, {"STATUT_DECLARATION", "Statut Déclaration"},
+        {"STATUT_PAIE", "Statut Paie"}, {"TYPE_DECLARATION", "Type Déclaration"},
+        {"TYPE_ABSENCE", "Type Absence"}, {"VILLE", "Villes"}
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/ReferenceData">Données de Référence</a></li>
+                <li class="breadcrumb-item active">Modifier</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-pencil text-danger me-2"></i>Modifier l'Entrée</h4>
+    </div>
+    <a href="/ReferenceData" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+</div>
+
+@if (TempData["Error"] != null) {
+<div class="alert alert-danger alert-dismissible fade show rounded-3" role="alert">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+@if (item != null) {
+<form method="post" action="/ReferenceData/Save">
+    <input type="hidden" name="id" value="@item.Id" />
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-transparent border-0 pt-4 px-4">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-database me-2 text-danger"></i>Informations</h6>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Catégorie</label>
+                            <input type="text" class="form-control" value="@(categoryLabels.ContainsKey(item.Category) ? categoryLabels[item.Category] : item.Category)" disabled />
+                            <input type="hidden" name="category" value="@item.Category" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Code <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-code"></i></span>
+                                <input type="text" name="code" class="form-control border-start-0" value="@item.Code" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Libellé <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-tag"></i></span>
+                                <input type="text" name="label" class="form-control border-start-0" value="@item.Label" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Valeur texte</label>
+                            <input type="text" name="value" class="form-control" value="@item.Value" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Valeur numérique</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-123"></i></span>
+                                <input type="number" name="numericValue" class="form-control border-start-0" step="0.01" value="@item.NumericValue" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ordre de tri</label>
+                            <input type="number" name="sortOrder" class="form-control" value="@item.SortOrder" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="/ReferenceData" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+                <button type="submit" class="btn btn-danger rounded-pill px-4"><i class="bi bi-check-circle me-2"></i>Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+</form>
+} else {
+<div class="alert alert-warning">Entrée non trouvée. <a href="/ReferenceData">Retour</a></div>
+}

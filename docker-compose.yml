@@ -20,6 +20,8 @@ services:
       - Jwt__Audience=MetaComptaClients
     ports:
       - "7100:8080"
+    volumes:
+      - metacompta-uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -92,3 +94,6 @@ services:
 networks:
   metacompta-network:
     driver: bridge
+
+volumes:
+  metacompta-uploads:

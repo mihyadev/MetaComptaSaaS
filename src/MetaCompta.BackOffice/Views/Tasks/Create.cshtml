@@ -68,9 +68,13 @@
                 </div>
             </div>
             <div class="mt-4">
-                <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Créer la tâche</button>
+                @if (ViewBag.CanTaskCreate as bool? ?? false)
+                {
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Créer la tâche</button>
+                }
                 <a href="@Url.Action("Index", "Tasks")" class="btn btn-outline-secondary ms-2">Annuler</a>
             </div>
         </form>
     </div>
 </div>
+

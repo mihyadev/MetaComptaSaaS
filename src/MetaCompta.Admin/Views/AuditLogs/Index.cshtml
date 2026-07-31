@@ -1,18 +1,24 @@
-@{ ViewData["Title"] = "Journaux d'Audit"; }
+﻿@using System.Text.Json
+@{
+    ViewData["Title"] = "Journaux d'Audit";
+    var result = ViewBag.AuditResult as ApiResponse<AdminPagedResult>;
+    var items = result?.Data?.Items ?? new List<JsonElement>();
+    var total = result?.Data?.TotalCount ?? 0;
+    int pageNum = (int)(ViewBag.Page ?? 1);
+    var actionFilter = ViewBag.ActionFilter as string ?? "";
+}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h5 class="fw-bold mb-0">Journaux d'Audit</h5>
-    <div class="d-flex gap-2">
-        <input type="date" class="form-control form-control-sm" style="width:150px;" />
-        <select class="form-select form-select-sm" style="width:150px;">
-            <option>Toutes actions</option>
-            <option>Création</option>
-            <option>Modification</option>
-            <option>Suppression</option>
-            <option>Connexion</option>
+    <h5 class="fw-bold mb-0">Journaux d'Audit <span class="badge bg-secondary fs-6">@total</span></h5>
+    <form method="get" class="d-flex gap-2">
+        <select name="action" class="form-select form-select-sm" style="width:180px;" onchange="this.form.submit()">
+            <option value="">Toutes actions</option>
+            <option value="Create" selected="@(actionFilter == "Create" ? "selected" : null)">Cr&eacute;ation</option>
+            <option value="Update" selected="@(actionFilter == "Update" ? "selected" : null)">Modification</option>
+            <option value="Delete" selected="@(actionFilter == "Delete" ? "selected" : null)">Suppression</option>
+            <option value="Login" selected="@(actionFilter == "Login" ? "selected" : null)">Connexion</option>
         </select>
-        <button class="btn btn-danger btn-sm rounded-pill px-3"><i class="bi bi-funnel me-1"></i>Filtrer</button>
-    </div>
+    </form>
 </div>
 
 <div class="card border-0 shadow-sm rounded-4">
@@ -20,27 +26,38 @@
         <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0">
                 <thead class="table-light">
-                    <tr><th class="ps-4">Date</th><th>Utilisateur</th><th>Action</th><th>Entité</th><th>Détails</th><th>IP</th></tr>
+                    <tr><th class="ps-4">Date</th><th>Utilisateur</th><th>Action</th><th>Entit&eacute;</th><th>D&eacute;tails</th></tr>
                 </thead>
                 <tbody>
+                    @if (items.Count == 0) {
+                    <tr><td colspan="5" class="text-center text-muted py-4"><i class="bi bi-journal-text fs-1 d-block mb-2"></i>Aucun enregistrement d'audit.</td></tr>
+                    }
+                    @foreach (var item in items)
+                    {
+                        var date = item.TryGetProperty("createdAt", out var dEl) ? dEl.GetString()?.Substring(0, 16).Replace("T", " ") ?? "" : "";
+                        var user = item.TryGetProperty("userName", out var uEl) ? uEl.GetString() ?? "-" : (item.TryGetProperty("userId", out var uidEl) ? uidEl.GetString() ?? "-" : "-");
+                        var action = item.TryGetProperty("action", out var aEl) ? aEl.GetString() ?? "" : "";
+                        var entity = item.TryGetProperty("entityType", out var eEl) ? eEl.GetString() ?? "" : (item.TryGetProperty("entity", out var e2El) ? e2El.GetString() ?? "" : "");
+                        var details = item.TryGetProperty("details", out var dtEl) ? dtEl.GetString() ?? "" : "";
+                        var badgeClass = action switch { "Create" => "bg-success", "Update" => "bg-warning text-dark", "Delete" => "bg-danger", "Login" => "bg-info", _ => "bg-secondary" };
                     <tr>
-                        <td class="ps-4">2026-01-15 10:30</td>
-                        <td><code>gerant@cabinet-demo.ma</code></td>
-                        <td><span class="badge bg-success">Création</span></td>
-                        <td>Client</td>
-                        <td>Nouveau client: ABC Consulting SARL</td>
-                        <td class="text-muted">192.168.1.10</td>
+                        <td class="ps-4 text-muted small">@date</td>
+                        <td><code class="small">@user</code></td>
+                        <td><span class="badge @badgeClass">@action</span></td>
+                        <td>@entity</td>
+                        <td class="small text-muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@details</td>
                     </tr>
-                    <tr>
-                        <td class="ps-4">2026-01-15 09:15</td>
-                        <td><code>admin@metacompta.ma</code></td>
-                        <td><span class="badge bg-warning text-dark">Modification</span></td>
-                        <td>ReferenceData</td>
-                        <td>Mise à jour taux TVA 20%</td>
-                        <td class="text-muted">10.0.0.1</td>
-                    </tr>
+                    }
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+@if (total > 50) {
+<nav class="mt-3"><ul class="pagination pagination-sm justify-content-center">
+    @for (int p = 1; p <= Math.Ceiling((double)total / 50); p++) {
+    <li class="page-item @(p == pageNum ? "active" : "")"><a class="page-link" href="/AuditLogs?page=@p&action=@actionFilter">@p</a></li>
+    }
+</ul></nav>
+}

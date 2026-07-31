@@ -1,0 +1,117 @@
+@{
+    ViewData["Title"] = "Notifications";
+    var notifications = ViewBag.Notifications as List<MetaCompta.Application.DTOs.NotificationDto> ?? new List<MetaCompta.Application.DTOs.NotificationDto>();
+    var unreadCount = notifications.Count(n => !n.IsRead);
+    var readCount = notifications.Count(n => n.IsRead);
+    var actionCount = notifications.Count(n => !string.IsNullOrEmpty(n.Url));
+}
+
+<div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h4 class="fw-bold mb-1">Notifications</h4>
+            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0" style="font-size:0.8rem;"><li class="breadcrumb-item"><a href="/Home" class="text-decoration-none">Accueil</a></li><li class="breadcrumb-item active">Notifications</li></ol></nav>
+        </div>
+        @if (unreadCount > 0)
+        {
+            <form asp-action="MarkAllAsRead" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check2-all me-1"></i>Tout marquer comme lu</button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-xl-4 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-danger border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Non lues</div><div class="fs-3 fw-bold text-danger">@unreadCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-bell fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-md-6">
+        <div class="card shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Déjà lues</div><div class="fs-3 fw-bold text-success">@readCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-check-circle fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-md-12">
+        <div class="card shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Avec action</div><div class="fs-3 fw-bold">@actionCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-arrow-up-right-circle fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (notifications.Any())
+{
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush">
+                @foreach (var notif in notifications.OrderByDescending(n => n.CreatedAt))
+                {
+                    var iconClass = notif.Type switch {
+                        "Success" => "bi-check-circle-fill",
+                        "Warning" => "bi-exclamation-triangle-fill",
+                        "Error" => "bi-x-circle-fill",
+                        _ => "bi-info-circle-fill"
+                    };
+                    var iconColor = notif.Type switch {
+                        "Success" => "text-success",
+                        "Warning" => "text-warning",
+                        "Error" => "text-danger",
+                        _ => "text-primary"
+                    };
+                    <div class="list-group-item border-0 px-4 py-3 @(!notif.IsRead ? "bg-primary bg-opacity-10" : "")">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center rounded-3 flex-shrink-0 bg-light" style="width:42px;height:42px;">
+                                <i class="bi @iconClass fs-5 @iconColor"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-1">
+                                    <h6 class="mb-0 fw-semibold">@notif.Titre</h6>
+                                    <small class="text-muted">@notif.CreatedAt.ToString("dd/MM/yyyy HH:mm")</small>
+                                </div>
+                                <p class="mb-2 small text-muted">@notif.Message</p>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    @if (!notif.IsRead)
+                                    {
+                                        <span class="badge bg-danger rounded-pill">Nouveau</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(notif.Url))
+                                    {
+                                        <a href="@notif.Url" class="btn btn-primary btn-sm"><i class="bi bi-arrow-right me-1"></i>Ouvrir</a>
+                                    }
+                                    @if (!notif.IsRead)
+                                    {
+                                        <form asp-action="MarkAsRead" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@notif.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">Marquer lu</button>
+                                        </form>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm text-center py-5">
+        <div class="card-body">
+            <i class="bi bi-bell-slash text-muted" style="font-size:3rem;"></i>
+            <h5 class="mt-3 mb-1">Aucune notification</h5>
+            <p class="mb-0 small text-muted">Vos nouvelles notifications apparaîtront ici.</p>
+        </div>
+    </div>
+}

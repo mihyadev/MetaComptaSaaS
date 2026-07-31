@@ -1,5 +1,8 @@
 using MetaCompta.Application.DTOs;
+using MetaCompta.BackOffice.Filters;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -25,18 +28,26 @@ public class CabinetController : BaseController
     // EMPLOYEES
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeDetail)]
     public async Task<IActionResult> Index(string? departement = null, int page = 1, string? search = null)
     {
         await LoadReferenceDataToViewBagAsync("DEPARTEMENT_CABINET");
         var result = await _cabinet.GetEmployeesAsync(departement, page, search);
         ViewBag.Departement = departement;
         ViewBag.Search = search;
+        ViewBag.CanCreateEmployee = PermissionHelper.HasPermission(HttpContext.Session, ClaimDefinitions.CabinetEmployeeCreate);
+        ViewBag.CanEditEmployee = PermissionHelper.HasPermission(HttpContext.Session, ClaimDefinitions.CabinetEmployeeEdit);
         return View(result);
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeCreate)]
     public async Task<IActionResult> CreateEmployee()
     {
+        if (!RequiresPermission(ClaimDefinitions.CabinetEmployeeCreate,
+            "Permission cabinet.employee.create requise pour créer un employé du cabinet."))
+            return RedirectToAction(nameof(Index));
+
         var claims = await _cabinet.GetClaimsByDomainAsync();
         var roles = await _cabinet.GetRolesAsync(1, null);
         ViewBag.ClaimsByDomain = claims;
@@ -46,8 +57,13 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeCreate)]
     public async Task<IActionResult> CreateEmployee(CabinetEmployeeCreateDto dto)
     {
+        if (!RequiresPermission(ClaimDefinitions.CabinetEmployeeCreate,
+            "Permission cabinet.employee.create requise pour créer un employé du cabinet."))
+            return RedirectToAction(nameof(Index));
+
         if (!ModelState.IsValid)
         {
             var claims = await _cabinet.GetClaimsByDomainAsync();
@@ -76,8 +92,13 @@ public class CabinetController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeEdit)]
     public async Task<IActionResult> EditEmployee(string id)
     {
+        if (!RequiresPermission(ClaimDefinitions.CabinetEmployeeEdit,
+            "Permission cabinet.employee.edit requise pour modifier un employé du cabinet."))
+            return RedirectToAction(nameof(Index));
+
         var employee = await _cabinet.GetEmployeeByIdAsync(id);
         if (employee == null) return NotFound();
 
@@ -113,8 +134,13 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeEdit)]
     public async Task<IActionResult> EditEmployee(string id, CabinetEmployeeUpdateDto dto)
     {
+        if (!RequiresPermission(ClaimDefinitions.CabinetEmployeeEdit,
+            "Permission cabinet.employee.edit requise pour modifier un employé du cabinet."))
+            return RedirectToAction(nameof(Index));
+
         if (!ModelState.IsValid)
         {
             var claims = await _cabinet.GetClaimsByDomainAsync();
@@ -141,6 +167,7 @@ public class CabinetController : BaseController
         return View(dto);
     }
 
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeDetail)]
     public async Task<IActionResult> EmployeeDetails(string id)
     {
         var employee = await _cabinet.GetEmployeeByIdAsync(id);
@@ -150,8 +177,13 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeEdit)]
     public async Task<IActionResult> ToggleEmployee(string id)
     {
+        if (!RequiresPermission(ClaimDefinitions.CabinetEmployeeEdit,
+            "Permission cabinet.employee.edit requise pour activer/désactiver un employé."))
+            return RedirectToAction(nameof(Index));
+
         var result = await _cabinet.ToggleEmployeeActiveAsync(id);
         TempData[result?.Success == true ? "SuccessMessage" : "ErrorMessage"] =
             result?.Message ?? "Opération effectuée.";
@@ -162,6 +194,7 @@ public class CabinetController : BaseController
     // ROLES & PERMISSIONS
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CabinetRoleManage)]
     public async Task<IActionResult> Roles(int page = 1, string? search = null)
     {
         var result = await _cabinet.GetRolesAsync(page, search);
@@ -173,6 +206,7 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetRoleManage)]
     public async Task<IActionResult> CreateRole(string name, string? description, List<string> permissions)
     {
         var result = await _cabinet.CreateRoleAsync(name, description, permissions ?? new List<string>());
@@ -183,6 +217,7 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetRoleManage)]
     public async Task<IActionResult> UpdateRolePermissions(string roleId, List<string> permissions)
     {
         var result = await _cabinet.UpdateRolePermissionsAsync(roleId, permissions ?? new List<string>());
@@ -195,6 +230,7 @@ public class CabinetController : BaseController
     // EQUIPES (Teams — grouped employees view)
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeDetail)]
     public async Task<IActionResult> Equipes(int page = 1, string? search = null)
     {
         var result = await _cabinet.GetEmployeesAsync(null, page, search);
@@ -207,6 +243,7 @@ public class CabinetController : BaseController
     // ═══════════════════════════════════════════════════════════
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CabinetEdit)]
     public async Task<IActionResult> EditCabinet()
     {
         var cabinet = await _cabinet.GetCabinetAsync();
@@ -230,6 +267,7 @@ public class CabinetController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetEdit)]
     public async Task<IActionResult> EditCabinet(CabinetEditDto dto)
     {
         if (!ModelState.IsValid) return View(dto);
@@ -249,6 +287,7 @@ public class CabinetController : BaseController
     // AUDIT LOGS
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.CabinetAuditView)]
     public async Task<IActionResult> AuditLogs(string? utilisateur = null, string? action = null, DateTime? dateDebut = null, DateTime? dateFin = null, int page = 1)
     {
         var result = await _cabinet.GetAuditLogsAsync(utilisateur, action, dateDebut, dateFin, page);

@@ -1,0 +1,204 @@
+@using MetaCompta.Application.DTOs
+@model PagedResult<ContratCommercialDto>
+@{
+    ViewData["Title"] = "Contrats Clients";
+    var contrats = Model?.Items ?? new List<ContratCommercialDto>();
+    var clients = ViewBag.Clients as List<ClientDto> ?? new();
+    var selectedClientId = ViewBag.SelectedClientId as int?;
+    var selectedStatut = ViewBag.SelectedStatut as string;
+    var totalActifs = contrats.Count(c => c.Statut == "Actif" || c.Statut == "Valide");
+    var totalMontant = contrats.Sum(c => c.MontantHT);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Clients">Clients</a></li>
+                <li class="breadcrumb-item active">Contrats</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text text-warning me-2"></i>Contrats Clients</h4>
+    </div>
+    <a href="@Url.Action("ContratCreate", "Commercial")" class="btn btn-warning rounded-pill px-3">
+        <i class="bi bi-plus-lg me-1"></i> Nouveau contrat
+    </a>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-card" style="border-left:4px solid var(--primary);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Total Contrats</div>
+                    <div class="stat-value">@(Model?.TotalCount ?? 0)</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(14,165,233,0.1);color:var(--primary);"><i
+                    class="bi bi-file-earmark-text"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card" style="border-left:4px solid #059669;">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Actifs / Valid&#233;s</div>
+                        <div class="stat-value">@totalActifs</div>
+                    </div>
+                    <div class="stat-icon" style="background:rgba(16,185,129,0.1);color:#059669;"><i
+                        class="bi bi-check-circle"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="stat-card" style="border-left:4px solid #d97706;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="stat-label">Montant Total HT</div>
+                            <div class="stat-value" style="font-size:1rem;">@totalMontant.ToString("N0") MAD</div>
+                        </div>
+                        <div class="stat-icon" style="background:rgba(217,119,6,0.1);color:#d97706;"><i
+                            class="bi bi-cash-stack"></i></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="stat-card" style="border-left:4px solid #7c3aed;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="stat-label">En attente signature</div>
+                                <div class="stat-value">@contrats.Count(c => c.Statut == "Brouillon")</div>
+                            </div>
+                            <div class="stat-icon" style="background:rgba(124,58,237,0.1);color:#7c3aed;"><i class="bi bi-pen"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body py-2">
+                    <form method="get" class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted mb-1">Client</label>
+                            <select name="clientId" class="form-select form-select-sm rounded-pill">
+                                <option value="">Tous les clients</option>
+                                @foreach (var c in clients)
+                                {
+                                    <option value="@c.Id" selected="@(selectedClientId == c.Id)">@c.RaisonSociale</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Statut</label>
+                            <select name="statut" class="form-select form-select-sm rounded-pill">
+                                <option value="">Tous</option>
+                                <option value="Brouillon" selected="@(selectedStatut == "Brouillon")">Brouillon</option>
+                                <option value="Signe" selected="@(selectedStatut == "Signe")">Sign&#233;</option>
+                                <option value="Valide" selected="@(selectedStatut == "Valide")">Valid&#233;</option>
+                                <option value="Actif" selected="@(selectedStatut == "Actif")">Actif</option>
+                                <option value="Suspendu" selected="@(selectedStatut == "Suspendu")">Suspendu</option>
+                                <option value="Termine" selected="@(selectedStatut == "Termine")">Termin&#233;</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 w-100"><i
+                                class="bi bi-search me-1"></i>Filtrer</button>
+                            </div>
+                            <div class="col-md-2">
+                                <a href="@Url.Action("Contrats", "Clients")"
+                                   class="btn btn-sm btn-outline-secondary rounded-pill px-3 w-100">R&#233;initialiser</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-body p-0">
+                        @if (contrats.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-3">R&#233;f&#233;rence</th>
+                                            <th>Client</th>
+                                            <th>Objet</th>
+                                            <th>P&#233;riode</th>
+                                            <th>Statut</th>
+                                            <th class="text-end">Montant HT</th>
+                                            <th class="text-end pe-3">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var ct in contrats)
+                                        {
+                                            var badge = ct.Statut switch
+                                            {
+                                                "Brouillon" => "bg-secondary-subtle text-secondary",
+                                                "Signe" => "bg-info-subtle text-info",
+                                                "Valide" or "Actif" => "bg-success-subtle text-success",
+                                                "Suspendu" => "bg-warning-subtle text-warning",
+                                                "Termine" => "bg-dark-subtle text-dark",
+                                                _ => "bg-light text-dark"
+                                            };
+                                            <tr>
+                                                <td class="ps-3 fw-semibold">@ct.Reference</td>
+                                                <td>
+                                                    <a href="@Url.Action("Details", "Clients", new { id = ct.ClientId })"
+                                                       class="text-decoration-none">@(ct.ClientName ?? "-")</a>
+                                                </td>
+                                                <td>@(ct.Objet ?? "-")</td>
+                                                <td>
+                                                    @(ct.DateDebutContrat?.ToString("dd/MM/yyyy") ?? "-")
+                                                    @if (ct.DateFinContrat.HasValue)
+                                                    {
+                                                        <text> &rarr; @ct.DateFinContrat.Value.ToString("dd/MM/yyyy")</text>
+                                                    }
+                                                </td>
+                                                <td><span class="badge @badge rounded-pill">@ct.Statut</span></td>
+                                                <td class="text-end">@ct.MontantHT.ToString("N2") MAD</td>
+                                                <td class="text-end pe-3">
+                                                    <a href="@Url.Action("ContratDetails", "Commercial", new { id = ct.Id })"
+                                                           class="btn btn-sm btn-outline-primary rounded-pill px-2" style="font-size:0.7rem;">
+                                                        <i class="bi bi-eye me-1"></i>D&#233;tails
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if ((Model?.TotalPages ?? 0) > 1)
+                            {
+                                <div class="d-flex justify-content-center py-3">
+                                    <nav>
+                                        <ul class="pagination pagination-sm mb-0">
+                                            @for (int p = 1; p <= Model!.TotalPages; p++)
+                                            {
+                                                <li class="page-item @(p == Model.Page ? "active" : "")">
+                                                    <a class="page-link rounded-pill mx-1"
+                                                       href="@Url.Action("Contrats", "Clients", new { page = p, clientId = selectedClientId, statut = selectedStatut })">@p</a>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </nav>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5" style="font-size:0.9rem;">
+                                <i class="bi bi-file-earmark-text d-block mb-2" style="font-size:2.5rem;"></i>
+                                Aucun contrat trouv&#233;.<br />
+                                <small><a href="@Url.Action("ContratCreate", "Commercial")">Cr&#233;er un contrat</a> pour
+                                    d&#233;marrer.</small>
+                                </div>
+                            }
+                        </div>
+                    </div>
+

@@ -31,6 +31,10 @@ public class AccountController : ExtranetBaseController
             HttpContext.Session.SetString("JwtToken", result.Data.AccessToken);
             HttpContext.Session.SetString("UserName", result.Data.User?.FullName ?? email);
             HttpContext.Session.SetString("UserRole", result.Data.User?.Role ?? "Client");
+            HttpContext.Session.SetString("UserEmail", result.Data.User?.Email ?? email);
+            HttpContext.Session.SetString("ClientName", result.Data.User?.ClientName ?? "");
+            HttpContext.Session.SetString("ClientId", result.Data.User?.ClientId?.ToString() ?? "");
+            HttpContext.Session.SetString("CabinetName", result.Data.User?.CabinetName ?? "");
         }
         return RedirectToAction("Index", "Home");
     }

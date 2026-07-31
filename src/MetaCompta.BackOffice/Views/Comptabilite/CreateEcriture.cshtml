@@ -1,4 +1,4 @@
-﻿@model MetaCompta.Application.DTOs.EcritureCreateDto
+@model MetaCompta.Application.DTOs.EcritureCreateDto
 @{
     ViewData["Title"] = "Nouvelle écriture comptable";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
@@ -75,7 +75,10 @@
             </div>
 
             <div class="mt-4">
-                <button type="submit" class="btn btn-mc-primary"><i class="bi bi-check-circle me-1"></i> Créer l'écriture</button>
+                @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
+                {
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Créer l'écriture</button>
+                }
                 <a href="@Url.Action("Ecritures", "Comptabilite")" class="btn btn-outline-secondary ms-2">Annuler</a>
             </div>
         </form>

@@ -12,9 +12,12 @@
         <h4 class="fw-bold mb-1"><i class="bi bi-building text-primary me-2"></i>Gestion des Clients</h4>
         <p class="text-muted mb-0">Gérer les entreprises clientes du cabinet</p>
     </div>
-    <a asp-action="Create" class="btn btn-mc-primary rounded-pill px-4">
-        <i class="bi bi-plus-circle me-2"></i> Nouveau Client
-    </a>
+    @if (ViewBag.CanClientCreate as bool? ?? false)
+    {
+        <a asp-action="Create" class="btn btn-primary rounded-pill px-4">
+            <i class="bi bi-plus-circle me-2"></i> Nouveau Client
+        </a>
+    }
 </div>
 
 <!-- Stats Cards -->
@@ -22,39 +25,39 @@
 {
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-primary);">
+            <div class="stat-card" style="border-left: 4px solid var(--primary);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">Total Clients</div>
                         <div class="stat-value">@Model.TotalCount</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);">
+                    <div class="stat-icon" style="background: rgba(14,165,233,0.1); color: var(--primary);">
                         <i class="bi bi-building"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-secondary);">
+            <div class="stat-card" style="border-left: 4px solid var(--secondary);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">Clients Actifs</div>
                         <div class="stat-value">@(Model.Items?.Count(c => c.Statut == "Active") ?? 0)</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: var(--mc-secondary);">
+                    <div class="stat-icon" style="background: rgba(16,185,129,0.1); color: var(--secondary);">
                         <i class="bi bi-check-circle"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-accent);">
+            <div class="stat-card" style="border-left: 4px solid var(--warning);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">Total Employés</div>
                         <div class="stat-value">@(Model.Items?.Sum(c => c.EmployeeCount) ?? 0)</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--mc-accent);">
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--warning);">
                         <i class="bi bi-people"></i>
                     </div>
                 </div>
@@ -195,16 +198,22 @@
                                         <a asp-action="Details" asp-route-id="@client.Id" class="btn btn-outline-primary" title="Détails">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a asp-action="Edit" asp-route-id="@client.Id" class="btn btn-outline-warning" title="Modifier">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
-                                        <form asp-action="Delete" asp-route-id="@client.Id" method="post" style="display:inline;"
-                                            onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce client ? Toutes les données associées seront perdues.');">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        @if (ViewBag.CanClientEdit as bool? ?? false)
+                                        {
+                                            <a asp-action="Edit" asp-route-id="@client.Id" class="btn btn-outline-warning" title="Modifier">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        }
+                                        @if (ViewBag.CanClientDelete as bool? ?? false)
+                                        {
+                                            <form asp-action="Delete" asp-route-id="@client.Id" method="post" style="display:inline;"
+                                                onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce client ? Toutes les données associées seront perdues.');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -216,9 +225,12 @@
                             <td colspan="8" class="text-center py-5 text-muted">
                                 <i class="bi bi-building display-4 d-block mb-2 opacity-25"></i>
                                 <p class="mb-2">Aucun client trouvé.</p>
-                                <a asp-action="Create" class="btn btn-sm btn-mc-primary rounded-pill mt-1">
-                                    <i class="bi bi-plus-circle me-1"></i> Ajouter un client
-                                </a>
+                                @if (ViewBag.CanClientCreate as bool? ?? false)
+                                {
+                                    <a asp-action="Create" class="btn btn-sm btn-primary rounded-pill mt-1">
+                                        <i class="bi bi-plus-circle me-1"></i> Ajouter un client
+                                    </a>
+                                }
                             </td>
                         </tr>
                     }
@@ -252,3 +264,4 @@
         </ul>
     </nav>
 }
+

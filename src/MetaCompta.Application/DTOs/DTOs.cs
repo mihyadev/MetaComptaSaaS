@@ -6,8 +6,33 @@ namespace MetaCompta.Application.DTOs;
 public record LoginDto(string Email, string Password);
 public record RegisterDto(string Email, string Password, string FirstName, string LastName, string? Role, int? CabinetId, int? ClientId);
 public record TokenDto(string AccessToken, string RefreshToken, DateTime Expiration, UserInfoDto User);
-public record UserInfoDto(string Id, string Email, string FullName, string? Role, int? CabinetId, string? CabinetName, string? ProfileImageUrl, string PreferredLanguage);
+public record UserInfoDto(string Id, string Email, string FullName, string? Role, int? CabinetId, string? CabinetName, string? ProfileImageUrl, string PreferredLanguage, int? ClientId = null, string? ClientName = null);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+
+// ===== Contract access (Manage vs Consult) =====
+public static class ContractAccessMode
+{
+    public const string Manage = "Manage";
+    public const string Consult = "Consult";
+}
+
+public static class ContractAccessReason
+{
+    public const string Ok = "Ok";
+    public const string NoContract = "NoContract";
+    public const string AwaitingValidation = "AwaitingValidation";
+    public const string Expired = "Expired";
+    public const string Suspended = "Suspended";
+}
+
+public class ContractAccessContextDto
+{
+    public string Mode { get; set; } = ContractAccessMode.Consult;
+    public string Reason { get; set; } = ContractAccessReason.NoContract;
+    public string ReasonLabel { get; set; } = string.Empty;
+    public bool AllowsManage => Mode == ContractAccessMode.Manage;
+    public List<string> ActiveServices { get; set; } = new();
+}
 
 // ===== Client =====
 public class ClientDto
@@ -96,6 +121,19 @@ public class GenerateDeclarationsRequestDto
     public List<string>? TypeServices { get; set; } // null = all active services
 }
 
+/// <summary>
+/// Represents one enabled fiduciary service on a contract, with optional per-service honoraires.
+/// Stored as JSON array in ContratCommercial.ServicesActivesJson.
+/// </summary>
+public class ContratServiceActiveLine
+{
+    public string TypeService { get; set; } = string.Empty;
+    public string? LibelleService { get; set; }
+    public decimal? Honoraires { get; set; }
+    public string? FrequenceHonoraires { get; set; } // Mensuel, Trimestriel, Semestriel, Annuel
+    public bool AutoGenererDeclarations { get; set; } = true;
+}
+
 public class GenerateDeclarationsResultDto
 {
     public int TotalGenerated { get; set; }
@@ -131,6 +169,37 @@ public class ClientCreateDto
     public DateTime? DateDebutContrat { get; set; }
     public string? NotesInternes { get; set; }
     public List<ServiceContratCreateDto> ServicesFiduciaires { get; set; } = new();
+}
+
+// ===== Client Users (Extranet) =====
+public class ClientUserDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string FullName => $"{FirstName} {LastName}";
+    public string? Telephone { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+}
+
+public class ClientUserCreateDto
+{
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? Telephone { get; set; }
+}
+
+public class ClientUserUpdateDto
+{
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? Telephone { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 // ===== Employee =====
@@ -208,6 +277,14 @@ public class DeclarationDto
     public decimal? MontantCredit { get; set; }
     public string? PdfUrl { get; set; }
     public int DaysUntilDeadline { get; set; }
+
+    // Active workflow progress (filled when an instance exists)
+    public int? WorkflowInstanceId { get; set; }
+    public string? WorkflowStatus { get; set; }
+    public string? CurrentStepName { get; set; }
+    public int TotalSteps { get; set; }
+    public int CompletedSteps { get; set; }
+    public double ProgressPercent => TotalSteps > 0 ? Math.Round((double)CompletedSteps / TotalSteps * 100, 1) : 0;
 }
 
 public class DeclarationTVADto
@@ -236,11 +313,12 @@ public class DeclarationTVADto
 }
 
 /// <summary>
-/// Request DTO for saving only TVA manual adjustments (Immobilisations + Credit Precedent).
+/// Manual TVA entry (Morocco): Facturée − Déductible − Crédit précédent.
 /// </summary>
 public class TVAAjustementsRequest
 {
-    public decimal TVARecuperableImmobilisations { get; set; }
+    public decimal TVAFacturee { get; set; }
+    public decimal TVADeductible { get; set; }
     public decimal CreditPrecedent { get; set; }
 }
 
@@ -310,6 +388,9 @@ public class PaySlipDto
     public decimal FormationProfessionnelle { get; set; }
     public decimal TotalChargesPatronales { get; set; }
     public string? PdfUrl { get; set; }
+
+    // Dynamic bulletin lines from PayrollEngine
+    public List<BulletinLigneDto> Lignes { get; set; } = new();
 }
 
 public class PaySlipVariablesDto
@@ -347,6 +428,34 @@ public class DocumentDto
     public string? UploadePar { get; set; }
     public string? UploadedByUserName { get => UploadePar; set => UploadePar = value; }
     public DateTime CreatedAt { get; set; }
+    public int? DeclarationId { get; set; }
+    public string? ContentType { get; set; }
+}
+
+// ===== Message =====
+public class MessageDto
+{
+    public int Id { get; set; }
+    public int? ClientId { get; set; }
+    public string? ClientName { get; set; }
+    public int? DeclarationId { get; set; }
+    public string SenderId { get; set; } = string.Empty;
+    public string SenderName { get; set; } = string.Empty;
+    public string SenderRole { get; set; } = "Cabinet";
+    public string Sujet { get; set; } = string.Empty;
+    public string Contenu { get; set; } = string.Empty;
+    public bool IsReadByRecipient { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int? ParentMessageId { get; set; }
+}
+
+public class SendMessageDto
+{
+    public int? ClientId { get; set; }
+    public int? DeclarationId { get; set; }
+    public string Sujet { get; set; } = string.Empty;
+    public string Contenu { get; set; } = string.Empty;
+    public int? ParentMessageId { get; set; }
 }
 
 // ===== Notification =====
@@ -372,7 +481,7 @@ public class TaskItemDto
     public string? ClientNom { get; set; }
     public string? ClientName { get => ClientNom; set => ClientNom = value; }
     public string? AssigneA { get; set; }
-    public string? AssignedToUserName { get => AssigneA; set => AssigneA = value; }
+    public string? AssignedToUserName { get; set; }
     public string? AssignedByUserName { get; set; }
     public DateTime? DateDebut { get; set; }
     public DateTime? DateEcheance { get; set; }
@@ -380,6 +489,41 @@ public class TaskItemDto
     public string Statut { get; set; } = "AFaire";
     public DateTime DateCreation { get; set; }
     public int CommentCount { get; set; }
+    public List<TaskCommentDto> Comments { get; set; } = new();
+    // Declaration link
+    public int? DeclarationId { get; set; }
+    public string? DeclarationType { get; set; }
+    public string? DeclarationPeriode { get; set; }
+    public string? DeclarationStatut { get; set; }
+    // Workflow step context
+    public bool IsWorkflowTask { get; set; }
+    public int? WorkflowInstanceId { get; set; }
+    public int? WorkflowStepInstanceId { get; set; }
+    public string? WorkflowStepName { get; set; }
+    public int? WorkflowStepOrder { get; set; }
+    public int? WorkflowTotalSteps { get; set; }
+    public int? WorkflowCompletedSteps { get; set; }
+    public double WorkflowProgressPercent =>
+        WorkflowTotalSteps.GetValueOrDefault() > 0
+            ? Math.Round((double)WorkflowCompletedSteps.GetValueOrDefault() / WorkflowTotalSteps!.Value * 100, 1)
+            : 0;
+    public string? WorkflowStepStatus { get; set; }
+    public string? WorkflowStepInstructions { get; set; }
+}
+
+public class TaskCommentDto
+{
+    public int Id { get; set; }
+    public int TaskItemId { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string Contenu { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AddTaskCommentDto
+{
+    public string Contenu { get; set; } = string.Empty;
 }
 
 // ===== Dashboard =====
@@ -402,6 +546,44 @@ public class DashboardChartsDto
     public object? ClientsDistribution { get; set; }
     public object? TeamPerformance { get; set; }
     public object? DeclarationStatusGlobal { get; set; }
+}
+
+// ===== Extranet Dashboard =====
+public class ExtranetDashboardDto
+{
+    public string? ClientName { get; set; }
+    public string? ICE { get; set; }
+    public string? FormeJuridique { get; set; }
+    public string? SecteurActivite { get; set; }
+    public string? Statut { get; set; }
+    public int EmployeeCount { get; set; }
+    public int DocumentCount { get; set; }
+    public int DeclarationsEnCours { get; set; }
+    public int DeclarationsSoumises { get; set; }
+    public int TachesEnAttente { get; set; }
+    public int MessagesNonLus { get; set; }
+    public List<ExtranetDeadlineDto> ProchainsDelais { get; set; } = new();
+    public List<ExtranetRecentDto> DernieresDeclarations { get; set; } = new();
+}
+
+public class ExtranetDeadlineDto
+{
+    public int Id { get; set; }
+    public string? Type { get; set; }
+    public string? Periode { get; set; }
+    public DateTime DateLimite { get; set; }
+    public string? Statut { get; set; }
+    public int JoursRestants => (int)(DateLimite.Date - DateTime.UtcNow.Date).TotalDays;
+}
+
+public class ExtranetRecentDto
+{
+    public int Id { get; set; }
+    public string? Type { get; set; }
+    public string? Periode { get; set; }
+    public DateTime? DateSoumission { get; set; }
+    public decimal MontantDu { get; set; }
+    public string? Statut { get; set; }
 }
 
 // ===== Paged result =====
@@ -699,6 +881,34 @@ public class CabinetEditDto
     public string? LogoUrl { get; set; }
 }
 
+public class CabinetCreateDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? ICE { get; set; }
+    public string? IF { get; set; }
+    public string? RC { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? Phone { get; set; }
+    public string? AdminEmail { get; set; }
+    public string? AdminPassword { get; set; }
+    public string? AdminFirstName { get; set; }
+    public string? AdminLastName { get; set; }
+}
+
+public class CabinetEditAdminDto
+{
+    public string? Name { get; set; }
+    public string? Email { get; set; }
+    public string? ICE { get; set; }
+    public string? IF { get; set; }
+    public string? RC { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? Phone { get; set; }
+}
+
 /// <summary>
 /// DTO for the cabinet detail view.
 /// </summary>
@@ -983,6 +1193,9 @@ public class WorkflowStepTemplateDto
     public string AssignmentType { get; set; } = "Employee";
     public string? AssignedToUserId { get; set; }
     public string? AssignedToUserName { get; set; }
+    /// <summary>Comma-separated multi-assignee user IDs (Employee assignment).</summary>
+    public string? AssignedToUserIds { get; set; }
+    public List<string> AssignedToUserIdList { get; set; } = new();
     public string? AssignedToRoleName { get; set; }
     public int? AssignedToDepartmentId { get; set; }
     public string? AssignedToDepartmentName { get; set; }
@@ -1035,6 +1248,8 @@ public class WorkflowStepTemplateCreateDto
     public string StepType { get; set; } = "Initialisation";
     public string AssignmentType { get; set; } = "Employee";
     public string? AssignedToUserId { get; set; }
+    /// <summary>Multi-select from builder (bound from form). Synced to AssignedToUserIds CSV on save.</summary>
+    public List<string>? AssignedToUserIds { get; set; }
     public string? AssignedToRoleName { get; set; }
     public int? AssignedToDepartmentId { get; set; }
     public bool IsClientStep { get; set; }
@@ -1113,6 +1328,7 @@ public class WorkflowStepInstanceDto
     public string Status { get; set; } = "Pending";
     public string? AssignedToUserId { get; set; }
     public string? AssignedToUserName { get; set; }
+    public List<string> AssignedToUserIdList { get; set; } = new();
     public string? CompletedByUserName { get; set; }
 
     // Context fields (Client / Declaration)
@@ -1120,7 +1336,16 @@ public class WorkflowStepInstanceDto
     public string? ClientName { get; set; }
     public int? DeclarationId { get; set; }
     public string? DeclarationType { get; set; }
+    public string? DeclarationPeriode { get; set; }
+    public string? DeclarationStatut { get; set; }
     public string? AssignmentType { get; set; }
+
+    // Parent workflow progress
+    public string? WorkflowStatus { get; set; }
+    public string? CurrentStepName { get; set; }
+    public int TotalSteps { get; set; }
+    public int CompletedSteps { get; set; }
+    public double ProgressPercent => TotalSteps > 0 ? Math.Round((double)CompletedSteps / TotalSteps * 100, 1) : 0;
 
     public DateTime? ActivatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
@@ -1133,6 +1358,12 @@ public class WorkflowStepInstanceDto
     public bool IsBlocking { get; set; }
     public bool IsRequired { get; set; }
     public bool IsOverdue => DueDate.HasValue && DueDate < DateTime.UtcNow && Status != "Completed" && Status != "Skipped";
+
+    // ── Exclusive unit take (UnitTakes) ──
+    public bool HasOpenTake { get; set; }
+    public string? OpenTakeUserId { get; set; }
+    public string? OpenTakeUserName { get; set; }
+    public DateTime? OpenTakeTakenAt { get; set; }
 
     // ── Retry / Relance ──
     public int RetryCount { get; set; }
@@ -1260,6 +1491,7 @@ public class LigneDocumentCommercialDto
     public decimal? QuantiteConsommee { get; set; }
     public bool? DejaFacture { get; set; }
     public int? LigneSourceId { get; set; }
+    public string? ModeFacturation { get; set; } // Mensuel, Trimestriel, Semestriel, Annuel, Ponctuel
 }
 
 public class LigneDocumentCommercialCreateDto
@@ -1277,6 +1509,7 @@ public class LigneDocumentCommercialCreateDto
     public decimal? RemisePourcentage { get; set; }
     public decimal? RemiseMontant { get; set; }
     public decimal TauxTVA { get; set; } = 20m;
+    public string? ModeFacturation { get; set; } // Mensuel, Trimestriel, Semestriel, Annuel, Ponctuel
     public int? LigneSourceId { get; set; }
 }
 
@@ -1359,6 +1592,16 @@ public class ContratCommercialDto
     public string Reference { get; set; } = string.Empty;
     public int ClientId { get; set; }
     public string? ClientName { get; set; }
+    /// <summary>ICE — Identifiant Commun de l'Entreprise (15 digits).</summary>
+    public string? ClientICE { get; set; }
+    /// <summary>IF — Identifiant Fiscal.</summary>
+    public string? ClientIF { get; set; }
+    /// <summary>RC — Registre du Commerce.</summary>
+    public string? ClientRC { get; set; }
+    /// <summary>Affiliation CNSS.</summary>
+    public string? ClientNumeroCNSS { get; set; }
+    /// <summary>Ville du siège (affiché avec le RC).</summary>
+    public string? ClientVille { get; set; }
     public int? BonCommandeId { get; set; }
     public string? BonCommandeReference { get; set; }
     public int? DevisId { get; set; }
@@ -1387,8 +1630,31 @@ public class ContratCommercialDto
     public bool PeutValider => EstSigne && Statut == RefCodes.StatutContrat.Signe;
     public int NombreFactures { get; set; }
     public decimal TotalFacture { get; set; }
+    public string? ResponsableId { get; set; }
+    public string? ResponsableNom { get; set; }
+    public List<ContratMembreDto> Membres { get; set; } = new();
+    /// <summary>Operational service triggers only — independent from fee lines.</summary>
+    public List<ContratServiceActiveLine> ServicesActives { get; set; } = new();
+    /// <summary>Independent multi-line fee schedule (billing).</summary>
     public List<LigneDocumentCommercialDto> Lignes { get; set; } = new();
     public List<DocumentCommercialHistoriqueDto> Historique { get; set; } = new();
+}
+
+public class ContratMembreDto
+{
+    public int Id { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string? UserName { get; set; }
+    public string? RoleLabel { get; set; }
+    public string? Departement { get; set; }
+    public string? Poste { get; set; }
+}
+
+/// <summary>Member assignment line for contract team (dossier).</summary>
+public class ContratMembreInputDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string? RoleLabel { get; set; }
 }
 
 public class ContratSignatureDto
@@ -1396,6 +1662,12 @@ public class ContratSignatureDto
     public string SignataireNom { get; set; } = string.Empty;
     public string? SignataireFonction { get; set; }
     public string? SignatureUrl { get; set; }
+}
+
+/// <summary>Update contract dossier team (members + métier roles).</summary>
+public class ContratEquipeUpdateDto
+{
+    public List<ContratMembreInputDto> Membres { get; set; } = new();
 }
 
 // ===== Facture =====
@@ -1509,7 +1781,7 @@ public class ConvertDevisEnContratDto
     public string? FrequenceFacturation { get; set; }
     public string? ClausesSpecifiques { get; set; }
     public string? Notes { get; set; }
-    public List<LigneServiceOverrideDto> LigneServiceOverrides { get; set; } = new();
+    public List<ContratServiceActiveLine> ServicesActives { get; set; } = new();
 }
 
 public class ContratCommercialCreateDto
@@ -1518,13 +1790,24 @@ public class ContratCommercialCreateDto
     public string? Objet { get; set; }
     public string? Description { get; set; }
     public string Devise { get; set; } = "MAD";
+    /// <summary>Mandatory contract validity start (Moroccan fiduciary deal).</summary>
     public DateTime? DateDebutContrat { get; set; }
+    /// <summary>Mandatory contract validity end.</summary>
     public DateTime? DateFinContrat { get; set; }
     public string ModeleFacturation { get; set; } = "Forfait";
     public string? FrequenceFacturation { get; set; }
     public string? ClausesSpecifiques { get; set; }
     public string? ConditionsParticulieres { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Legacy — no longer used for validation; kept for API compatibility.</summary>
+    public string? ResponsableId { get; set; }
+    /// <summary>Cabinet employee user IDs (legacy). Prefer <see cref="Membres"/>.</summary>
+    public List<string> MembreIds { get; set; } = new();
+    /// <summary>Dossier team with optional métier roles.</summary>
+    public List<ContratMembreInputDto> Membres { get; set; } = new();
+    /// <summary>Operational triggers only — do not drive fee lines.</summary>
+    public List<ContratServiceActiveLine> ServicesActives { get; set; } = new();
+    /// <summary>Independent freeform fee schedule (MAD).</summary>
     public List<LigneDocumentCommercialCreateDto> Lignes { get; set; } = new();
 }
 
@@ -1537,7 +1820,7 @@ public class ConvertBonCommandeEnContratDto
     public string? FrequenceFacturation { get; set; }
     public string? ClausesSpecifiques { get; set; }
     public string? Notes { get; set; }
-    public List<LigneServiceOverrideDto> LigneServiceOverrides { get; set; } = new();
+    public List<ContratServiceActiveLine> ServicesActives { get; set; } = new();
 }
 
 // ===== Dashboard Commercial =====

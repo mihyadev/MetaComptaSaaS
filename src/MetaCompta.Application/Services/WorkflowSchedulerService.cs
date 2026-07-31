@@ -173,4 +173,18 @@ public class WorkflowSchedulerService : IWorkflowSchedulerService
             }
         }
     }
+
+    public async Task ProcessDueRelancesAsync()
+    {
+        try
+        {
+            var count = await _workflowService.ProcessDueRelancesAsync();
+            if (count > 0)
+                _logger.LogInformation("WorkflowScheduler: Processed {Count} due relance(s).", count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WorkflowScheduler: ProcessDueRelances failed.");
+        }
+    }
 }

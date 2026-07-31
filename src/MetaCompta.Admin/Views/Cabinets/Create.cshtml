@@ -1,0 +1,121 @@
+@{
+    ViewData["Title"] = "Nouveau Cabinet";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-building-add text-danger me-2"></i>Nouveau Cabinet</h4>
+        <p class="text-muted mb-0">Créer un nouveau cabinet comptable et son administrateur</p>
+    </div>
+    <a href="/Cabinets" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+</div>
+
+@if (TempData["Error"] != null) {
+<div class="alert alert-danger alert-dismissible fade show rounded-3" role="alert">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<form method="post" action="/Cabinets/Create">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+
+            <!-- Informations du Cabinet -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-transparent border-0 pt-4 px-4">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-building me-2 text-danger"></i>Informations du Cabinet</h6>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nom du Cabinet <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-building"></i></span>
+                                <input type="text" name="Name" class="form-control border-start-0" placeholder="Ex: Cabinet Expert Conseil" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope"></i></span>
+                                <input type="email" name="Email" class="form-control border-start-0" placeholder="contact@cabinet.ma" required />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">ICE</label>
+                            <input type="text" name="ICE" class="form-control" placeholder="Identifiant Commun Entreprise" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">IF</label>
+                            <input type="text" name="IF" class="form-control" placeholder="Identifiant Fiscal" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">RC</label>
+                            <input type="text" name="RC" class="form-control" placeholder="Registre de Commerce" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ville</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-geo-alt"></i></span>
+                                <input type="text" name="City" class="form-control border-start-0" placeholder="Ex: Casablanca" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Téléphone</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-telephone"></i></span>
+                                <input type="text" name="Phone" class="form-control border-start-0" placeholder="+212 5XX-XXXXXX" />
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Adresse</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-pin-map"></i></span>
+                                <input type="text" name="Address" class="form-control border-start-0" placeholder="Adresse complète du cabinet" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Administrateur du Cabinet -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-transparent border-0 pt-4 px-4">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-person-gear me-2 text-danger"></i>Administrateur du Cabinet</h6>
+                    <small class="text-muted">Le compte SuperAdmin qui gérera ce cabinet</small>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Email Admin <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope-at"></i></span>
+                                <input type="email" name="AdminEmail" class="form-control border-start-0" placeholder="admin@cabinet.ma" required />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-key"></i></span>
+                                <input type="password" name="AdminPassword" class="form-control border-start-0" placeholder="Min. 8 caractères" required minlength="8" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Prénom</label>
+                            <input type="text" name="AdminFirstName" class="form-control" placeholder="Prénom de l'administrateur" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nom</label>
+                            <input type="text" name="AdminLastName" class="form-control" placeholder="Nom de l'administrateur" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="/Cabinets" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+                <button type="submit" class="btn btn-danger rounded-pill px-4"><i class="bi bi-check-circle me-2"></i>Créer le Cabinet</button>
+            </div>
+
+        </div>
+    </div>
+</form>

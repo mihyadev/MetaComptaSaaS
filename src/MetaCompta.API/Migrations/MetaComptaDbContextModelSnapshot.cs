@@ -66,6 +66,12 @@ namespace MetaCompta.API.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("Adresse")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CIN")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int?>("CabinetId")
                         .HasColumnType("int");
 
@@ -78,6 +84,15 @@ namespace MetaCompta.API.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateEmbauche")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateNaissance")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Departement")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
@@ -100,6 +115,9 @@ namespace MetaCompta.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("LieuNaissance")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
 
@@ -114,6 +132,9 @@ namespace MetaCompta.API.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("NumeroCNSS")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");
 
@@ -122,6 +143,9 @@ namespace MetaCompta.API.Migrations
 
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<string>("Poste")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
@@ -139,8 +163,17 @@ namespace MetaCompta.API.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Sexe")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SituationFamiliale")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
+
+                    b.Property<string>("TypeContrat")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
@@ -432,7 +465,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 1,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 186, DateTimeKind.Utc).AddTicks(9238),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7415),
                             Description = "Permission to View in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -442,7 +475,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 2,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3646),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7815),
                             Description = "Permission to Create in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -452,7 +485,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 3,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3681),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7818),
                             Description = "Permission to Edit in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -462,7 +495,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 4,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3691),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7821),
                             Description = "Permission to Delete in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -472,7 +505,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 5,
                             Action = "Archive",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3697),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7823),
                             Description = "Permission to Archive in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -482,7 +515,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 6,
                             Action = "Configure",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3717),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7827),
                             Description = "Permission to Configure in Client module",
                             IsDeleted = false,
                             Module = "Client",
@@ -492,7 +525,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 7,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3731),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7831),
                             Description = "Permission to View in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -502,7 +535,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 8,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3738),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7834),
                             Description = "Permission to Create in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -512,7 +545,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 9,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3745),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7837),
                             Description = "Permission to Edit in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -522,7 +555,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 10,
                             Action = "Validate",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3755),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7839),
                             Description = "Permission to Validate in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -532,7 +565,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 11,
                             Action = "Submit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3762),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7843),
                             Description = "Permission to Submit in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -542,7 +575,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 12,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3767),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7895),
                             Description = "Permission to Delete in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -552,7 +585,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 13,
                             Action = "Revert",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3771),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7898),
                             Description = "Permission to Revert in Declaration module",
                             IsDeleted = false,
                             Module = "Declaration",
@@ -562,7 +595,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 14,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3777),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7901),
                             Description = "Permission to View in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -572,7 +605,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 15,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3783),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7904),
                             Description = "Permission to Create in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -582,7 +615,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 16,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3788),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7907),
                             Description = "Permission to Edit in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -592,7 +625,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 17,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3793),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7909),
                             Description = "Permission to Delete in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -602,7 +635,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 18,
                             Action = "Archive",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3800),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7912),
                             Description = "Permission to Archive in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -612,7 +645,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 19,
                             Action = "ManageAbsences",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3805),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7915),
                             Description = "Permission to ManageAbsences in Employee module",
                             IsDeleted = false,
                             Module = "Employee",
@@ -622,7 +655,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 20,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3812),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7918),
                             Description = "Permission to View in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -632,7 +665,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 21,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3817),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7919),
                             Description = "Permission to Create in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -642,7 +675,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 22,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(3822),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7921),
                             Description = "Permission to Edit in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -652,7 +685,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 23,
                             Action = "Validate",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4031),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7923),
                             Description = "Permission to Validate in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -662,7 +695,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 24,
                             Action = "Process",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4039),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7925),
                             Description = "Permission to Process in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -672,7 +705,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 25,
                             Action = "GenerateSlips",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4045),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7927),
                             Description = "Permission to GenerateSlips in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -682,7 +715,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 26,
                             Action = "GenerateBankFile",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4050),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7929),
                             Description = "Permission to GenerateBankFile in Payroll module",
                             IsDeleted = false,
                             Module = "Payroll",
@@ -692,7 +725,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 27,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4057),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7931),
                             Description = "Permission to View in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -702,7 +735,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 28,
                             Action = "Upload",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4062),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7934),
                             Description = "Permission to Upload in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -712,7 +745,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 29,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4066),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7936),
                             Description = "Permission to Edit in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -722,7 +755,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 30,
                             Action = "Validate",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4071),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7938),
                             Description = "Permission to Validate in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -732,7 +765,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 31,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4075),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7940),
                             Description = "Permission to Delete in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -742,7 +775,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 32,
                             Action = "Share",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4080),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7942),
                             Description = "Permission to Share in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -752,7 +785,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 33,
                             Action = "Download",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4085),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7944),
                             Description = "Permission to Download in Document module",
                             IsDeleted = false,
                             Module = "Document",
@@ -762,7 +795,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 34,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4095),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7947),
                             Description = "Permission to View in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -772,7 +805,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 35,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4100),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7976),
                             Description = "Permission to Create in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -782,7 +815,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 36,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4104),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7978),
                             Description = "Permission to Edit in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -792,7 +825,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 37,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4109),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7980),
                             Description = "Permission to Delete in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -802,7 +835,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 38,
                             Action = "Assign",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4114),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7982),
                             Description = "Permission to Assign in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -812,7 +845,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 39,
                             Action = "ManageAll",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4118),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7984),
                             Description = "Permission to ManageAll in Task module",
                             IsDeleted = false,
                             Module = "Task",
@@ -822,7 +855,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 40,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4126),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7987),
                             Description = "Permission to View in Report module",
                             IsDeleted = false,
                             Module = "Report",
@@ -832,7 +865,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 41,
                             Action = "Export",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4131),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7989),
                             Description = "Permission to Export in Report module",
                             IsDeleted = false,
                             Module = "Report",
@@ -842,7 +875,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 42,
                             Action = "ViewStrategic",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4136),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7991),
                             Description = "Permission to ViewStrategic in Report module",
                             IsDeleted = false,
                             Module = "Report",
@@ -852,7 +885,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 43,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4141),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7994),
                             Description = "Permission to View in Notification module",
                             IsDeleted = false,
                             Module = "Notification",
@@ -862,7 +895,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 44,
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4146),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7996),
                             Description = "Permission to Manage in Notification module",
                             IsDeleted = false,
                             Module = "Notification",
@@ -872,7 +905,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 45,
                             Action = "Configure",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4151),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(7998),
                             Description = "Permission to Configure in Notification module",
                             IsDeleted = false,
                             Module = "Notification",
@@ -882,7 +915,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 46,
                             Action = "Admin",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4511),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8001),
                             Description = "Permission to Admin in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -892,7 +925,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 47,
                             Action = "UserManage",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4521),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8003),
                             Description = "Permission to UserManage in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -902,7 +935,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 48,
                             Action = "ProfileManage",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4527),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8005),
                             Description = "Permission to ProfileManage in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -912,7 +945,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 49,
                             Action = "AuditView",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4532),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8007),
                             Description = "Permission to AuditView in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -922,7 +955,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 50,
                             Action = "ConfigurationView",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4538),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8009),
                             Description = "Permission to ConfigurationView in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -932,7 +965,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 51,
                             Action = "ConfigurationEdit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4544),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8012),
                             Description = "Permission to ConfigurationEdit in System module",
                             IsDeleted = false,
                             Module = "System",
@@ -942,7 +975,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 52,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4551),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8014),
                             Description = "Permission to View in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -952,7 +985,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 53,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4556),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8016),
                             Description = "Permission to Create in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -962,7 +995,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 54,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4560),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8018),
                             Description = "Permission to Edit in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -972,7 +1005,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 55,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4565),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8020),
                             Description = "Permission to Delete in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -982,7 +1015,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 56,
                             Action = "Configure",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4569),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8022),
                             Description = "Permission to Configure in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -992,7 +1025,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 57,
                             Action = "Advance",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4574),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8024),
                             Description = "Permission to Advance in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -1002,7 +1035,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 58,
                             Action = "Validate",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4579),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8025),
                             Description = "Permission to Validate in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -1012,7 +1045,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 59,
                             Action = "Reassign",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4584),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8028),
                             Description = "Permission to Reassign in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -1022,7 +1055,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 60,
                             Action = "Cancel",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4589),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8030),
                             Description = "Permission to Cancel in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -1032,7 +1065,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 61,
                             Action = "Monitor",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4594),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8049),
                             Description = "Permission to Monitor in Workflow module",
                             IsDeleted = false,
                             Module = "Workflow",
@@ -1042,7 +1075,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 62,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4599),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8052),
                             Description = "Permission to View in Department module",
                             IsDeleted = false,
                             Module = "Department",
@@ -1052,7 +1085,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 63,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4604),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8055),
                             Description = "Permission to Create in Department module",
                             IsDeleted = false,
                             Module = "Department",
@@ -1062,7 +1095,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 64,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4609),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8057),
                             Description = "Permission to Edit in Department module",
                             IsDeleted = false,
                             Module = "Department",
@@ -1072,7 +1105,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 65,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4614),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8059),
                             Description = "Permission to Delete in Department module",
                             IsDeleted = false,
                             Module = "Department",
@@ -1082,7 +1115,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 66,
                             Action = "ManageMembers",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4625),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8062),
                             Description = "Permission to ManageMembers in Department module",
                             IsDeleted = false,
                             Module = "Department",
@@ -1092,7 +1125,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 67,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4632),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8066),
                             Description = "Permission to View in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1102,7 +1135,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 68,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4768),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8068),
                             Description = "Permission to Create in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1112,7 +1145,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 69,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4774),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8070),
                             Description = "Permission to Edit in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1122,7 +1155,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 70,
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4779),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8072),
                             Description = "Permission to Delete in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1132,7 +1165,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 71,
                             Action = "Validate",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4785),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8074),
                             Description = "Permission to Validate in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1142,7 +1175,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 72,
                             Action = "Convert",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4790),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8077),
                             Description = "Permission to Convert in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1152,7 +1185,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 73,
                             Action = "Sign",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4795),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8078),
                             Description = "Permission to Sign in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1162,7 +1195,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 74,
                             Action = "GenerateInvoice",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4799),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8081),
                             Description = "Permission to GenerateInvoice in Commercial module",
                             IsDeleted = false,
                             Module = "Commercial",
@@ -1172,7 +1205,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 75,
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4806),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8083),
                             Description = "Permission to View in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1182,7 +1215,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 76,
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4811),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8085),
                             Description = "Permission to Create in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1192,7 +1225,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 77,
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4815),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8087),
                             Description = "Permission to Edit in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1202,7 +1235,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 78,
                             Action = "Send",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4820),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8089),
                             Description = "Permission to Send in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1212,7 +1245,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 79,
                             Action = "Cancel",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4824),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8091),
                             Description = "Permission to Cancel in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1222,7 +1255,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 80,
                             Action = "Refund",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4829),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8092),
                             Description = "Permission to Refund in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1232,7 +1265,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 81,
                             Action = "ManagePayments",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 187, DateTimeKind.Utc).AddTicks(4833),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(8094),
                             Description = "Permission to ManagePayments in Facture module",
                             IsDeleted = false,
                             Module = "Facture",
@@ -1334,7 +1367,7 @@ namespace MetaCompta.API.Migrations
                             Id = 1,
                             Category = "TVA_RATE",
                             Code = "TVA_20",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 188, DateTimeKind.Utc).AddTicks(4059),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9067),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1347,7 +1380,7 @@ namespace MetaCompta.API.Migrations
                             Id = 2,
                             Category = "TVA_RATE",
                             Code = "TVA_14",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(373),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9820),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1360,7 +1393,7 @@ namespace MetaCompta.API.Migrations
                             Id = 3,
                             Category = "TVA_RATE",
                             Code = "TVA_10",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(385),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9837),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1373,7 +1406,7 @@ namespace MetaCompta.API.Migrations
                             Id = 4,
                             Category = "TVA_RATE",
                             Code = "TVA_7",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(391),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9839),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1386,7 +1419,7 @@ namespace MetaCompta.API.Migrations
                             Id = 5,
                             Category = "CNSS",
                             Code = "PLAFOND",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(397),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9841),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1399,7 +1432,7 @@ namespace MetaCompta.API.Migrations
                             Id = 6,
                             Category = "CNSS",
                             Code = "TAUX_SALARIAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(402),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9842),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1412,7 +1445,7 @@ namespace MetaCompta.API.Migrations
                             Id = 7,
                             Category = "CNSS",
                             Code = "TAUX_PATRONAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(513),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9869),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1425,7 +1458,7 @@ namespace MetaCompta.API.Migrations
                             Id = 8,
                             Category = "AMO",
                             Code = "TAUX_SALARIAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(663),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9871),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1438,7 +1471,7 @@ namespace MetaCompta.API.Migrations
                             Id = 9,
                             Category = "AMO",
                             Code = "TAUX_PATRONAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(668),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9872),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1451,7 +1484,7 @@ namespace MetaCompta.API.Migrations
                             Id = 10,
                             Category = "FP",
                             Code = "TAUX",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(674),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9874),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1464,7 +1497,7 @@ namespace MetaCompta.API.Migrations
                             Id = 11,
                             Category = "IR_BRACKET",
                             Code = "T1",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(679),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(9875),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1478,7 +1511,7 @@ namespace MetaCompta.API.Migrations
                             Id = 12,
                             Category = "IR_BRACKET",
                             Code = "T2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2280),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(25),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1492,7 +1525,7 @@ namespace MetaCompta.API.Migrations
                             Id = 13,
                             Category = "IR_BRACKET",
                             Code = "T3",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2291),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(40),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1506,7 +1539,7 @@ namespace MetaCompta.API.Migrations
                             Id = 14,
                             Category = "IR_BRACKET",
                             Code = "T4",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2298),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(42),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1520,7 +1553,7 @@ namespace MetaCompta.API.Migrations
                             Id = 15,
                             Category = "IR_BRACKET",
                             Code = "T5",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2305),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(44),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1534,7 +1567,7 @@ namespace MetaCompta.API.Migrations
                             Id = 16,
                             Category = "IR_BRACKET",
                             Code = "T6",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2312),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(46),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1548,7 +1581,7 @@ namespace MetaCompta.API.Migrations
                             Id = 17,
                             Category = "IS_RATE",
                             Code = "NORMAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2414),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(48),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1561,7 +1594,7 @@ namespace MetaCompta.API.Migrations
                             Id = 18,
                             Category = "IS_RATE",
                             Code = "REDUIT",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2420),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(91),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1574,7 +1607,7 @@ namespace MetaCompta.API.Migrations
                             Id = 19,
                             Category = "IS_RATE",
                             Code = "MINIMUM",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2426),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(93),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1587,7 +1620,7 @@ namespace MetaCompta.API.Migrations
                             Id = 20,
                             Category = "IR_DEDUCTION",
                             Code = "CHARGE_FAMILLE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2431),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(95),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1600,7 +1633,7 @@ namespace MetaCompta.API.Migrations
                             Id = 21,
                             Category = "IR_DEDUCTION",
                             Code = "PLAFOND_ENFANTS",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2437),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(96),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -1614,7 +1647,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "LEGAL",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(2443),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(98),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1628,7 +1661,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "FISCAL",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3865),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(270),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1642,7 +1675,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "SOCIAL",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3875),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(272),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1656,7 +1689,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "COMPTABLE",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3881),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(274),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1670,7 +1703,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "RH",
                             Couleur = "#d97706",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3886),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(275),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1684,7 +1717,7 @@ namespace MetaCompta.API.Migrations
                             Category = "DOC_CATEGORY",
                             Code = "ADMIN",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3892),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(277),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1698,7 +1731,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_CONTRAT",
                             Code = "CDI",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3898),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(278),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1712,7 +1745,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_CONTRAT",
                             Code = "CDD",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3980),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(280),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1726,7 +1759,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_CONTRAT",
                             Code = "INTERIM",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3986),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(282),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1740,7 +1773,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_CONTRAT",
                             Code = "STAGE",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3991),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(283),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1754,7 +1787,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "SARL",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(3997),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(285),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1768,7 +1801,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "SA",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4003),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(286),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1782,7 +1815,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "SNC",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4170),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(288),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1796,7 +1829,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "SCS",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4176),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(298),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1810,7 +1843,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "SCA",
                             Couleur = "#d97706",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4181),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(300),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1824,7 +1857,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "AUTO_ENTREPRENEUR",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4187),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(301),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1838,7 +1871,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "PERSONNE_PHYSIQUE",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4192),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(303),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1852,7 +1885,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "ASSOCIATION",
                             Couleur = "#ec4899",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4198),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(304),
                             CssClass = "bg-pink-subtle text-pink",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1866,7 +1899,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "COOPERATIVE",
                             Couleur = "#14b8a6",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4203),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(306),
                             CssClass = "bg-teal-subtle text-teal",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1880,7 +1913,7 @@ namespace MetaCompta.API.Migrations
                             Category = "FORME_JURIDIQUE",
                             Code = "EI",
                             Couleur = "#6366f1",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4256),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(307),
                             CssClass = "bg-indigo-subtle text-indigo",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -1894,7 +1927,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CLIENT",
                             Code = "Active",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(4262),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(309),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -1909,7 +1942,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CLIENT",
                             Code = "Inactive",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5012),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(378),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -1924,7 +1957,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CLIENT",
                             Code = "Dormante",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5022),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(380),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pause-circle",
@@ -1939,7 +1972,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CLIENT",
                             Code = "Dissoute",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5028),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(382),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-slash-circle",
@@ -1954,7 +1987,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_EMPLOYE",
                             Code = "Actif",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5034),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(384),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -1969,7 +2002,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_EMPLOYE",
                             Code = "Inactif",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5040),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(386),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -1984,7 +2017,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_EMPLOYE",
                             Code = "Suspendu",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5046),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(396),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pause-circle",
@@ -1999,7 +2032,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_DECLARATION",
                             Code = "TVA",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5052),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(398),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-receipt",
@@ -2014,7 +2047,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_DECLARATION",
                             Code = "IS",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5058),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(400),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-building",
@@ -2029,7 +2062,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_DECLARATION",
                             Code = "IR",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5064),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(401),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-person",
@@ -2044,7 +2077,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_DECLARATION",
                             Code = "CNSS",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5071),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(403),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-shield",
@@ -2059,7 +2092,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_DECLARATION",
                             Code = "IR_SALAIRES",
                             Couleur = "#d97706",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5140),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(436),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-cash",
@@ -2074,7 +2107,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5146),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(438),
                             CssClass = "badge-brouillon",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -2089,7 +2122,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "ACompleter",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5152),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(439),
                             CssClass = "badge-acompleter",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-exclamation-circle",
@@ -2104,7 +2137,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Completee",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5158),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(441),
                             CssClass = "badge-completee",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check",
@@ -2119,7 +2152,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "EnRevision",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5164),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(443),
                             CssClass = "badge-enrevision",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-eye",
@@ -2134,7 +2167,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Validee",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5170),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(444),
                             CssClass = "badge-validee",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -2149,7 +2182,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Soumise",
                             Couleur = "#166534",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5176),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(455),
                             CssClass = "badge-soumise",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-send",
@@ -2164,7 +2197,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Refusee",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5182),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(457),
                             CssClass = "badge-refusee",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -2179,7 +2212,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "EnCours",
                             Couleur = "#3b82f6",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5188),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(459),
                             CssClass = "badge-acompleter",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-repeat",
@@ -2194,7 +2227,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "EnPreparation",
                             Couleur = "#8b5cf6",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5193),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(460),
                             CssClass = "badge-enrevision",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-gear",
@@ -2209,7 +2242,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Payee",
                             Couleur = "#047857",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5200),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(462),
                             CssClass = "badge-soumise",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-cash-coin",
@@ -2224,7 +2257,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DECLARATION",
                             Code = "Rejetee",
                             Couleur = "#b91c1c",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5250),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(464),
                             CssClass = "badge-refusee",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-octagon",
@@ -2239,7 +2272,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_TVA",
                             Code = "Mensuelle",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5256),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(465),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2253,7 +2286,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_TVA",
                             Code = "Trimestrielle",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5261),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(467),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2267,7 +2300,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_TVA",
                             Code = "Exonere",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5267),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(469),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2280,7 +2313,7 @@ namespace MetaCompta.API.Migrations
                             Id = 64,
                             Category = "VILLE",
                             Code = "CASABLANCA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5273),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(470),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2292,7 +2325,7 @@ namespace MetaCompta.API.Migrations
                             Id = 65,
                             Category = "VILLE",
                             Code = "RABAT",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5277),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(471),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2304,7 +2337,7 @@ namespace MetaCompta.API.Migrations
                             Id = 66,
                             Category = "VILLE",
                             Code = "MARRAKECH",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5384),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(473),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2316,7 +2349,7 @@ namespace MetaCompta.API.Migrations
                             Id = 67,
                             Category = "VILLE",
                             Code = "FES",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5389),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(483),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2328,7 +2361,7 @@ namespace MetaCompta.API.Migrations
                             Id = 68,
                             Category = "VILLE",
                             Code = "TANGER",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5394),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(484),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2340,7 +2373,7 @@ namespace MetaCompta.API.Migrations
                             Id = 69,
                             Category = "VILLE",
                             Code = "AGADIR",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5399),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(485),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2352,7 +2385,7 @@ namespace MetaCompta.API.Migrations
                             Id = 70,
                             Category = "VILLE",
                             Code = "MEKNES",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5404),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(487),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2364,7 +2397,7 @@ namespace MetaCompta.API.Migrations
                             Id = 71,
                             Category = "VILLE",
                             Code = "OUJDA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5409),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(488),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2376,7 +2409,7 @@ namespace MetaCompta.API.Migrations
                             Id = 72,
                             Category = "VILLE",
                             Code = "KENITRA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5414),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(490),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2388,7 +2421,7 @@ namespace MetaCompta.API.Migrations
                             Id = 73,
                             Category = "VILLE",
                             Code = "TETOUAN",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5418),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(491),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2400,7 +2433,7 @@ namespace MetaCompta.API.Migrations
                             Id = 74,
                             Category = "VILLE",
                             Code = "SALE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5467),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(492),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2412,7 +2445,7 @@ namespace MetaCompta.API.Migrations
                             Id = 75,
                             Category = "VILLE",
                             Code = "NADOR",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5472),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(494),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2424,7 +2457,7 @@ namespace MetaCompta.API.Migrations
                             Id = 76,
                             Category = "VILLE",
                             Code = "MOHAMMEDIA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5477),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(495),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2436,7 +2469,7 @@ namespace MetaCompta.API.Migrations
                             Id = 77,
                             Category = "VILLE",
                             Code = "EL_JADIDA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5482),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(496),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2448,7 +2481,7 @@ namespace MetaCompta.API.Migrations
                             Id = 78,
                             Category = "VILLE",
                             Code = "BENI_MELLAL",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5486),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(498),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2460,7 +2493,7 @@ namespace MetaCompta.API.Migrations
                             Id = 79,
                             Category = "VILLE",
                             Code = "KHOURIBGA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5491),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(499),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2472,7 +2505,7 @@ namespace MetaCompta.API.Migrations
                             Id = 80,
                             Category = "VILLE",
                             Code = "SETTAT",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5496),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(501),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2484,7 +2517,7 @@ namespace MetaCompta.API.Migrations
                             Id = 81,
                             Category = "VILLE",
                             Code = "SAFI",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5501),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(502),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2496,7 +2529,7 @@ namespace MetaCompta.API.Migrations
                             Id = 82,
                             Category = "VILLE",
                             Code = "LAAYOUNE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5506),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(511),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2508,7 +2541,7 @@ namespace MetaCompta.API.Migrations
                             Id = 83,
                             Category = "VILLE",
                             Code = "DAKHLA",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5511),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(513),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2520,7 +2553,7 @@ namespace MetaCompta.API.Migrations
                             Id = 84,
                             Category = "SITUATION_FAMILIALE",
                             Code = "Celibataire",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5516),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(514),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-person",
                             IsActive = true,
@@ -2533,7 +2566,7 @@ namespace MetaCompta.API.Migrations
                             Id = 85,
                             Category = "SITUATION_FAMILIALE",
                             Code = "Marie",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5522),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(542),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-people",
                             IsActive = true,
@@ -2546,7 +2579,7 @@ namespace MetaCompta.API.Migrations
                             Id = 86,
                             Category = "SITUATION_FAMILIALE",
                             Code = "Divorce",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5527),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(543),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-person-dash",
                             IsActive = true,
@@ -2559,7 +2592,7 @@ namespace MetaCompta.API.Migrations
                             Id = 87,
                             Category = "SITUATION_FAMILIALE",
                             Code = "Veuf",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5532),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(545),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-person-x",
                             IsActive = true,
@@ -2572,7 +2605,7 @@ namespace MetaCompta.API.Migrations
                             Id = 88,
                             Category = "SEXE",
                             Code = "M",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5579),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(546),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2584,7 +2617,7 @@ namespace MetaCompta.API.Migrations
                             Id = 89,
                             Category = "SEXE",
                             Code = "F",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5584),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(548),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2596,7 +2629,7 @@ namespace MetaCompta.API.Migrations
                             Id = 90,
                             Category = "MODE_PAIEMENT",
                             Code = "Virement",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5588),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(549),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-bank",
                             IsActive = true,
@@ -2609,7 +2642,7 @@ namespace MetaCompta.API.Migrations
                             Id = 91,
                             Category = "MODE_PAIEMENT",
                             Code = "Cheque",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5594),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(550),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-credit-card",
                             IsActive = true,
@@ -2622,7 +2655,7 @@ namespace MetaCompta.API.Migrations
                             Id = 92,
                             Category = "MODE_PAIEMENT",
                             Code = "Especes",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5599),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(552),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-cash",
                             IsActive = true,
@@ -2636,7 +2669,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_ABSENCE",
                             Code = "Annuel",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5604),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(553),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2650,7 +2683,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_ABSENCE",
                             Code = "Maladie",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5610),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(555),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2664,7 +2697,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_ABSENCE",
                             Code = "SansSolde",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5615),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(557),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2678,7 +2711,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_ABSENCE",
                             Code = "Maternite",
                             Couleur = "#ec4899",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5621),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(567),
                             CssClass = "bg-pink-subtle text-pink",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2692,7 +2725,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_ABSENCE",
                             Code = "Exceptionnel",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5626),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(569),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -2706,7 +2739,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DOCUMENT",
                             Code = "EnAttente",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5632),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(570),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-clock",
@@ -2721,7 +2754,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DOCUMENT",
                             Code = "Valide",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5638),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(572),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -2736,7 +2769,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DOCUMENT",
                             Code = "Rejete",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5644),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(574),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -2751,7 +2784,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DOCUMENT",
                             Code = "Archive",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5777),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(575),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-archive",
@@ -2766,7 +2799,7 @@ namespace MetaCompta.API.Migrations
                             Category = "PRIORITE_TACHE",
                             Code = "Faible",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5784),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(577),
                             CssClass = "badge-faible",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-down",
@@ -2781,7 +2814,7 @@ namespace MetaCompta.API.Migrations
                             Category = "PRIORITE_TACHE",
                             Code = "Moyenne",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5790),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(578),
                             CssClass = "badge-moyenne",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-right",
@@ -2796,7 +2829,7 @@ namespace MetaCompta.API.Migrations
                             Category = "PRIORITE_TACHE",
                             Code = "Haute",
                             Couleur = "#ea580c",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5795),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(580),
                             CssClass = "badge-haute",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-up",
@@ -2811,7 +2844,7 @@ namespace MetaCompta.API.Migrations
                             Category = "PRIORITE_TACHE",
                             Code = "Urgente",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5801),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(582),
                             CssClass = "badge-urgente",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-exclamation-triangle",
@@ -2826,7 +2859,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_TACHE",
                             Code = "AFaire",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5807),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(583),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-circle",
@@ -2841,7 +2874,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_TACHE",
                             Code = "EnCours",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5813),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(585),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-play-circle",
@@ -2856,7 +2889,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_TACHE",
                             Code = "EnAttenteRevision",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5819),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(595),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-eye",
@@ -2871,7 +2904,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_TACHE",
                             Code = "Termine",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5825),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(596),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -2886,7 +2919,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_TACHE",
                             Code = "Annule",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5830),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(598),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -2901,7 +2934,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIE",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5836),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(600),
                             CssClass = "badge-brouillon",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -2916,7 +2949,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIE",
                             Code = "EnCours",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5842),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(601),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-play-circle",
@@ -2931,7 +2964,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIE",
                             Code = "EnAttenteValidation",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5890),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(603),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-clock",
@@ -2946,7 +2979,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIE",
                             Code = "Validee",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5896),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(605),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -2961,7 +2994,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIE",
                             Code = "Cloturee",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5902),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(606),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-lock",
@@ -2975,7 +3008,7 @@ namespace MetaCompta.API.Migrations
                             Id = 116,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "COMMERCE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5907),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(608),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2987,7 +3020,7 @@ namespace MetaCompta.API.Migrations
                             Id = 117,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "SERVICES",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5912),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(609),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -2999,7 +3032,7 @@ namespace MetaCompta.API.Migrations
                             Id = 118,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "INDUSTRIE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5919),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(610),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3011,7 +3044,7 @@ namespace MetaCompta.API.Migrations
                             Id = 119,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "BTP",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5924),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(612),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3023,7 +3056,7 @@ namespace MetaCompta.API.Migrations
                             Id = 120,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "IMMOBILIER",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5929),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(647),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3035,7 +3068,7 @@ namespace MetaCompta.API.Migrations
                             Id = 121,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "TRANSPORT",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5934),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(649),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3047,7 +3080,7 @@ namespace MetaCompta.API.Migrations
                             Id = 122,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "RESTAURATION",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5939),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(650),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3059,7 +3092,7 @@ namespace MetaCompta.API.Migrations
                             Id = 123,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "TECH",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5944),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(652),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3071,7 +3104,7 @@ namespace MetaCompta.API.Migrations
                             Id = 124,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "AGRICULTURE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5949),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(653),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3083,7 +3116,7 @@ namespace MetaCompta.API.Migrations
                             Id = 125,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "SANTE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5954),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(654),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3095,7 +3128,7 @@ namespace MetaCompta.API.Migrations
                             Id = 126,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "EDUCATION",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(5959),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(656),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3107,7 +3140,7 @@ namespace MetaCompta.API.Migrations
                             Id = 127,
                             Category = "SECTEUR_ACTIVITE",
                             Code = "AUTRE",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6002),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(657),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
                             IsDeleted = false,
@@ -3120,7 +3153,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "Legal",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6007),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(658),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-file-earmark-text",
@@ -3135,7 +3168,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "Fiscal",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6013),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(660),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calculator",
@@ -3150,7 +3183,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "Social",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6019),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(662),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-people",
@@ -3165,7 +3198,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "Comptable",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6025),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(663),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-journal-text",
@@ -3180,7 +3213,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "RH",
                             Couleur = "#d97706",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6030),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(665),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-person-badge",
@@ -3195,7 +3228,7 @@ namespace MetaCompta.API.Migrations
                             Category = "CATEGORIE_DOCUMENT",
                             Code = "Admin",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6036),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(676),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-folder",
@@ -3210,7 +3243,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6042),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(677),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -3225,7 +3258,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Soumis",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6048),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(679),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-send",
@@ -3240,7 +3273,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Approuve",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6134),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(681),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -3255,7 +3288,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Rejete",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6140),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(682),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -3270,7 +3303,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Expire",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6146),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(684),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-clock-history",
@@ -3285,7 +3318,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_DEVIS",
                             Code = "Annule",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6194),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(686),
                             CssClass = "bg-dark-subtle text-dark",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-slash-circle",
@@ -3300,7 +3333,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_BON_COMMANDE",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6200),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(687),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -3315,7 +3348,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_BON_COMMANDE",
                             Code = "Confirme",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6206),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(689),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check",
@@ -3330,7 +3363,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_BON_COMMANDE",
                             Code = "Approuve",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6212),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(690),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -3345,7 +3378,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_BON_COMMANDE",
                             Code = "Annule",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6218),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(692),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -3360,7 +3393,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6224),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(694),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -3375,7 +3408,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "EnCours",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6230),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(703),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-repeat",
@@ -3390,7 +3423,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Signe",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6236),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(705),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pen",
@@ -3405,7 +3438,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Confirme",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6242),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(707),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check",
@@ -3420,7 +3453,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Valide",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6247),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(708),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle-fill",
@@ -3435,7 +3468,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Actif",
                             Couleur = "#166534",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6253),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(710),
                             CssClass = "bg-success text-white",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-play-circle",
@@ -3450,7 +3483,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Suspendu",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6299),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(711),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pause-circle",
@@ -3465,7 +3498,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Termine",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6305),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(713),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-stop-circle",
@@ -3480,7 +3513,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_CONTRAT",
                             Code = "Annule",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6310),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(715),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -3495,7 +3528,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Brouillon",
                             Couleur = "#94a3b8",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6317),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(716),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-pencil",
@@ -3510,7 +3543,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Generee",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6323),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(718),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-file-earmark-text",
@@ -3525,7 +3558,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Envoyee",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6329),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(747),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-send",
@@ -3540,7 +3573,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Vue",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6334),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(758),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-eye",
@@ -3555,7 +3588,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "PartiellementPayee",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6340),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(760),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-cash",
@@ -3570,7 +3603,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Payee",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6346),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(761),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -3585,7 +3618,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "EnRetard",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6352),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(763),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-exclamation-triangle",
@@ -3600,7 +3633,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Annulee",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6358),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(765),
                             CssClass = "bg-dark-subtle text-dark",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -3615,7 +3648,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_FACTURE",
                             Code = "Remboursee",
                             Couleur = "#ec4899",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6364),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(767),
                             CssClass = "bg-pink-subtle text-pink",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-counterclockwise",
@@ -3630,7 +3663,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIEMENT",
                             Code = "Valide",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6414),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(768),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-check-circle",
@@ -3645,7 +3678,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIEMENT",
                             Code = "EnAttente",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6420),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(770),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-clock",
@@ -3660,7 +3693,7 @@ namespace MetaCompta.API.Migrations
                             Category = "STATUT_PAIEMENT",
                             Code = "Rejete",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6426),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(772),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-x-circle",
@@ -3675,7 +3708,7 @@ namespace MetaCompta.API.Migrations
                             Category = "MODELE_FACTURATION",
                             Code = "Forfait",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6432),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(773),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-box",
@@ -3690,7 +3723,7 @@ namespace MetaCompta.API.Migrations
                             Category = "MODELE_FACTURATION",
                             Code = "Regie",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6438),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(775),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-clock-history",
@@ -3705,7 +3738,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_LIGNE",
                             Code = "Service",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6444),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(777),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -3719,7 +3752,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_LIGNE",
                             Code = "Regie",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6450),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(786),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -3733,7 +3766,7 @@ namespace MetaCompta.API.Migrations
                             Category = "TYPE_LIGNE",
                             Code = "Forfait",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6455),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(788),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IsActive = true,
@@ -3746,7 +3779,7 @@ namespace MetaCompta.API.Migrations
                             Id = 260,
                             Category = "MODE_PAIEMENT_COMMERCIAL",
                             Code = "Virement",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6461),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(790),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-bank",
                             IsActive = true,
@@ -3759,7 +3792,7 @@ namespace MetaCompta.API.Migrations
                             Id = 261,
                             Category = "MODE_PAIEMENT_COMMERCIAL",
                             Code = "Cheque",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6466),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(792),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-credit-card",
                             IsActive = true,
@@ -3772,7 +3805,7 @@ namespace MetaCompta.API.Migrations
                             Id = 262,
                             Category = "MODE_PAIEMENT_COMMERCIAL",
                             Code = "Carte",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6532),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(793),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-credit-card-2-front",
                             IsActive = true,
@@ -3785,7 +3818,7 @@ namespace MetaCompta.API.Migrations
                             Id = 263,
                             Category = "MODE_PAIEMENT_COMMERCIAL",
                             Code = "Especes",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6537),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(795),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-cash",
                             IsActive = true,
@@ -3798,7 +3831,7 @@ namespace MetaCompta.API.Migrations
                             Id = 264,
                             Category = "MODE_PAIEMENT_COMMERCIAL",
                             Code = "Prelevement",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6936),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(796),
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-arrow-repeat",
                             IsActive = true,
@@ -3811,173 +3844,383 @@ namespace MetaCompta.API.Migrations
                             Id = 270,
                             Category = "TYPE_SERVICE",
                             Code = "TVA",
-                            Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6946),
-                            CssClass = "bg-primary-subtle text-primary",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(798),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-receipt",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Taxe sur la Valeur Ajoutée",
+                            Label = "TVA – Taxe sur la Valeur Ajoutée",
                             SortOrder = 1
                         },
                         new
                         {
                             Id = 271,
                             Category = "TYPE_SERVICE",
-                            Code = "IS",
-                            Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6952),
-                            CssClass = "bg-purple-subtle text-purple",
+                            Code = "CM",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(799),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-building",
+                            Icone = "bi-calculator",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Impôt sur les Sociétés",
+                            Label = "CM – Cotisation Minimale",
                             SortOrder = 2
                         },
                         new
                         {
                             Id = 272,
                             Category = "TYPE_SERVICE",
-                            Code = "IR",
-                            Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6958),
-                            CssClass = "bg-success-subtle text-success",
+                            Code = "DRF",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(801),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-person",
+                            Icone = "bi-file-earmark-text",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Impôt sur le Revenu",
+                            Label = "D.R.F – Déclaration du Résultat Fiscal",
                             SortOrder = 3
                         },
                         new
                         {
                             Id = 273,
                             Category = "TYPE_SERVICE",
-                            Code = "CNSS",
-                            Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6964),
-                            CssClass = "bg-info-subtle text-info",
+                            Code = "ACOMPTES",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(803),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-shield",
+                            Icone = "bi-calendar-range",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Caisse Nationale de Sécurité Sociale",
+                            Label = "Acomptes IS",
                             SortOrder = 4
                         },
                         new
                         {
                             Id = 274,
                             Category = "TYPE_SERVICE",
-                            Code = "PAIE",
-                            Couleur = "#d97706",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6970),
-                            CssClass = "bg-warning-subtle text-warning",
+                            Code = "REG_IS",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(804),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-cash-stack",
+                            Icone = "bi-arrow-repeat",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Gestion de la Paie",
+                            Label = "Régularisation IS – Reliquat d'Impôt",
                             SortOrder = 5
                         },
                         new
                         {
                             Id = 275,
                             Category = "TYPE_SERVICE",
-                            Code = "JURIDIQUE",
-                            Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6975),
-                            CssClass = "bg-danger-subtle text-danger",
+                            Code = "IR_SAL",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(814),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-briefcase",
+                            Icone = "bi-person-lines-fill",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Dossiers Juridiques",
+                            Label = "I.R/SALAIRE – IR Revenus Salariaux et assimilés",
                             SortOrder = 6
                         },
                         new
                         {
                             Id = 276,
                             Category = "TYPE_SERVICE",
-                            Code = "COMPTABILITE",
-                            Couleur = "#14b8a6",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6981),
-                            CssClass = "bg-teal-subtle text-teal",
+                            Code = "DRG",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(816),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-journal-text",
+                            Icone = "bi-person-badge",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Tenue Comptable",
+                            Label = "D.R.G – Déclaration du Revenu Global",
                             SortOrder = 7
                         },
                         new
                         {
                             Id = 277,
                             Category = "TYPE_SERVICE",
-                            Code = "BILAN",
-                            Couleur = "#6366f1",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6987),
-                            CssClass = "bg-indigo-subtle text-indigo",
+                            Code = "IR_COMP",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(818),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-bar-chart-line",
+                            Icone = "bi-send",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Bilan & États de Synthèse",
+                            Label = "IR/COMP – Versement de l'Impôt sur le Revenu",
                             SortOrder = 8
                         },
                         new
                         {
                             Id = 278,
                             Category = "TYPE_SERVICE",
-                            Code = "ETATSFISCAUX",
-                            Couleur = "#ec4899",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6993),
-                            CssClass = "bg-pink-subtle text-pink",
+                            Code = "RAS_FONC",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(819),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-file-earmark-spreadsheet",
+                            Icone = "bi-house",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "États Fiscaux",
+                            Label = "R.A.S/FONCIER – Retenue à la source sur Revenus Fonciers",
                             SortOrder = 9
                         },
                         new
                         {
                             Id = 279,
                             Category = "TYPE_SERVICE",
-                            Code = "AUDITCOMPTABLE",
-                            Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(6999),
-                            CssClass = "bg-secondary-subtle text-secondary",
+                            Code = "RAS_DIV",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(821),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-search",
+                            Icone = "bi-graph-up-arrow",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Audit Comptable",
+                            Label = "RAS/DIV – Retenue à la source sur Revenus de Capitaux",
                             SortOrder = 10
                         },
                         new
                         {
                             Id = 280,
                             Category = "TYPE_SERVICE",
-                            Code = "CONSEILFISCAL",
-                            Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7005),
-                            CssClass = "bg-warning-subtle text-warning",
+                            Code = "DT",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(822),
+                            CssClass = "bg-orange-subtle text-orange",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Icone = "bi-lightbulb",
+                            Icone = "bi-stamp",
                             IsActive = true,
                             IsDeleted = false,
-                            Label = "Conseil Fiscal",
+                            Label = "D.T – Droits de Timbre",
                             SortOrder = 11
                         },
                         new
                         {
+                            Id = 281,
+                            Category = "TYPE_SERVICE",
+                            Code = "DEI_TP",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(824),
+                            CssClass = "bg-orange-subtle text-orange",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-geo-alt",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "D.E.I/TP – Déclaration des Éléments Imposables (Taxe Prof.)",
+                            SortOrder = 12
+                        },
+                        new
+                        {
+                            Id = 282,
+                            Category = "TYPE_SERVICE",
+                            Code = "EG",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(826),
+                            CssClass = "bg-orange-subtle text-orange",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-fuel-pump",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "E.G – État Descriptif du Gasoil",
+                            SortOrder = 13
+                        },
+                        new
+                        {
+                            Id = 283,
+                            Category = "TYPE_SERVICE",
+                            Code = "DRVT",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(827),
+                            CssClass = "bg-orange-subtle text-orange",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-people",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "D.R.V.T – Déclaration des Rémunérations versées à des Tiers",
+                            SortOrder = 14
+                        },
+                        new
+                        {
+                            Id = 284,
+                            Category = "TYPE_SERVICE",
+                            Code = "CSS_SOL",
+                            Couleur = "#c2410c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(829),
+                            CssClass = "bg-orange-subtle text-orange",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-heart",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "C.S.S – Contribution Sociale de Solidarité sur Bénéfices",
+                            SortOrder = 15
+                        },
+                        new
+                        {
                             Id = 285,
+                            Category = "TYPE_SERVICE",
+                            Code = "CNSS",
+                            Couleur = "#065f46",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(830),
+                            CssClass = "bg-success-subtle text-success",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-shield-shaded",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "C.N.S.S – Caisse Nationale de Sécurité Sociale",
+                            SortOrder = 20
+                        },
+                        new
+                        {
+                            Id = 286,
+                            Category = "TYPE_SERVICE",
+                            Code = "DTS",
+                            Couleur = "#065f46",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(858),
+                            CssClass = "bg-success-subtle text-success",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-file-earmark-person",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "D.T.S/État 9421 – Déclaration des Traitements et Salaires",
+                            SortOrder = 21
+                        },
+                        new
+                        {
+                            Id = 287,
+                            Category = "TYPE_SERVICE",
+                            Code = "DCH_ETS",
+                            Couleur = "#065f46",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(869),
+                            CssClass = "bg-success-subtle text-success",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-building-x",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "D.CH.ETS – Déclaration de Chômage d'Établissement",
+                            SortOrder = 22
+                        },
+                        new
+                        {
+                            Id = 288,
+                            Category = "TYPE_SERVICE",
+                            Code = "PV_AGO",
+                            Couleur = "#be123c",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(871),
+                            CssClass = "bg-danger-subtle text-danger",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-card-checklist",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "PV AGO – Procès Verbal Assemblée Générale Ordinaire",
+                            SortOrder = 30
+                        },
+                        new
+                        {
+                            Id = 289,
+                            Category = "TYPE_SERVICE",
+                            Code = "COMPTABILITE",
+                            Couleur = "#1d4ed8",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(873),
+                            CssClass = "bg-primary-subtle text-primary",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-journal-bookmark",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Saisie Comptable & Journaux",
+                            SortOrder = 40
+                        },
+                        new
+                        {
+                            Id = 290,
+                            Category = "TYPE_SERVICE",
+                            Code = "TRESORERIE",
+                            Couleur = "#1d4ed8",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(874),
+                            CssClass = "bg-primary-subtle text-primary",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-safe2",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Gestion de Trésorerie & Rapprochement Bancaire",
+                            SortOrder = 41
+                        },
+                        new
+                        {
+                            Id = 291,
+                            Category = "TYPE_SERVICE",
+                            Code = "IMMOBILISATION",
+                            Couleur = "#1d4ed8",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(876),
+                            CssClass = "bg-primary-subtle text-primary",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-box-seam",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Gestion des Immobilisations & Amortissements",
+                            SortOrder = 42
+                        },
+                        new
+                        {
+                            Id = 292,
+                            Category = "TYPE_SERVICE",
+                            Code = "BILAN",
+                            Couleur = "#6d28d9",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(878),
+                            CssClass = "bg-indigo-subtle text-indigo",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-clipboard-data",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Bilan & États de Synthèse",
+                            SortOrder = 43
+                        },
+                        new
+                        {
+                            Id = 293,
+                            Category = "TYPE_SERVICE",
+                            Code = "ETATSFISCAUX",
+                            Couleur = "#6d28d9",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(879),
+                            CssClass = "bg-indigo-subtle text-indigo",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-file-earmark-spreadsheet",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "États Fiscaux (CPC, ESG, TFT)",
+                            SortOrder = 44
+                        },
+                        new
+                        {
+                            Id = 294,
+                            Category = "TYPE_SERVICE",
+                            Code = "LIASSEFISCALE",
+                            Couleur = "#6d28d9",
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(881),
+                            CssClass = "bg-indigo-subtle text-indigo",
+                            EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Icone = "bi-files",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Liasse Fiscale",
+                            SortOrder = 45
+                        },
+                        new
+                        {
+                            Id = 320,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Fiscal",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7011),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(883),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calculator",
@@ -3988,11 +4231,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 286,
+                            Id = 321,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Social",
                             Couleur = "#0891b2",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7017),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(884),
                             CssClass = "bg-info-subtle text-info",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-people",
@@ -4003,11 +4246,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 287,
+                            Id = 322,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Comptable",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7023),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(886),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-journal-text",
@@ -4018,11 +4261,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 288,
+                            Id = 323,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Juridique",
                             Couleur = "#dc2626",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7029),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(887),
                             CssClass = "bg-danger-subtle text-danger",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-briefcase",
@@ -4033,11 +4276,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 289,
+                            Id = 324,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Conseil",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7035),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(889),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-lightbulb",
@@ -4048,11 +4291,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 290,
+                            Id = 325,
                             Category = "CATEGORIE_SERVICE",
                             Code = "Autre",
                             Couleur = "#64748b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7041),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(891),
                             CssClass = "bg-secondary-subtle text-secondary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-three-dots",
@@ -4063,11 +4306,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 295,
+                            Id = 330,
                             Category = "FREQUENCE",
                             Code = "Mensuelle",
                             Couleur = "#2563eb",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7047),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(892),
                             CssClass = "bg-primary-subtle text-primary",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calendar-month",
@@ -4078,11 +4321,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 296,
+                            Id = 331,
                             Category = "FREQUENCE",
                             Code = "Trimestrielle",
                             Couleur = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7053),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(894),
                             CssClass = "bg-purple-subtle text-purple",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calendar3",
@@ -4093,11 +4336,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 297,
+                            Id = 332,
                             Category = "FREQUENCE",
                             Code = "Annuelle",
                             Couleur = "#059669",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7059),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(895),
                             CssClass = "bg-success-subtle text-success",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calendar-event",
@@ -4108,11 +4351,11 @@ namespace MetaCompta.API.Migrations
                         },
                         new
                         {
-                            Id = 298,
+                            Id = 333,
                             Category = "FREQUENCE",
                             Code = "Ponctuelle",
                             Couleur = "#f59e0b",
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 189, DateTimeKind.Utc).AddTicks(7065),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 638, DateTimeKind.Utc).AddTicks(897),
                             CssClass = "bg-warning-subtle text-warning",
                             EffectiveFrom = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Icone = "bi-calendar-check",
@@ -4209,7 +4452,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 1,
                             AnnualPrice = 4990m,
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 184, DateTimeKind.Utc).AddTicks(712),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(1400),
                             Description = "Pour les petits cabinets",
                             IsActive = true,
                             IsDeleted = false,
@@ -4224,7 +4467,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 2,
                             AnnualPrice = 9990m,
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 184, DateTimeKind.Utc).AddTicks(4594),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(2252),
                             Description = "Pour les cabinets en croissance",
                             IsActive = true,
                             IsDeleted = false,
@@ -4239,7 +4482,7 @@ namespace MetaCompta.API.Migrations
                         {
                             Id = 3,
                             AnnualPrice = 19990m,
-                            CreatedAt = new DateTime(2026, 3, 25, 23, 9, 21, 184, DateTimeKind.Utc).AddTicks(4603),
+                            CreatedAt = new DateTime(2026, 5, 19, 13, 23, 15, 637, DateTimeKind.Utc).AddTicks(2254),
                             Description = "Pour les grands cabinets",
                             IsActive = true,
                             IsDeleted = false,
@@ -4250,6 +4493,71 @@ namespace MetaCompta.API.Migrations
                             MonthlyPrice = 1999m,
                             Name = "Entreprise"
                         });
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.AffectationRubrique", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DateEffet")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateFin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("RubriqueCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RubriqueId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("ValeurDefaut")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("RubriqueId");
+
+                    b.ToTable("AffectationsRubriques");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.BonCommande", b =>
@@ -4372,6 +4680,92 @@ namespace MetaCompta.API.Migrations
                         .IsUnique();
 
                     b.ToTable("BonsCommande", (string)null);
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.BulletinLigne", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AfficherSurBulletin")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("Base")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Gain")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("OrdreAffichage")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PaySlipId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Retenue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("RubriqueCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("RubriqueId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Section")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("Taux")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaySlipId");
+
+                    b.HasIndex("RubriqueId");
+
+                    b.ToTable("BulletinLignes");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.Client", b =>
@@ -4593,6 +4987,77 @@ namespace MetaCompta.API.Migrations
                     b.ToTable("ClientWorkflowConfigs");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.ConstanteGlobale", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Categorie")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DateEffet")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateFin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Valeur")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId", "Code", "DateEffet")
+                        .IsUnique();
+
+                    b.ToTable("ConstantesGlobales");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.ContratCommercial", b =>
                 {
                     b.Property<int>("Id")
@@ -4709,6 +5174,10 @@ namespace MetaCompta.API.Migrations
                     b.Property<string>("ResponsableId")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("ServicesActivesJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
                     b.Property<string>("SignataireFonction")
                         .HasColumnType("nvarchar(max)");
 
@@ -4759,6 +5228,66 @@ namespace MetaCompta.API.Migrations
                         .IsUnique();
 
                     b.ToTable("ContratsCommerciaux", (string)null);
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.CumulEmploye", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Annee")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Mois")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RubriqueCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Valeur")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId");
+
+                    b.HasIndex("EmployeeId", "RubriqueCode", "Annee", "Mois")
+                        .IsUnique();
+
+                    b.ToTable("CumulsEmployes");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.Declaration", b =>
@@ -6134,6 +6663,10 @@ namespace MetaCompta.API.Migrations
                     b.Property<int?>("LigneSourceId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ModeFacturation")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<decimal>("MontantHT")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -6236,6 +6769,9 @@ namespace MetaCompta.API.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("DeclarationId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2");
 
@@ -6265,6 +6801,10 @@ namespace MetaCompta.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("SenderRole")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Sujet")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -6280,6 +6820,8 @@ namespace MetaCompta.API.Migrations
                     b.HasIndex("CabinetId");
 
                     b.HasIndex("ClientId");
+
+                    b.HasIndex("DeclarationId");
 
                     b.HasIndex("ParentMessageId");
 
@@ -6714,6 +7256,178 @@ namespace MetaCompta.API.Migrations
                     b.ToTable("PayrollPeriods");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.RegleCalcul", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Condition")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Formule")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Priorite")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RubriqueId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId");
+
+                    b.HasIndex("RubriqueId");
+
+                    b.ToTable("ReglesCalcul");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.Rubrique", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AfficherSurBulletin")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DependsDe")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FormuleBase")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FormuleGain")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FormuleMontant")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FormuleRetenue")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FormuleTaux")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("Obligatoire")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OrdreAffichage")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrdreExecution")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Section")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("Systeme")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("CabinetId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Rubriques");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.ServiceContrat", b =>
                 {
                     b.Property<int>("Id")
@@ -6823,6 +7537,110 @@ namespace MetaCompta.API.Migrations
                         .HasFilter("[ExerciceFiscal] IS NOT NULL");
 
                     b.ToTable("ServiceContrats", (string)null);
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.TVALigneFacture", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DateFacture")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DeclarationTVAId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FournisseurClient")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ICE")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("IdentifiantFiscal")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsProrata")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MontantHT")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("MontantTTC")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("MontantTVA")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("NumeroFacture")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal?>("ProrataPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Regime")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("TauxTVA")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("TypeOperation")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("TypePiece")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId");
+
+                    b.HasIndex("DeclarationTVAId");
+
+                    b.ToTable("TVALignesFactures", (string)null);
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.TaskComment", b =>
@@ -6962,6 +7780,72 @@ namespace MetaCompta.API.Migrations
                     b.HasIndex("DeclarationId");
 
                     b.ToTable("TaskItems");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.VariableEmploye", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CabinetId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DateEffet")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateFin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LibellePersonnalise")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RubriqueCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Valeur")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CabinetId");
+
+                    b.HasIndex("EmployeeId", "RubriqueCode", "DateEffet")
+                        .IsUnique();
+
+                    b.ToTable("VariablesEmployes");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.WorkflowHistory", b =>
@@ -7161,11 +8045,23 @@ namespace MetaCompta.API.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("LastRetryAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ResultDataJson")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RoutedToStepOrder")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
@@ -7183,6 +8079,9 @@ namespace MetaCompta.API.Migrations
                     b.Property<int?>("TaskItemId")
                         .HasColumnType("int");
 
+                    b.Property<string>("TriggerSource")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -7193,22 +8092,6 @@ namespace MetaCompta.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("WorkflowStepTemplateId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RetryCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("LastRetryAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("NextRetryAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("TriggerSource")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("RoutedToStepOrder")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -7237,6 +8120,15 @@ namespace MetaCompta.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ActionConfigJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ActionOnComplete")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ActionOnEntry")
+                        .HasColumnType("int");
+
                     b.Property<int?>("AssignedToDepartmentId")
                         .HasColumnType("int");
 
@@ -7264,6 +8156,12 @@ namespace MetaCompta.API.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CronDescription")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CronExpression")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("DeclarationStatusOnComplete")
                         .HasColumnType("nvarchar(max)");
 
@@ -7279,6 +8177,9 @@ namespace MetaCompta.API.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("GotoStepOrder")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsBlocking")
                         .HasColumnType("bit");
 
@@ -7291,16 +8192,37 @@ namespace MetaCompta.API.Migrations
                     b.Property<bool>("IsRequired")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsScheduled")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<string>("OnMaxRetriesAction")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("RequiredPermission")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("RetryIntervalHours")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RoutingConditionsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RoutingMode")
+                        .HasColumnType("int");
+
                     b.Property<int?>("SLAHours")
                         .HasColumnType("int");
+
+                    b.Property<string>("ServiceContratTypeCode")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("StepOrder")
                         .HasColumnType("int");
@@ -7315,66 +8237,23 @@ namespace MetaCompta.API.Migrations
                     b.Property<int>("TaskType")
                         .HasColumnType("int");
 
+                    b.Property<int>("TriggerSource")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("UseServiceContratAffectation")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ValidationRulesJson")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("WorkflowTemplateId")
                         .HasColumnType("int");
-
-                    b.Property<int>("ActionOnEntry")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ActionOnComplete")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ActionConfigJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CronExpression")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("CronDescription")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsScheduled")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("MaxRetries")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RetryIntervalHours")
-                        .HasColumnType("int");
-
-                    b.Property<string>("OnMaxRetriesAction")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("RoutingMode")
-                        .HasColumnType("int");
-
-                    b.Property<string>("RoutingConditionsJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("GotoStepOrder")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TriggerSource")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("UseServiceContratAffectation")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("ServiceContratTypeCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
 
                     b.HasKey("Id");
 
@@ -7429,6 +8308,9 @@ namespace MetaCompta.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSystem")
                         .HasColumnType("bit");
 
                     b.Property<string>("Name")
@@ -7606,6 +8488,33 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.AffectationRubrique", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Employee", "Employee")
+                        .WithMany("Affectations")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Rubrique", "Rubrique")
+                        .WithMany()
+                        .HasForeignKey("RubriqueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Rubrique");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.BonCommande", b =>
                 {
                     b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
@@ -7638,6 +8547,25 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Devis");
 
                     b.Navigation("Responsable");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.BulletinLigne", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Entities.PaySlip", "PaySlip")
+                        .WithMany("BulletinLignes")
+                        .HasForeignKey("PaySlipId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Rubrique", "Rubrique")
+                        .WithMany("BulletinLignes")
+                        .HasForeignKey("RubriqueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaySlip");
+
+                    b.Navigation("Rubrique");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.Client", b =>
@@ -7691,6 +8619,17 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("WorkflowTemplate");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.ConstanteGlobale", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.ContratCommercial", b =>
                 {
                     b.HasOne("MetaCompta.Domain.Entities.BonCommande", "BonCommande")
@@ -7736,6 +8675,25 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Responsable");
 
                     b.Navigation("ValidateurUser");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.CumulEmploye", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Employee", "Employee")
+                        .WithMany("Cumuls")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("Employee");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.Declaration", b =>
@@ -8139,6 +9097,10 @@ namespace MetaCompta.API.Migrations
                         .WithMany()
                         .HasForeignKey("ClientId");
 
+                    b.HasOne("MetaCompta.Domain.Entities.Declaration", "Declaration")
+                        .WithMany()
+                        .HasForeignKey("DeclarationId");
+
                     b.HasOne("MetaCompta.Domain.Entities.Message", "ParentMessage")
                         .WithMany()
                         .HasForeignKey("ParentMessageId");
@@ -8146,6 +9108,8 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Cabinet");
 
                     b.Navigation("Client");
+
+                    b.Navigation("Declaration");
 
                     b.Navigation("ParentMessage");
                 });
@@ -8239,6 +9203,43 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Validateur");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.RegleCalcul", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Rubrique", "Rubrique")
+                        .WithMany("Regles")
+                        .HasForeignKey("RubriqueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("Rubrique");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.Rubrique", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.ServiceContrat", b =>
                 {
                     b.HasOne("MetaCompta.Domain.Entities.Client", "Client")
@@ -8255,6 +9256,25 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Responsable");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.TVALigneFacture", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.DeclarationTVA", "DeclarationTVA")
+                        .WithMany("LignesFactures")
+                        .HasForeignKey("DeclarationTVAId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("DeclarationTVA");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.TaskComment", b =>
@@ -8309,6 +9329,25 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Declaration");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.VariableEmploye", b =>
+                {
+                    b.HasOne("MetaCompta.Domain.Common.Cabinet", "Cabinet")
+                        .WithMany()
+                        .HasForeignKey("CabinetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MetaCompta.Domain.Entities.Employee", "Employee")
+                        .WithMany("Variables")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cabinet");
+
+                    b.Navigation("Employee");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.WorkflowHistory", b =>
@@ -8598,6 +9637,11 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("History");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.DeclarationTVA", b =>
+                {
+                    b.Navigation("LignesFactures");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Members");
@@ -8618,9 +9662,15 @@ namespace MetaCompta.API.Migrations
                 {
                     b.Navigation("Absences");
 
+                    b.Navigation("Affectations");
+
+                    b.Navigation("Cumuls");
+
                     b.Navigation("Documents");
 
                     b.Navigation("PaySlips");
+
+                    b.Navigation("Variables");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.Facture", b =>
@@ -8632,9 +9682,21 @@ namespace MetaCompta.API.Migrations
                     b.Navigation("Paiements");
                 });
 
+            modelBuilder.Entity("MetaCompta.Domain.Entities.PaySlip", b =>
+                {
+                    b.Navigation("BulletinLignes");
+                });
+
             modelBuilder.Entity("MetaCompta.Domain.Entities.PayrollPeriod", b =>
                 {
                     b.Navigation("PaySlips");
+                });
+
+            modelBuilder.Entity("MetaCompta.Domain.Entities.Rubrique", b =>
+                {
+                    b.Navigation("BulletinLignes");
+
+                    b.Navigation("Regles");
                 });
 
             modelBuilder.Entity("MetaCompta.Domain.Entities.TaskItem", b =>

@@ -8,18 +8,12 @@
 }
 
 <style>
-    .cc-header { background:linear-gradient(135deg,#7c3aed 0%,#a855f7 50%,#c084fc 100%); border-radius:18px; color:#fff; padding:1.75rem 2.25rem; position:relative; overflow:hidden; }
-    .cc-header::before { content:''; position:absolute; top:-40%; right:-10%; width:250px; height:250px; border-radius:50%; background:rgba(255,255,255,0.06); }
-    .cc-glass { background:rgba(255,255,255,0.92); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.5); border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,0.05); }
-    .cc-section-title { font-size:0.88rem; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem; }
-    .cc-form-label { font-size:0.8rem; font-weight:600; color:#475569; margin-bottom:0.3rem; }
-    .cc-form-control { border-radius:10px; border:1.5px solid #e2e8f0; font-size:0.85rem; }
-    .cc-form-select { border-radius:10px; border:1.5px solid #e2e8f0; font-size:0.85rem; }
-    .cc-form-check .form-check-input { border-radius:6px; }
-    .cc-form-check .form-check-label { font-size:0.8rem; color:#475569; font-weight:500; }
-    .cc-table th { font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid #e2e8f0; padding:0.65rem 0.75rem; background:#f8fafc; }
-    .cc-table td { font-size:0.82rem; padding:0.65rem 0.75rem; vertical-align:middle; border-bottom:1px solid #f1f5f9; }
-    .cc-check { font-size:1.1rem; }
+    .cc-header { background: var(--monday-blue); border-radius: 18px; color: #fff; padding: 1.75rem 2.25rem; }
+    .cc-glass { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; box-shadow: var(--monday-shadow); }
+    .cc-section-title { font-size: 0.88rem; font-weight: 700; color: var(--monday-text); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .cc-table th { font-size: 0.75rem; font-weight: 700; color: var(--monday-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--monday-border); padding: 0.65rem 0.75rem; background: var(--monday-bg); }
+    .cc-table td { font-size: 0.82rem; padding: 0.65rem 0.75rem; vertical-align: middle; border-bottom: 1px solid var(--monday-border); }
+    .cc-check { font-size: 1.1rem; }
 </style>
 
 <!-- HEADER -->
@@ -71,6 +65,8 @@
 }
 
 <!-- ADD / UPDATE -->
+@if (ViewBag.CanWorkflowConfigure as bool? ?? false)
+{
 <div class="cc-glass p-4">
     <div class="cc-section-title"><i class="bi bi-plus-circle text-primary"></i> Ajouter / Modifier une configuration</div>
     <form asp-action="SaveClientConfig" method="post">
@@ -126,3 +122,4 @@
         </div>
     </form>
 </div>
+}

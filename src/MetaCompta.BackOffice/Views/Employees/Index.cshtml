@@ -12,7 +12,10 @@
         <h4 class="fw-bold mb-1"><i class="bi bi-people text-primary me-2"></i>Employés</h4>
         <p class="text-muted mb-0">@Model.TotalCount employé(s)</p>
     </div>
-    <a asp-action="Create" class="btn btn-primary rounded-pill px-3"><i class="bi bi-plus-circle me-1"></i> Nouvel Employé</a>
+    @if (ViewBag.CanEmployeeCreate as bool? ?? false)
+    {
+        <a asp-action="Create" class="btn btn-primary rounded-pill px-3"><i class="bi bi-plus-circle me-1"></i> Nouvel Employé</a>
+    }
 </div>
 
 @if (client != null)
@@ -89,11 +92,17 @@
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
                                         <a asp-action="Details" asp-route-id="@e.Id" class="btn btn-outline-primary rounded-start-pill"><i class="bi bi-eye"></i></a>
-                                        <a asp-action="Edit" asp-route-id="@e.Id" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
-                                        <form asp-action="Delete" asp-route-id="@e.Id" method="post" class="d-inline" onsubmit="return confirm('Supprimer cet employé?')">
-                                            @Html.AntiForgeryToken()
-                                            <button class="btn btn-outline-danger btn-sm rounded-end-pill"><i class="bi bi-trash"></i></button>
-                                        </form>
+                                        @if (ViewBag.CanEmployeeEdit as bool? ?? false)
+                                        {
+                                            <a asp-action="Edit" asp-route-id="@e.Id" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
+                                        }
+                                        @if (ViewBag.CanEmployeeDelete as bool? ?? false)
+                                        {
+                                            <form asp-action="Delete" asp-route-id="@e.Id" method="post" class="d-inline" onsubmit="return confirm('Supprimer cet employé?')">
+                                                @Html.AntiForgeryToken()
+                                                <button class="btn btn-outline-danger btn-sm rounded-end-pill"><i class="bi bi-trash"></i></button>
+                                            </form>
+                                        }
                                     </div>
                                 </td>
                             </tr>

@@ -1,0 +1,96 @@
+@using MetaCompta.Application.DTOs
+@model IEnumerable<TVALigneFactureDto>
+@{
+    var declarationId = (int)(ViewData["DeclarationId"] ?? 0);
+    var emptyMessage = ViewData["EmptyMessage"]?.ToString() ?? "Aucune ligne.";
+    var partnerHeader = ViewData["PartnerHeader"]?.ToString() ?? "Client / Fournisseur";
+    var badgeClass = ViewData["OperationBadgeClass"]?.ToString() ?? "bg-secondary-subtle text-secondary";
+    var badgeText = ViewData["OperationBadgeText"]?.ToString() ?? "";
+    var showTotals = ViewData["ShowTotals"] as bool? ?? true;
+    var totalsLabel = ViewData["TotalsLabel"]?.ToString() ?? "Total";
+    var totalsClass = ViewData["TotalsClass"]?.ToString() ?? "";
+    var list = Model?.ToList() ?? new List<TVALigneFactureDto>();
+}
+
+<div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 mc-table">
+        <thead class="table-light">
+            <tr>
+                <th class="ps-3">Type</th>
+                <th>N° Facture</th>
+                <th>Date</th>
+                <th>@partnerHeader</th>
+                <th>ICE</th>
+                <th>Description</th>
+                <th class="text-end">HT</th>
+                <th>Taux</th>
+                <th class="text-end">TVA</th>
+                <th class="text-end">TTC</th>
+                <th>Nature</th>
+                <th class="text-end pe-3">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (list.Any())
+            {
+                foreach (var ligne in list)
+                {
+                    <tr>
+                        <td class="ps-3">
+                            @{
+                                var pieceIcon = ligne.TypePiece switch
+                                {
+                                    "Avoir" => "bi-arrow-return-left text-danger",
+                                    "AutoFacture" => "bi-arrow-repeat text-warning",
+                                    _ => "bi-receipt text-primary"
+                                };
+                            }
+                            <i class="bi @pieceIcon me-1"></i>@ligne.TypePiece
+                        </td>
+                        <td class="fw-semibold">@(ligne.NumeroFacture ?? "-")</td>
+                        <td>@ligne.DateFacture.ToString("dd/MM/yyyy")</td>
+                        <td>@(ligne.FournisseurClient ?? "-")</td>
+                        <td><small class="text-muted">@(ligne.ICE ?? "-")</small></td>
+                        <td>@(ligne.Description ?? "-")</td>
+                        <td class="text-end fw-semibold">@ligne.MontantHT.ToString("N2")</td>
+                        <td><span class="badge bg-secondary-subtle text-secondary rounded-pill">@ligne.TauxTVA%</span></td>
+                        <td class="text-end">@ligne.MontantTVA.ToString("N2")</td>
+                        <td class="text-end fw-bold">@ligne.MontantTTC.ToString("N2")</td>
+                        <td><span class="badge @badgeClass rounded-pill">@badgeText</span></td>
+                        <td class="text-end pe-3">
+                            <form asp-action="DeleteTVALigne" method="post" class="d-inline" onsubmit="return confirm('Supprimer cette ligne ?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="declarationId" value="@declarationId" />
+                                <input type="hidden" name="ligneId" value="@ligne.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (showTotals)
+                {
+                    <tr class="table-light fw-bold">
+                        <td class="ps-3" colspan="6">
+                            <i class="bi bi-sigma me-1"></i><span class="@totalsClass">@totalsLabel</span>
+                        </td>
+                        <td class="text-end @totalsClass">@list.Sum(l => l.MontantHT).ToString("N2")</td>
+                        <td></td>
+                        <td class="text-end @totalsClass">@list.Sum(l => l.MontantTVA).ToString("N2")</td>
+                        <td class="text-end @totalsClass">@list.Sum(l => l.MontantTTC).ToString("N2")</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="12" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        @emptyMessage
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

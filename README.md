@@ -81,9 +81,9 @@ docker-compose logs -f
 | Service | URL | Description |
 |---------|-----|-------------|
 | **API** | `https://localhost:7100` | API REST + Swagger UI |
-| **BackOffice** | `http://localhost:7200` | Interface de gestion |
-| **Extranet** | `http://localhost:7300` | Portail client |
-| **Admin** | `http://localhost:7400` | Administration SaaS |
+| **BackOffice** | `http://localhost:7101` | Interface de gestion |
+| **Extranet** | `http://localhost:7102` | Portail client |
+| **Admin** | `http://localhost:7103` | Administration SaaS |
 
 ## 🔑 Comptes de Démonstration
 

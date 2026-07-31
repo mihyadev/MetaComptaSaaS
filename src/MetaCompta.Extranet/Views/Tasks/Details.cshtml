@@ -1,0 +1,249 @@
+@model MetaCompta.Application.DTOs.WorkflowStepInstanceDto
+@using MetaCompta.Application.DTOs
+@{
+    ViewData["Title"] = Model.StepName;
+    var step = Model;
+    var decl = ViewBag.Declaration as DeclarationDto;
+    var docs = ViewBag.Documents as List<DocumentDto> ?? new List<DocumentDto>();
+    var messages = ViewBag.Messages as List<MessageDto> ?? new List<MessageDto>();
+    var wf = ViewBag.WorkflowInstance as WorkflowInstanceDto;
+    var isCollecte = step.StepType is "Collecte" or "DemandePieces";
+    var isApproval = step.StepType == "ValidationClient";
+    var canAct = step.Status is "WaitingForClient" or "InProgress" or "WaitingForValidation";
+    var progress = step.ProgressPercent;
+    var declId = step.DeclarationId ?? decl?.Id ?? wf?.DeclarationId;
+    var clientId = step.ClientId ?? decl?.ClientId;
+}
+
+<div class="ex-page-hero">
+    <div>
+        <a href="/Tasks" class="btn btn-sm btn-outline-secondary mb-2"><i class="bi bi-arrow-left me-1"></i>Mes tâches</a>
+        <h4 class="mb-1">@step.StepName</h4>
+        <p class="ex-sub mb-0">
+            @(step.DeclarationType ?? decl?.Type ?? "Dossier") @(step.DeclarationPeriode ?? decl?.Periode)
+            @if (declId.HasValue) { <span>· Déclaration #@declId</span> }
+        </p>
+    </div>
+    <span class="ex-status-pill bg-warning-subtle text-warning-emphasis">À votre charge</span>
+</div>
+
+<div class="ex-board-card accent-warning mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <div>
+            <div class="fw-bold">Action demandée par votre cabinet</div>
+            <div class="small text-muted mt-1">
+                @if (isCollecte)
+                {
+                    <span>Déposez les documents demandés, laissez un message si besoin, puis terminez la tâche.</span>
+                }
+                else if (isApproval)
+                {
+                    <span>Vérifiez les informations puis approuvez pour terminer cette étape.</span>
+                }
+                else
+                {
+                    <span>Traitez cette étape puis cliquez sur Terminer.</span>
+                }
+            </div>
+        </div>
+        @if (step.DueDate.HasValue)
+        {
+            <div class="small @(step.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                <i class="bi bi-calendar-event me-1"></i>Échéance @step.DueDate.Value.ToString("dd/MM/yyyy")
+            </div>
+        }
+    </div>
+    @if (step.TotalSteps > 0)
+    {
+        <div class="ex-progress mb-0">
+            <div class="ex-progress-meta">
+                <span>Avancement dossier</span>
+                <span>@step.CompletedSteps / @step.TotalSteps (@progress.ToString("0.#")%)</span>
+            </div>
+            <div class="progress"><div class="progress-bar" style="width:@(progress.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(step.Notes))
+    {
+        <div class="small mt-3 fst-italic text-muted">
+            <i class="bi bi-info-circle me-1"></i>@step.Notes
+        </div>
+    }
+</div>
+
+@if (declId.HasValue)
+{
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="ex-board-card h-100" id="documents">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-paperclip text-primary me-2"></i>Documents (@docs.Count)</h6>
+                </div>
+                <form asp-action="UploadDocument" method="post" enctype="multipart/form-data" class="p-3 rounded-3 bg-body-tertiary border mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="stepId" value="@step.Id" />
+                    <input type="hidden" name="declarationId" value="@declId" />
+                    <div class="mb-2">
+                        <input type="file" name="file" class="form-control form-control-sm" required
+                               accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv,.doc,.docx" />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col">
+                            <input type="text" name="titre" class="form-control form-control-sm" placeholder="Titre (optionnel)" />
+                        </div>
+                        <div class="col-auto">
+                            <select name="categorie" class="form-select form-select-sm">
+                                <option value="Fiscal">Fiscal</option>
+                                <option value="Comptable">Comptable</option>
+                                <option value="Legal">Légal</option>
+                                <option value="Bancaire">Bancaire</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-cloud-upload me-1"></i>Envoyer le document
+                    </button>
+                </form>
+
+                @if (docs.Any())
+                {
+                    <div style="max-height:280px; overflow-y:auto;">
+                        @foreach (var doc in docs.OrderByDescending(d => d.CreatedAt))
+                        {
+                            var sBadge = doc.Statut switch { "Valide" => "success", "Rejete" => "danger", _ => "warning" };
+                            <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+                                <i class="bi bi-file-earmark text-muted"></i>
+                                <div class="flex-grow-1 min-width-0">
+                                    <div class="fw-medium text-truncate small">@doc.NomFichier</div>
+                                    <div class="small text-muted" style="font-size:.72rem;">@doc.Categorie · @doc.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                                </div>
+                                <span class="badge bg-@sBadge rounded-pill" style="font-size:.65rem;">@doc.Statut</span>
+                                <a href="/Tasks/DownloadDocument/@doc.Id?stepId=@step.Id" class="btn btn-sm text-primary" title="Télécharger"><i class="bi bi-download"></i></a>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-3 text-muted small">Aucun document déposé pour l'instant.</div>
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="ex-board-card h-100" id="messages">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-chat-dots text-primary me-2"></i>Messages (@messages.Count)</h6>
+                </div>
+                <form asp-action="SendMessage" method="post" class="p-3 rounded-3 bg-body-tertiary border mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="stepId" value="@step.Id" />
+                    <input type="hidden" name="declarationId" value="@declId" />
+                    <input type="hidden" name="clientId" value="@(clientId ?? 0)" />
+                    <div class="mb-2">
+                        <input type="text" name="sujet" class="form-control form-control-sm" placeholder="Objet (optionnel)" />
+                    </div>
+                    <div class="mb-2">
+                        <textarea name="contenu" class="form-control form-control-sm" rows="3" placeholder="Écrivez un message à votre cabinet..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-send me-1"></i>Envoyer le message
+                    </button>
+                </form>
+
+                @if (messages.Any())
+                {
+                    <div class="d-flex flex-column gap-2" style="max-height:280px; overflow-y:auto;">
+                        @foreach (var msg in messages.OrderByDescending(m => m.CreatedAt).Take(20))
+                        {
+                            var isMe = msg.SenderRole == "Client";
+                            <div class="rounded-3 p-2 @(isMe ? "bg-primary text-white" : "bg-light border")">
+                                <div class="small fw-semibold mb-1 @(isMe ? "text-white-50" : "text-muted")" style="font-size:.72rem;">
+                                    @(isMe ? "Vous" : msg.SenderName) · @msg.CreatedAt.ToString("dd/MM HH:mm")
+                                </div>
+                                @if (!string.IsNullOrEmpty(msg.Sujet))
+                                {
+                                    <div class="small fw-semibold mb-1">@msg.Sujet</div>
+                                }
+                                <div class="small mb-0">@msg.Contenu</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-3 text-muted small">Aucun message.</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info">Cette tâche n'est pas liée à une déclaration — contactez votre cabinet si besoin.</div>
+}
+
+@if (canAct)
+{
+    <div class="ex-board-card accent-success mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <div class="fw-bold">Terminer la tâche</div>
+                <div class="small text-muted">
+                    @if (isCollecte)
+                    {
+                        <span>Confirmez uniquement après avoir déposé tous les documents requis.</span>
+                    }
+                    else
+                    {
+                        <span>Une fois terminé, le cabinet reprend le dossier.</span>
+                    }
+                </div>
+            </div>
+            <form asp-action="CompleteStep" method="post" class="d-flex flex-wrap gap-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="stepId" value="@step.Id" />
+                <input type="hidden" name="workflowInstanceId" value="@step.WorkflowInstanceId" />
+                <div style="min-width:220px;">
+                    <input type="text" name="notes" class="form-control form-control-sm" placeholder="Commentaire (optionnel)" />
+                </div>
+                <button type="submit" class="btn btn-success"
+                        onclick="return confirm('Confirmer que vous avez terminé cette tâche ?');">
+                    <i class="bi bi-check-circle me-1"></i>J'ai terminé
+                </button>
+            </form>
+        </div>
+    </div>
+}
+
+@if (wf?.StepInstances != null && wf.StepInstances.Any())
+{
+    <div class="ex-board-card accent-info mb-4">
+        <div class="fw-bold mb-3">Suivi du dossier</div>
+        <ul class="ex-timeline">
+        @foreach (var s in wf.StepInstances.OrderBy(x => x.StepOrder))
+        {
+            var cls = s.Status is "Completed" or "Skipped" ? "done"
+                : (s.Id == step.Id || s.Status is "InProgress" or "WaitingForClient" or "WaitingForValidation") ? "current"
+                : "upcoming";
+            var stLabel = s.Status switch
+            {
+                "Completed" => "Terminée",
+                "Skipped" => "Ignorée",
+                "WaitingForClient" => "Action client",
+                "InProgress" => "En cours",
+                "WaitingForValidation" => "Validation",
+                "Pending" => "À venir",
+                _ => s.Status
+            };
+            <li class="@cls">
+                <div class="dot">@(cls == "done" ? "✓" : s.StepOrder.ToString())</div>
+                <div>
+                    <div class="step-title">@s.StepName</div>
+                    <div class="step-meta">@stLabel@(s.IsClientStep || s.AssignmentType == "Client" ? " · Client" : " · Cabinet")</div>
+                </div>
+            </li>
+        }
+        </ul>
+    </div>
+}

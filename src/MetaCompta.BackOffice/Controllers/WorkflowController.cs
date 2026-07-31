@@ -1,5 +1,7 @@
 using MetaCompta.Application.DTOs;
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -13,24 +15,28 @@ public class WorkflowController : BaseController
     private readonly IWorkflowFacade _workflow;
     private readonly IClientFacade _clients;
     private readonly IDepartmentFacade _departments;
+    private readonly ICabinetFacade _cabinet;
 
     public WorkflowController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IWorkflowFacade workflow,
         IClientFacade clients,
-        IDepartmentFacade departments)
+        IDepartmentFacade departments,
+        ICabinetFacade cabinet)
         : base(referenceData, contextAccessor)
     {
         _workflow = workflow;
         _clients = clients;
         _departments = departments;
+        _cabinet = cabinet;
     }
 
     // ═══════════════════════════════════════════════════════════
     // DASHBOARD
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.WorkflowMonitor)]
     public async Task<IActionResult> Index()
     {
         try
@@ -53,6 +59,7 @@ public class WorkflowController : BaseController
     /// Unified Workflow Builder — single page for creating, viewing, editing templates.
     /// Replaces: CreateTemplate, EditTemplate, TemplateDetails, Templates views.
     /// </summary>
+    [RequirePermission(ClaimDefinitions.WorkflowView, ClaimDefinitions.WorkflowEdit, ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> Builder(int? id = null)
     {
         await LoadDropdowns();
@@ -85,6 +92,11 @@ public class WorkflowController : BaseController
                     StepType = s.StepType,
                     AssignmentType = s.AssignmentType,
                     AssignedToUserId = s.AssignedToUserId,
+                    AssignedToUserIds = s.AssignedToUserIdList?.Count > 0
+                        ? s.AssignedToUserIdList
+                        : (!string.IsNullOrEmpty(s.AssignedToUserIds)
+                            ? s.AssignedToUserIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                            : (!string.IsNullOrEmpty(s.AssignedToUserId) ? new List<string> { s.AssignedToUserId } : null)),
                     AssignedToRoleName = s.AssignedToRoleName,
                     AssignedToDepartmentId = s.AssignedToDepartmentId,
                     IsClientStep = s.IsClientStep,
@@ -109,6 +121,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate, ClaimDefinitions.WorkflowEdit)]
     public async Task<IActionResult> BuilderSave(int? id, WorkflowTemplateCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -148,6 +161,7 @@ public class WorkflowController : BaseController
     // TEMPLATES (kept for backward compatibility)
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.WorkflowView)]
     public async Task<IActionResult> Templates(string? declarationType = null, int? clientId = null, int page = 1)
     {
         var result = await _workflow.GetTemplatesAsync(declarationType, clientId, page);
@@ -156,6 +170,7 @@ public class WorkflowController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.WorkflowView)]
     public async Task<IActionResult> TemplateDetails(int id)
     {
         var template = await _workflow.GetTemplateByIdAsync(id);
@@ -168,6 +183,7 @@ public class WorkflowController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> CreateTemplate()
     {
         await LoadDropdowns();
@@ -176,6 +192,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> CreateTemplate(WorkflowTemplateCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -197,6 +214,7 @@ public class WorkflowController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.WorkflowEdit)]
     public async Task<IActionResult> EditTemplate(int id)
     {
         var template = await _workflow.GetTemplateByIdAsync(id);
@@ -217,6 +235,11 @@ public class WorkflowController : BaseController
                 StepType = s.StepType,
                 AssignmentType = s.AssignmentType,
                 AssignedToUserId = s.AssignedToUserId,
+                AssignedToUserIds = s.AssignedToUserIdList?.Count > 0
+                    ? s.AssignedToUserIdList
+                    : (!string.IsNullOrEmpty(s.AssignedToUserIds)
+                        ? s.AssignedToUserIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                        : (!string.IsNullOrEmpty(s.AssignedToUserId) ? new List<string> { s.AssignedToUserId } : null)),
                 AssignedToRoleName = s.AssignedToRoleName,
                 AssignedToDepartmentId = s.AssignedToDepartmentId,
                 IsClientStep = s.IsClientStep,
@@ -241,6 +264,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowEdit)]
     public async Task<IActionResult> EditTemplate(int id, WorkflowTemplateCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -265,6 +289,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowDelete)]
     public async Task<IActionResult> DeleteTemplate(int id)
     {
         var result = await _workflow.DeleteTemplateAsync(id);
@@ -274,6 +299,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> CreateDefaultTemplate()
     {
         var result = await _workflow.CreateDefaultTemplateAsync();
@@ -283,6 +309,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> SeedAllDefaultTemplates()
     {
         var result = await _workflow.SeedAllDefaultTemplatesAsync();
@@ -294,6 +321,7 @@ public class WorkflowController : BaseController
     // INSTANCES (Workflow executions)
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.WorkflowMonitor)]
     public async Task<IActionResult> Instances(int? clientId = null, string? status = null, int? declarationId = null, int page = 1)
     {
         var result = await _workflow.GetInstancesAsync(clientId, status, declarationId, page);
@@ -303,20 +331,32 @@ public class WorkflowController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.WorkflowView, ClaimDefinitions.WorkflowMonitor)]
     public async Task<IActionResult> InstanceDetails(int id)
     {
         var instance = await _workflow.GetInstanceByIdAsync(id);
         if (instance == null)
         {
             TempData["Error"] = "Instance de workflow introuvable.";
-            return RedirectToAction("Instances");
+            // Avoid redirect to Instances (needs workflow.monitor) for roles that only have workflow.view
+            return RedirectToAction("MyTasks");
         }
         var history = await _workflow.GetHistoryAsync(id);
         ViewBag.History = history;
+        try
+        {
+            var employees = await _cabinet.GetEmployeesAsync(page: 1, pageSize: 200);
+            ViewBag.Employees = employees?.Items?.Where(e => e.EstActif).ToList() ?? new List<CabinetEmployeeDto>();
+        }
+        catch
+        {
+            ViewBag.Employees = new List<CabinetEmployeeDto>();
+        }
         return View(instance);
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> StartWorkflow()
     {
         var clients = await _clients.GetAllForDropdownAsync();
@@ -328,6 +368,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> StartWorkflow(StartWorkflowDto dto)
     {
         if (!ModelState.IsValid)
@@ -350,6 +391,7 @@ public class WorkflowController : BaseController
         return RedirectToAction("Instances");
     }
 
+    /// <summary>Advance step — authenticated user; service enforces assignee-only.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AdvanceStep(int instanceId, string? notes = null, string? comment = null)
@@ -362,6 +404,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
     public async Task<IActionResult> CancelWorkflow(int id, string reason = "")
     {
         var result = await _workflow.CancelWorkflowAsync(id, reason);
@@ -371,6 +414,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
     public async Task<IActionResult> PauseWorkflow(int id)
     {
         var result = await _workflow.PauseWorkflowAsync(id);
@@ -380,6 +424,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowAdvance)]
     public async Task<IActionResult> ResumeWorkflow(int id)
     {
         var result = await _workflow.ResumeWorkflowAsync(id);
@@ -389,11 +434,14 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ReassignStep(int stepInstanceId, string newAssigneeUserId, string? reason = null, int? returnInstanceId = null)
+    [RequirePermission(ClaimDefinitions.WorkflowReassign, ClaimDefinitions.TaskAssign)]
+    public async Task<IActionResult> ReassignStep(int stepInstanceId, string newAssigneeUserId, string? reason = null, int? returnInstanceId = null, int? returnTaskId = null)
     {
         var dto = new ReassignStepDto { NewAssigneeUserId = newAssigneeUserId, Reason = reason };
         var result = await _workflow.ReassignStepAsync(stepInstanceId, dto);
-        SetApiResult(result, null, "Erreur lors de la réassignation.");
+        SetApiResult(result, result?.Message, "Erreur lors de la réassignation.");
+        if (returnTaskId.HasValue)
+            return RedirectToAction("Details", "Tasks", new { id = returnTaskId.Value });
         if (returnInstanceId.HasValue)
             return RedirectToAction("InstanceDetails", new { id = returnInstanceId.Value });
         return RedirectToAction("MyTasks");
@@ -403,6 +451,7 @@ public class WorkflowController : BaseController
     // MY TASKS (Pending Steps)
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.WorkflowView)]
     public async Task<IActionResult> MyTasks()
     {
         var steps = await _workflow.GetMyPendingStepsAsync(SelectedClientId);
@@ -415,6 +464,7 @@ public class WorkflowController : BaseController
     // CLIENT CONFIG
     // ═══════════════════════════════════════════════════════════
 
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
     public async Task<IActionResult> ClientConfig(int clientId)
     {
         var configs = await _workflow.GetClientConfigsAsync(clientId);
@@ -428,6 +478,7 @@ public class WorkflowController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
     public async Task<IActionResult> SaveClientConfig(ClientWorkflowConfigCreateDto dto)
     {
         var result = await _workflow.SaveClientConfigAsync(dto);
@@ -438,6 +489,7 @@ public class WorkflowController : BaseController
     // ── Helpers ──────────────────────────────────────────────
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.WorkflowView)]
     public async Task<IActionResult> GetInstanceJson(int id)
     {
         var instance = await _workflow.GetInstanceByIdAsync(id);
@@ -448,5 +500,14 @@ public class WorkflowController : BaseController
     {
         ViewBag.Clients = await _clients.GetAllForDropdownAsync();
         ViewBag.Departments = await _departments.GetAllAsync();
+        try
+        {
+            var employees = await _cabinet.GetEmployeesAsync(page: 1, pageSize: 200);
+            ViewBag.Employees = employees?.Items?.Where(e => e.EstActif).ToList() ?? new List<CabinetEmployeeDto>();
+        }
+        catch
+        {
+            ViewBag.Employees = new List<CabinetEmployeeDto>();
+        }
     }
 }

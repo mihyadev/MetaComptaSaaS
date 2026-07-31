@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -25,6 +26,7 @@ public class DocumentsController : BaseController
         _clients = clients;
     }
 
+    [RequirePermission(ClaimDefinitions.DocumentDetail)]
     public async Task<IActionResult> Index(int? clientId = null, string? categorie = null, int page = 1, string? search = null)
     {
         clientId ??= SelectedClientId;
@@ -37,6 +39,7 @@ public class DocumentsController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.DocumentDetail)]
     public async Task<IActionResult> Details(int id)
     {
         var doc = await _documents.GetByIdAsync(id);
@@ -46,6 +49,7 @@ public class DocumentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DocumentDetail)]
     public async Task<IActionResult> ChangeStatus(int id, string newStatut, string? motif = null)
     {
         var result = await _documents.ChangeStatusAsync(id, newStatut, motif);
@@ -55,6 +59,7 @@ public class DocumentsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DocumentShare)]
     public async Task<IActionResult> ToggleShare(int id)
     {
         var result = await _documents.ToggleShareAsync(id);

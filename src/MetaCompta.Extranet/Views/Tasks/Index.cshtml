@@ -1,0 +1,164 @@
+@model List<MetaCompta.Application.DTOs.WorkflowStepInstanceDto>
+@using MetaCompta.Application.DTOs
+@{
+    ViewData["Title"] = "Mes Tâches";
+    var model = Model ?? new List<WorkflowStepInstanceDto>();
+    var pendingTasks = model.Where(t =>
+        t.Status == "Pending" || t.Status == "InProgress"
+        || t.Status == "WaitingForValidation" || t.Status == "WaitingForClient").ToList();
+    var completedTasks = model.Where(t => t.Status == "Completed" || t.Status == "Skipped").ToList();
+    var overdueTasks = pendingTasks.Where(t => t.IsOverdue).ToList();
+    var urgentTasks = pendingTasks.Where(t => t.DueDate.HasValue && !t.IsOverdue && t.DueDate.Value <= DateTime.UtcNow.AddDays(3)).ToList();
+}
+
+<div class="ex-page-hero">
+    <div>
+        <h4>Mes tâches</h4>
+        <p class="ex-sub">Actions en attente de votre part et suivi des déclarations.</p>
+    </div>
+    <a href="/Declarations" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text me-1"></i>Mes déclarations</a>
+</div>
+
+@if (ViewBag.LoadError is string loadErr && !string.IsNullOrEmpty(loadErr))
+{
+    <div class="alert alert-warning" role="alert"><i class="bi bi-exclamation-triangle me-1"></i>@loadErr</div>
+}
+
+<div class="ex-kpi-grid">
+    <div class="ex-kpi warning">
+        <div>
+            <div class="ex-kpi-label">En attente</div>
+            <div class="ex-kpi-value">@pendingTasks.Count</div>
+        </div>
+        <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+    </div>
+    <div class="ex-kpi danger">
+        <div>
+            <div class="ex-kpi-label">En retard</div>
+            <div class="ex-kpi-value">@overdueTasks.Count</div>
+        </div>
+        <div class="ex-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+    </div>
+    <div class="ex-kpi warning">
+        <div>
+            <div class="ex-kpi-label">Urgent (&lt; 3j)</div>
+            <div class="ex-kpi-value">@urgentTasks.Count</div>
+        </div>
+        <div class="ex-kpi-icon"><i class="bi bi-clock"></i></div>
+    </div>
+    <div class="ex-kpi success">
+        <div>
+            <div class="ex-kpi-label">Terminées</div>
+            <div class="ex-kpi-value">@completedTasks.Count</div>
+        </div>
+        <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+    </div>
+</div>
+
+@if (pendingTasks.Any())
+{
+    @foreach (var task in pendingTasks.OrderBy(t => t.DueDate ?? DateTime.MaxValue))
+    {
+        var stepTypeLabel = task.StepType switch
+        {
+            "Collecte" => "Déposer des documents",
+            "ValidationClient" => "Approuver la déclaration",
+            "DemandePieces" => "Fournir les pièces demandées",
+            _ => task.StepName
+        };
+        var stepTypeIcon = task.StepType switch
+        {
+            "Collecte" => "bi-cloud-upload",
+            "ValidationClient" => "bi-check-circle",
+            "DemandePieces" => "bi-folder-plus",
+            _ => "bi-list-task"
+        };
+        var accent = task.IsOverdue ? "accent-danger"
+            : (task.DueDate.HasValue && task.DueDate.Value <= DateTime.UtcNow.AddDays(3) ? "accent-warning" : "accent-info");
+        var statusLabel = task.Status switch
+        {
+            "Pending" => "En attente",
+            "InProgress" => "En cours",
+            "WaitingForValidation" => "Validation",
+            "WaitingForClient" => "À votre charge",
+            _ => task.Status
+        };
+        var statutDecl = task.DeclarationStatut ?? "—";
+        var progress = task.ProgressPercent;
+
+        <div class="ex-board-card @accent">
+            <div class="d-flex align-items-start gap-3 flex-wrap">
+                <div class="ex-kpi-icon" style="background:#e6f2fd;color:var(--monday-blue);"><i class="bi @stepTypeIcon"></i></div>
+                <div class="flex-grow-1" style="min-width:200px;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <h6 class="fw-bold mb-0" style="font-size:0.95rem;">@stepTypeLabel</h6>
+                        <span class="ex-status-pill bg-warning-subtle text-warning-emphasis">@statusLabel</span>
+                        @if (task.IsOverdue)
+                        {
+                            <span class="ex-status-pill bg-danger-subtle text-danger-emphasis">En retard</span>
+                        }
+                    </div>
+                    <div class="ex-meta-row mb-1">
+                        <span><i class="bi bi-file-earmark-text"></i>@(task.DeclarationType ?? "—") @(task.DeclarationPeriode)</span>
+                        @if (task.DeclarationId.HasValue)
+                        {
+                            <span>Déclaration #@task.DeclarationId</span>
+                        }
+                        <span><i class="bi bi-flag"></i>Statut : <strong>@statutDecl</strong></span>
+                    </div>
+                    <div class="small text-muted">
+                        Étape @task.StepOrder@(task.TotalSteps > 0 ? $" / {task.TotalSteps}" : "") — <strong>@task.StepName</strong>
+                        @if (!string.IsNullOrEmpty(task.CurrentStepName) && task.CurrentStepName != task.StepName)
+                        {
+                            <span class="ms-1">(courante : @task.CurrentStepName)</span>
+                        }
+                    </div>
+                    @if (task.TotalSteps > 0)
+                    {
+                        <div class="ex-progress">
+                            <div class="ex-progress-meta">
+                                <span>Avancement déclaration</span>
+                                <span>@progress.ToString("0.#")%</span>
+                            </div>
+                            <div class="progress"><div class="progress-bar" style="width:@(progress.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(task.Notes))
+                    {
+                        <div class="small mt-2 fst-italic text-muted"><i class="bi bi-info-circle me-1"></i>@task.Notes</div>
+                    }
+                </div>
+                <div class="text-end ms-auto">
+                    @if (task.DueDate.HasValue)
+                    {
+                        <div class="small @(task.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                            <i class="bi bi-calendar-event me-1"></i>@task.DueDate.Value.ToString("dd/MM/yyyy")
+                        </div>
+                    }
+                    <a href="/Tasks/Details/@task.Id" class="btn btn-primary btn-sm mt-2">
+                        @if (task.StepType is "Collecte" or "DemandePieces")
+                        {
+                            <i class="bi bi-box-arrow-up-right me-1"></i><span>Ouvrir &amp; déposer</span>
+                        }
+                        else if (task.StepType == "ValidationClient")
+                        {
+                            <i class="bi bi-check-circle me-1"></i><span>Ouvrir &amp; approuver</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-arrow-right me-1"></i><span>Ouvrir la tâche</span>
+                        }
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="ex-board-card text-center py-5">
+        <i class="bi bi-check-circle text-success" style="font-size:3rem;"></i>
+        <h5 class="mt-3 fw-bold text-success">Tout est à jour</h5>
+        <p class="mb-0 text-muted">Aucune tâche en attente. Votre cabinet vous notifiera dès qu'une action sera requise.</p>
+    </div>
+}

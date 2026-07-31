@@ -1,4 +1,4 @@
-﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EcritureComptableDto>
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.EcritureComptableDto>
 @{
     ViewData["Title"] = "Écritures comptables";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
@@ -15,9 +15,12 @@
             </ol>
         </nav>
     </div>
-    <a href="@Url.Action("CreateEcriture", "Comptabilite")" class="btn btn-mc-primary">
-        <i class="bi bi-plus-circle me-1"></i> Nouvelle écriture
-    </a>
+    @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
+    {
+        <a href="@Url.Action("CreateEcriture", "Comptabilite")" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Nouvelle écriture
+        </a>
+    }
 </div>
 
 @if (client != null)
@@ -49,7 +52,7 @@
                 <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Libellé, numéro pièce, compte..." />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>

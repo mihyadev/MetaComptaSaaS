@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AutoMapper;
 using MetaCompta.Application.DTOs;
 using MetaCompta.Application.Interfaces;
@@ -623,6 +624,8 @@ public class CommercialService : ICommercialService
         if (bc.Contrat != null)
             return ApiResponse<ContratCommercialDto>.Fail("Ce bon de commande a déjà été converti en contrat.");
 
+        
+
         var reference = await GenerateReferenceAsync("CTR", cabinetId);
 
         var contrat = new ContratCommercial
@@ -647,6 +650,9 @@ public class CommercialService : ICommercialService
             MontantTTC = bc.MontantTTC,
             MontantRemise = bc.MontantRemise,
             ConditionsParticulieres = bc.ConditionsParticulieres,
+            ServicesActivesJson = dto.ServicesActives.Any()
+                ? JsonSerializer.Serialize(dto.ServicesActives)
+                : null,
             Version = 1,
             CreatedBy = userId
         };
@@ -654,14 +660,13 @@ public class CommercialService : ICommercialService
         // Copier les lignes
         foreach (var ligneSource in bc.Lignes)
         {
-            var overrideEntry = dto.LigneServiceOverrides?.FirstOrDefault(o => o.LigneId == ligneSource.Id);
             contrat.Lignes.Add(new LigneDocumentCommercial
             {
                 CabinetId = cabinetId,
                 TypeLigne = ligneSource.TypeLigne,
                 TypeService = ligneSource.TypeService,
                 CodeService = ligneSource.CodeService,
-                ServiceContratId = overrideEntry != null ? overrideEntry.ServiceContratId : ligneSource.ServiceContratId,
+                ServiceContratId = ligneSource.ServiceContratId,
                 Ordre = ligneSource.Ordre,
                 Description = ligneSource.Description,
                 DescriptionDetaillee = ligneSource.DescriptionDetaillee,
@@ -674,6 +679,7 @@ public class CommercialService : ICommercialService
                 MontantTVA = ligneSource.MontantTVA,
                 MontantHT = ligneSource.MontantHT,
                 MontantTTC = ligneSource.MontantTTC,
+                ModeFacturation = ligneSource.ModeFacturation,
                 LigneSourceId = ligneSource.Id,
                 CreatedBy = userId
             });
@@ -711,6 +717,9 @@ public class CommercialService : ICommercialService
 
     public async Task<ApiResponse<ContratCommercialDto>> ConvertirDevisEnContratAsync(ConvertDevisEnContratDto dto, int cabinetId, string userId)
     {
+        if (dto == null)
+            return ApiResponse<ContratCommercialDto>.Fail("Requête invalide : données de conversion manquantes.");
+
         var devis = await _db.Devis
             .Where(d => d.Id == dto.DevisId && d.CabinetId == cabinetId)
             .Include(d => d.Lignes.OrderBy(l => l.Ordre))
@@ -724,6 +733,13 @@ public class CommercialService : ICommercialService
             return ApiResponse<ContratCommercialDto>.Fail("Seul un devis approuvé peut être converti en contrat.");
         if (devis.ContratDirect != null)
             return ApiResponse<ContratCommercialDto>.Fail("Ce devis a déjà été converti en contrat.");
+
+        // Defensive check: ensure no contract exists for this devis (including soft-deleted records)
+        var existsContract = await _db.ContratsCommerciaux
+            .IgnoreQueryFilters()
+            .AnyAsync(c => c.DevisId == devis.Id && c.CabinetId == cabinetId);
+        if (existsContract)
+            return ApiResponse<ContratCommercialDto>.Fail("Un contrat existe déjà pour ce devis.");
 
         var reference = await GenerateReferenceAsync("CTR", cabinetId);
 
@@ -751,19 +767,21 @@ public class CommercialService : ICommercialService
             ConditionsParticulieres = devis.ConditionsParticulieres,
             Version = 1,
             Notes = dto.Notes,
+            ServicesActivesJson = dto.ServicesActives.Any()
+                ? JsonSerializer.Serialize(dto.ServicesActives)
+                : null,
             CreatedBy = userId
         };
 
         foreach (var ligneSource in devis.Lignes)
         {
-            var overrideEntry = dto.LigneServiceOverrides?.FirstOrDefault(o => o.LigneId == ligneSource.Id);
             contrat.Lignes.Add(new LigneDocumentCommercial
             {
                 CabinetId = cabinetId,
                 TypeLigne = ligneSource.TypeLigne,
                 TypeService = ligneSource.TypeService,
                 CodeService = ligneSource.CodeService,
-                ServiceContratId = overrideEntry != null ? overrideEntry.ServiceContratId : ligneSource.ServiceContratId,
+                ServiceContratId = ligneSource.ServiceContratId,
                 Ordre = ligneSource.Ordre,
                 Description = ligneSource.Description,
                 DescriptionDetaillee = ligneSource.DescriptionDetaillee,
@@ -776,6 +794,7 @@ public class CommercialService : ICommercialService
                 MontantTVA = ligneSource.MontantTVA,
                 MontantHT = ligneSource.MontantHT,
                 MontantTTC = ligneSource.MontantTTC,
+                ModeFacturation = ligneSource.ModeFacturation,
                 LigneSourceId = ligneSource.Id,
                 CreatedBy = userId
             });
@@ -809,6 +828,10 @@ public class CommercialService : ICommercialService
 
     public async Task<ApiResponse<ContratCommercialDto>> CreateContratAsync(ContratCommercialCreateDto dto, int cabinetId, string userId)
     {
+        var validityError = ValidateContratValidity(dto);
+        if (validityError != null)
+            return ApiResponse<ContratCommercialDto>.Fail(validityError);
+
         var clientExists = await _db.Clients.AnyAsync(c => c.Id == dto.ClientId && c.CabinetId == cabinetId);
         if (!clientExists)
             return ApiResponse<ContratCommercialDto>.Fail("Client introuvable.");
@@ -832,19 +855,22 @@ public class CommercialService : ICommercialService
             ClausesSpecifiques = dto.ClausesSpecifiques,
             ConditionsParticulieres = dto.ConditionsParticulieres,
             Notes = dto.Notes,
+            ResponsableId = null,
+            ServicesActivesJson = dto.ServicesActives.Any()
+                ? JsonSerializer.Serialize(dto.ServicesActives)
+                : null,
             Version = 1,
             CreatedBy = userId
         };
 
-        decimal totalHT = 0, totalTVA = 0, totalTTC = 0;
+        AddContratMembres(contrat, ResolveMembresInput(dto), cabinetId, userId);
+
+        decimal totalHT = 0, totalTVA = 0, totalTTC = 0, totalRemise = 0;
         int ordre = 1;
         foreach (var l in dto.Lignes)
         {
-            var montantHT = l.Quantite * l.PrixUnitaireHT;
-            var remise = (l.RemisePourcentage.HasValue ? montantHT * l.RemisePourcentage.Value / 100m : 0) + (l.RemiseMontant ?? 0);
-            montantHT -= remise;
-            var montantTVA = montantHT * l.TauxTVA / 100m;
-            var montantTTC = montantHT + montantTVA;
+            var (montantHT, montantTVA, montantTTC, remise) = CalculerLigneHonoraires(l);
+            totalRemise += remise;
 
             contrat.Lignes.Add(new LigneDocumentCommercial
             {
@@ -856,7 +882,7 @@ public class CommercialService : ICommercialService
                 Ordre = l.Ordre > 0 ? l.Ordre : ordre,
                 Description = l.Description,
                 DescriptionDetaillee = l.DescriptionDetaillee,
-                Quantite = l.Quantite,
+                Quantite = l.Quantite <= 0 ? 1 : l.Quantite,
                 Unite = l.Unite,
                 PrixUnitaireHT = l.PrixUnitaireHT,
                 RemisePourcentage = l.RemisePourcentage,
@@ -865,6 +891,7 @@ public class CommercialService : ICommercialService
                 MontantHT = montantHT,
                 MontantTVA = montantTVA,
                 MontantTTC = montantTTC,
+                ModeFacturation = l.ModeFacturation,
                 CreatedBy = userId
             });
 
@@ -877,6 +904,7 @@ public class CommercialService : ICommercialService
         contrat.MontantHT = totalHT;
         contrat.MontantTVA = totalTVA;
         contrat.MontantTTC = totalTTC;
+        contrat.MontantRemise = totalRemise;
 
         _db.ContratsCommerciaux.Add(contrat);
         await _db.SaveChangesAsync();
@@ -905,6 +933,10 @@ public class CommercialService : ICommercialService
         if (dto.ClientId <= 0)
             return ApiResponse<ContratCommercialDto>.Fail("Le client est requis.");
 
+        var validityError = ValidateContratValidity(dto);
+        if (validityError != null)
+            return ApiResponse<ContratCommercialDto>.Fail(validityError);
+
         var contrat = await _db.ContratsCommerciaux
             .Where(c => c.Id == id && c.CabinetId == cabinetId)
             .Include(c => c.Lignes)
@@ -929,22 +961,25 @@ public class CommercialService : ICommercialService
         contrat.ClausesSpecifiques = dto.ClausesSpecifiques;
         contrat.ConditionsParticulieres = dto.ConditionsParticulieres;
         contrat.Notes = dto.Notes;
+        contrat.ResponsableId = null;
         contrat.Version++;
         contrat.UpdatedBy = userId;
         contrat.UpdatedAt = DateTime.UtcNow;
+        contrat.ServicesActivesJson = dto.ServicesActives.Any()
+            ? JsonSerializer.Serialize(dto.ServicesActives)
+            : null;
+
+        await SyncContratMembresAsync(contrat.Id, ResolveMembresInput(dto), cabinetId, userId);
 
         // Supprimer les anciennes lignes et recréer
         _db.LignesDocumentsCommerciaux.RemoveRange(contrat.Lignes);
 
-        decimal totalHT = 0, totalTVA = 0, totalTTC = 0;
+        decimal totalHT = 0, totalTVA = 0, totalTTC = 0, totalRemise = 0;
         int ordre = 1;
         foreach (var l in dto.Lignes)
         {
-            var montantHT = l.Quantite * l.PrixUnitaireHT;
-            var remise = (l.RemisePourcentage.HasValue ? montantHT * l.RemisePourcentage.Value / 100m : 0) + (l.RemiseMontant ?? 0);
-            montantHT -= remise;
-            var montantTVA = montantHT * l.TauxTVA / 100m;
-            var montantTTC = montantHT + montantTVA;
+            var (montantHT, montantTVA, montantTTC, remise) = CalculerLigneHonoraires(l);
+            totalRemise += remise;
 
             contrat.Lignes.Add(new LigneDocumentCommercial
             {
@@ -956,7 +991,7 @@ public class CommercialService : ICommercialService
                 Ordre = l.Ordre > 0 ? l.Ordre : ordre,
                 Description = l.Description,
                 DescriptionDetaillee = l.DescriptionDetaillee,
-                Quantite = l.Quantite,
+                Quantite = l.Quantite <= 0 ? 1 : l.Quantite,
                 Unite = l.Unite,
                 PrixUnitaireHT = l.PrixUnitaireHT,
                 RemisePourcentage = l.RemisePourcentage,
@@ -965,6 +1000,7 @@ public class CommercialService : ICommercialService
                 MontantHT = montantHT,
                 MontantTVA = montantTVA,
                 MontantTTC = montantTTC,
+                ModeFacturation = l.ModeFacturation,
                 CreatedBy = userId
             });
 
@@ -977,6 +1013,7 @@ public class CommercialService : ICommercialService
         contrat.MontantHT = totalHT;
         contrat.MontantTVA = totalTVA;
         contrat.MontantTTC = totalTTC;
+        contrat.MontantRemise = totalRemise;
 
         _db.DocumentsCommerciauxHistorique.Add(new DocumentCommercialHistorique
         {
@@ -998,9 +1035,34 @@ public class CommercialService : ICommercialService
         return await GetContratByIdAsync(contrat.Id, cabinetId);
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  CONTRATS
-    // ════════════════════════════════════════════════════════════════════════
+    public async Task<ApiResponse<ContratCommercialDto>> UpdateContratEquipeAsync(int id, ContratEquipeUpdateDto dto, int cabinetId, string userId)
+    {
+        var contrat = await _db.ContratsCommerciaux
+            .Where(c => c.Id == id && c.CabinetId == cabinetId)
+            .FirstOrDefaultAsync();
+
+        if (contrat == null)
+            return ApiResponse<ContratCommercialDto>.Fail("Contrat introuvable.");
+        if (contrat.Statut == RefCodes.StatutContrat.Termine || contrat.Statut == RefCodes.StatutContrat.Resilie
+            || contrat.Statut == RefCodes.StatutContrat.Annule)
+            return ApiResponse<ContratCommercialDto>.Fail("Impossible de modifier l'équipe d'un contrat clôturé.");
+
+        var membres = NormalizeMembresInput(dto.Membres);
+        if (membres.Count == 0)
+            return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier doit comporter au moins un collaborateur.");
+
+        contrat.ResponsableId = null;
+        contrat.UpdatedBy = userId;
+        contrat.UpdatedAt = DateTime.UtcNow;
+
+        await SyncContratMembresAsync(contrat.Id, membres, cabinetId, userId);
+
+        AddHistoriqueContrat("Contrat", contrat, "Équipe", contrat.Statut, contrat.Statut, userId,
+            "Équipe du dossier mise à jour");
+
+        await _db.SaveChangesAsync();
+        return await GetContratByIdAsync(contrat.Id, cabinetId);
+    }
 
     public async Task<ApiResponse<PagedResult<ContratCommercialDto>>> GetContratsAsync(int cabinetId, int? clientId = null, string? statut = null, int page = 1, int pageSize = 20)
     {
@@ -1042,6 +1104,9 @@ public class CommercialService : ICommercialService
             .Include(c => c.Client)
             .Include(c => c.BonCommande)
             .Include(c => c.Devis)
+            .Include(c => c.Responsable)
+            .Include(c => c.Membres)
+                .ThenInclude(m => m.User)
             .Include(c => c.Lignes.OrderBy(l => l.Ordre))
                 .ThenInclude(l => l.ServiceContrat)
             .Include(c => c.Factures)
@@ -1098,6 +1163,14 @@ public class CommercialService : ICommercialService
             return ApiResponse<ContratCommercialDto>.Fail("Le contrat doit être signé avant de pouvoir être validé.");
         if (contrat.Statut != RefCodes.StatutContrat.Signe)
             return ApiResponse<ContratCommercialDto>.Fail("Seul un contrat signé peut être validé.");
+        if (!await _db.ContratMembres.AnyAsync(m => m.ContratId == contrat.Id))
+            return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant validation.");
+
+        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratId: contrat.Id);
+        if (overlapRef != null)
+            return ApiResponse<ContratCommercialDto>.Fail(
+                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
 
         var ancienStatut = contrat.Statut;
         contrat.Statut = RefCodes.StatutContrat.Valide;
@@ -1133,6 +1206,42 @@ public class CommercialService : ICommercialService
 
         AddHistoriqueContrat("Contrat", contrat, "Suspension", ancienStatut, RefCodes.StatutContrat.Suspendu, userId);
 
+        await DesactiverServicesFromContratAsync(contrat);
+
+        await _db.SaveChangesAsync();
+        return await GetContratByIdAsync(id, cabinetId);
+    }
+
+    public async Task<ApiResponse<ContratCommercialDto>> ReactiverContratAsync(int id, int cabinetId, string userId)
+    {
+        var contrat = await _db.ContratsCommerciaux
+            .Where(c => c.Id == id && c.CabinetId == cabinetId)
+            .Include(c => c.Lignes)
+                .ThenInclude(l => l.ServiceContrat)
+            .FirstOrDefaultAsync();
+
+        if (contrat == null)
+            return ApiResponse<ContratCommercialDto>.Fail("Contrat introuvable.");
+        if (contrat.Statut != RefCodes.StatutContrat.Suspendu)
+            return ApiResponse<ContratCommercialDto>.Fail("Seul un contrat suspendu peut être réactivé.");
+        if (!await _db.ContratMembres.AnyAsync(m => m.ContratId == contrat.Id))
+            return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant réactivation.");
+
+        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratId: contrat.Id);
+        if (overlapRef != null)
+            return ApiResponse<ContratCommercialDto>.Fail(
+                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
+
+        var ancienStatut = contrat.Statut;
+        contrat.Statut = RefCodes.StatutContrat.Valide;
+        contrat.UpdatedBy = userId;
+        contrat.UpdatedAt = DateTime.UtcNow;
+
+        AddHistoriqueContrat("Contrat", contrat, "Réactivation", ancienStatut, RefCodes.StatutContrat.Valide, userId);
+
+        await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+
         await _db.SaveChangesAsync();
         return await GetContratByIdAsync(id, cabinetId);
     }
@@ -1154,6 +1263,8 @@ public class CommercialService : ICommercialService
         contrat.UpdatedAt = DateTime.UtcNow;
 
         AddHistoriqueContrat("Contrat", contrat, "Clôture", ancienStatut, RefCodes.StatutContrat.Termine, userId);
+
+        await DesactiverServicesFromContratAsync(contrat);
 
         await _db.SaveChangesAsync();
         return await GetContratByIdAsync(id, cabinetId);
@@ -1213,6 +1324,7 @@ public class CommercialService : ICommercialService
             MontantTVA = source.MontantTVA,
             MontantTTC = source.MontantTTC,
             MontantRemise = source.MontantRemise,
+            ServicesActivesJson = source.ServicesActivesJson,
             Version = 1,
             CreatedBy = userId
         };
@@ -1238,6 +1350,7 @@ public class CommercialService : ICommercialService
                 MontantHT = l.MontantHT,
                 MontantTVA = l.MontantTVA,
                 MontantTTC = l.MontantTTC,
+                ModeFacturation = l.ModeFacturation,
                 CreatedBy = userId
             });
         }
@@ -1697,17 +1810,17 @@ public class CommercialService : ICommercialService
 
         int lastNumber = 0;
 
-        // Chercher le dernier numéro dans chaque table selon le préfixe
+        // Chercher le dernier numéro dans chaque table selon le préfixe (excluant les soft-deleted)
         if (prefix == "DEV")
-            lastNumber = await GetMaxReferenceNumber(_db.Devis.Where(d => d.CabinetId == cabinetId), pattern);
+            lastNumber = await GetMaxReferenceNumber(_db.Devis.IgnoreQueryFilters().Where(d => d.CabinetId == cabinetId), pattern);
         else if (prefix == "PO")
-            lastNumber = await GetMaxReferenceNumber(_db.BonsCommande.Where(b => b.CabinetId == cabinetId), pattern);
+            lastNumber = await GetMaxReferenceNumber(_db.BonsCommande.IgnoreQueryFilters().Where(b => b.CabinetId == cabinetId), pattern);
         else if (prefix == "CTR")
-            lastNumber = await GetMaxReferenceNumber(_db.ContratsCommerciaux.Where(c => c.CabinetId == cabinetId), pattern);
+            lastNumber = await GetMaxReferenceNumber(_db.ContratsCommerciaux.IgnoreQueryFilters().Where(c => c.CabinetId == cabinetId), pattern);
         else if (prefix == "INV")
-            lastNumber = await GetMaxReferenceNumber(_db.Factures.Where(f => f.CabinetId == cabinetId), pattern);
+            lastNumber = await GetMaxReferenceNumber(_db.Factures.IgnoreQueryFilters().Where(f => f.CabinetId == cabinetId), pattern);
         else if (prefix == "PAY")
-            lastNumber = await GetMaxReferenceNumber(_db.Paiements.Where(p => p.CabinetId == cabinetId), pattern);
+            lastNumber = await GetMaxReferenceNumber(_db.Paiements.IgnoreQueryFilters().Where(p => p.CabinetId == cabinetId), pattern);
 
         return $"{prefix}-{year}-{(lastNumber + 1):D4}";
     }
@@ -1776,28 +1889,95 @@ public class CommercialService : ICommercialService
     /// Services are NEVER manually created/edited during Client create/update.
     ///
     /// Logic:
-    /// 1. Load Client to get fiscal config (TypeTVA, MoisClotureExercice)
-    /// 2. For each service line in the contract → create or reactivate ServiceContrat with smart defaults
-    /// 3. Deactivate any existing services NOT present in the new contract (single source of truth)
+    /// 1. Deserialize ServicesActivesJson from the contract
+    /// 2. For each checked service → create or reactivate ServiceContrat with smart defaults
+    /// 3. Per-service Honoraires from the JSON override the default
     /// </summary>
+    private static List<ContratMembreInputDto> ResolveMembresInput(ContratCommercialCreateDto dto)
+    {
+        if (dto.Membres != null && dto.Membres.Count > 0)
+            return NormalizeMembresInput(dto.Membres);
+
+        return NormalizeMembresInput(
+            (dto.MembreIds ?? new List<string>())
+                .Select(id => new ContratMembreInputDto { UserId = id })
+                .ToList());
+    }
+
+    private static List<ContratMembreInputDto> NormalizeMembresInput(IEnumerable<ContratMembreInputDto>? membres)
+    {
+        var result = new List<ContratMembreInputDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in membres ?? Enumerable.Empty<ContratMembreInputDto>())
+        {
+            if (string.IsNullOrWhiteSpace(m.UserId) || !seen.Add(m.UserId))
+                continue;
+            result.Add(new ContratMembreInputDto
+            {
+                UserId = m.UserId.Trim(),
+                RoleLabel = string.IsNullOrWhiteSpace(m.RoleLabel) ? null : m.RoleLabel.Trim()
+            });
+        }
+        return result;
+    }
+
+    private static void AddContratMembres(ContratCommercial contrat, List<ContratMembreInputDto>? membres, int cabinetId, string userId)
+    {
+        foreach (var m in NormalizeMembresInput(membres))
+        {
+            contrat.Membres.Add(new ContratMembre
+            {
+                CabinetId = cabinetId,
+                UserId = m.UserId,
+                RoleLabel = m.RoleLabel,
+                CreatedBy = userId
+            });
+        }
+    }
+
+    private async Task SyncContratMembresAsync(int contratId, List<ContratMembreInputDto>? membres, int cabinetId, string userId)
+    {
+        var existing = await _db.ContratMembres.Where(m => m.ContratId == contratId).ToListAsync();
+        _db.ContratMembres.RemoveRange(existing);
+
+        foreach (var m in NormalizeMembresInput(membres))
+        {
+            _db.ContratMembres.Add(new ContratMembre
+            {
+                CabinetId = cabinetId,
+                ContratId = contratId,
+                UserId = m.UserId,
+                RoleLabel = m.RoleLabel,
+                CreatedBy = userId
+            });
+        }
+    }
+
     private async Task ActiverServicesFromContratAsync(ContratCommercial contrat, int cabinetId, string userId)
     {
-        // ⚠️ Include ALL lines that reference a service type — not just TypeLigne=="Service".
-        // Contract lines can be "Service", "Forfait", or "Régie" but still reference a TypeService.
-        // Also try to infer TypeService from Description for lines where it was not explicitly set.
-        foreach (var l in contrat.Lignes)
+        // Deserialize the checked services from the contract JSON
+        if (string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
+            return;
+
+        List<ContratServiceActiveLine> serviceLines;
+        try
         {
-            if (string.IsNullOrWhiteSpace(l.TypeService))
-                l.TypeService = InferTypeServiceFromDescription(l.Description);
+            serviceLines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                contrat.ServicesActivesJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? new List<ContratServiceActiveLine>();
+        }
+        catch
+        {
+            return; // Malformed JSON — skip silently
         }
 
-        var lignesService = contrat.Lignes
-            .Where(l => !string.IsNullOrWhiteSpace(l.TypeService))
-            .ToList();
+        if (!serviceLines.Any())
+            return;
 
         var exercice = contrat.DateDebutContrat?.Year ?? DateTime.UtcNow.Year;
 
-        // Load Client for fiscal configuration (needed for smart defaults)
+        // Load Client for fiscal configuration
         var client = await _db.Clients.AsNoTracking()
             .Where(c => c.Id == contrat.ClientId)
             .Select(c => new { c.TypeTVA, c.MoisClotureExercice })
@@ -1806,77 +1986,58 @@ public class CommercialService : ICommercialService
         var typeTVA = client?.TypeTVA ?? RefCodes.TypeTva.Mensuelle;
         var moisCloture = client?.MoisClotureExercice ?? 12;
 
-        // Load ALL existing services for this client & exercise
+        // Load existing services for this client
         var servicesExistants = await _db.ServiceContrats
             .Where(s => s.ClientId == contrat.ClientId && (s.ExerciceFiscal == exercice || s.ExerciceFiscal == null))
             .ToListAsync();
 
-        // Track which service types are in the new contract
-        var typesInContrat = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Map to track which lines need linking to newly created ServiceContrats
-        var lignesNeedingLink = new List<(LigneDocumentCommercial ligne, ServiceContrat service)>();
-
-        foreach (var ligne in lignesService)
+        foreach (var svcLine in serviceLines)
         {
-            typesInContrat.Add(ligne.TypeService!);
+            if (string.IsNullOrWhiteSpace(svcLine.TypeService)) continue;
 
-            // Chercher un service existant pour ce client, type et exercice
             var serviceExistant = servicesExistants
-                .FirstOrDefault(s => string.Equals(s.TypeService, ligne.TypeService, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(s => string.Equals(s.TypeService, svcLine.TypeService, StringComparison.OrdinalIgnoreCase));
 
             if (serviceExistant != null)
             {
-                // Réactiver et mettre à jour depuis le contrat
+                // Reactivate and update — honoraires stay on fee lines only (decoupled billing)
                 serviceExistant.Actif = true;
-                serviceExistant.LibelleService = GetServiceLabel(ligne.TypeService!);
-                serviceExistant.Categorie = GetServiceCategory(ligne.TypeService!);
-                serviceExistant.Frequence = GetSmartFrequency(ligne.TypeService!, typeTVA);
+                serviceExistant.LibelleService = !string.IsNullOrWhiteSpace(svcLine.LibelleService)
+                    ? svcLine.LibelleService!
+                    : GetServiceLabel(svcLine.TypeService);
+                serviceExistant.Categorie = GetServiceCategory(svcLine.TypeService);
+                serviceExistant.Frequence = GetSmartFrequency(svcLine.TypeService, typeTVA);
                 serviceExistant.DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow;
                 serviceExistant.DateFin = contrat.DateFinContrat;
-                serviceExistant.HonorairesMensuels = ligne.PrixUnitaireHT > 0 ? ligne.PrixUnitaireHT : serviceExistant.HonorairesMensuels;
+                serviceExistant.AutoGenererDeclarations = svcLine.AutoGenererDeclarations;
                 serviceExistant.UpdatedBy = userId;
                 serviceExistant.UpdatedAt = DateTime.UtcNow;
                 ApplySmartDeadlines(serviceExistant);
                 ComputeExerciceDates(serviceExistant, moisCloture);
-
-                // Link the contract line to the existing service
-                ligne.ServiceContratId = serviceExistant.Id;
             }
             else
             {
-                // Créer un nouveau service avec smart defaults
+                // Create new service with smart defaults (ops trigger only — no fee copy)
                 var newService = new ServiceContrat
                 {
                     ClientId = contrat.ClientId,
-                    TypeService = ligne.TypeService!,
-                    LibelleService = GetServiceLabel(ligne.TypeService!),
-                    Categorie = GetServiceCategory(ligne.TypeService!),
-                    Frequence = GetSmartFrequency(ligne.TypeService!, typeTVA),
+                    TypeService = svcLine.TypeService,
+                    LibelleService = !string.IsNullOrWhiteSpace(svcLine.LibelleService)
+                        ? svcLine.LibelleService!
+                        : GetServiceLabel(svcLine.TypeService),
+                    Categorie = GetServiceCategory(svcLine.TypeService),
+                    Frequence = GetSmartFrequency(svcLine.TypeService, typeTVA),
                     ExerciceFiscal = exercice,
                     Actif = true,
-                    AutoGenererDeclarations = true,
+                    AutoGenererDeclarations = svcLine.AutoGenererDeclarations,
                     DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow,
                     DateFin = contrat.DateFinContrat,
-                    HonorairesMensuels = ligne.PrixUnitaireHT > 0 ? ligne.PrixUnitaireHT : null,
+                    HonorairesMensuels = null,
                     CreatedBy = userId
                 };
                 ApplySmartDeadlines(newService);
                 ComputeExerciceDates(newService, moisCloture);
                 _db.ServiceContrats.Add(newService);
-
-                // Track for linking after SaveChanges (need the generated Id)
-                lignesNeedingLink.Add((ligne, newService));
-            }
-        }
-
-        // Save to generate IDs for new ServiceContrats, then link contract lines
-        if (lignesNeedingLink.Any())
-        {
-            await _db.SaveChangesAsync();
-            foreach (var (ligne, service) in lignesNeedingLink)
-            {
-                ligne.ServiceContratId = service.Id;
             }
         }
 
@@ -1885,59 +2046,171 @@ public class CommercialService : ICommercialService
         // Service deactivation should only happen via explicit contract termination.
     }
 
+    /// <summary>
+    /// When a contract is suspended or terminated, set Actif=false on all ServiceContrat rows
+    /// for this client whose TypeService appears in this contract's ServicesActivesJson,
+    /// UNLESS another currently valid contract (Valide/Actif + dates) also covers that service.
+    /// </summary>
+    private async Task DesactiverServicesFromContratAsync(ContratCommercial contrat)
+    {
+        if (string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
+            return;
+
+        List<ContratServiceActiveLine> serviceLines;
+        try
+        {
+            serviceLines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                contrat.ServicesActivesJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? new List<ContratServiceActiveLine>();
+        }
+        catch { return; }
+
+        if (!serviceLines.Any()) return;
+
+        var today = DateTime.UtcNow;
+        var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
+
+        // Find service codes still covered by ANOTHER active contract for this client
+        var autresContratsActifs = await _db.ContratsCommerciaux
+            .Where(c => c.ClientId == contrat.ClientId && c.Id != contrat.Id
+                && activeStatuses.Contains(c.Statut) && !c.IsDeleted
+                && (c.DateDebutContrat == null || c.DateDebutContrat <= today)
+                && (c.DateFinContrat == null || c.DateFinContrat >= today)
+                && c.ServicesActivesJson != null)
+            .Select(c => c.ServicesActivesJson!)
+            .ToListAsync();
+
+        var codesEncouverts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var json in autresContratsActifs)
+        {
+            try
+            {
+                var lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (lines != null)
+                    foreach (var l in lines)
+                        if (!string.IsNullOrWhiteSpace(l.TypeService))
+                            codesEncouverts.Add(l.TypeService);
+            }
+            catch { /* ignore malformed JSON */ }
+        }
+
+        // Deactivate only services NOT covered by another active contract
+        var codesToDeactivate = serviceLines
+            .Select(l => l.TypeService)
+            .Where(c => !string.IsNullOrWhiteSpace(c) && !codesEncouverts.Contains(c!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!codesToDeactivate.Any()) return;
+
+        var rows = await _db.ServiceContrats
+            .Where(s => s.ClientId == contrat.ClientId && s.Actif
+                && codesToDeactivate.Contains(s.TypeService))
+            .ToListAsync();
+
+        foreach (var row in rows)
+        {
+            row.Actif = false;
+            row.UpdatedAt = today;
+        }
+    }
+
     // ── Smart Default Helpers (Contract → Service mapping) ───────
 
-    /// <summary>
-    /// Infers TypeService code from the Description text of a contract line.
-    /// Fallback when the user didn't explicitly select a TypeService in the form.
-    /// </summary>
-    private static string? InferTypeServiceFromDescription(string? description)
+    private static string? ValidateContratValidity(ContratCommercialCreateDto dto)
     {
-        if (string.IsNullOrWhiteSpace(description)) return null;
-        var d = description.Trim().ToUpperInvariant();
-
-        // Exact match first
-        var exactMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["TVA"] = "TVA", ["IS"] = "IS", ["IR"] = "IR", ["CNSS"] = "CNSS",
-            ["PAIE"] = "PAIE", ["COMPTABILITE"] = "COMPTABILITE", ["JURIDIQUE"] = "JURIDIQUE",
-            ["BILAN"] = "BILAN", ["ETATSFISCAUX"] = "ETATSFISCAUX",
-            ["AUDITCOMPTABLE"] = "AUDITCOMPTABLE", ["CONSEILFISCAL"] = "CONSEILFISCAL"
-        };
-        if (exactMap.TryGetValue(d, out var exact)) return exact;
-
-        // Keyword-based inference
-        if (d.Contains("TVA") || d.Contains("TAXE SUR LA VALEUR")) return "TVA";
-        if (d.Contains("IMPOT SUR LES SOCIETE") || d.Contains("IS ")) return "IS";
-        if (d.Contains("IMPOT SUR LE REVENU") || d.Contains("IR ")) return "IR";
-        if (d.Contains("CNSS") || d.Contains("SECURITE SOCIALE")) return "CNSS";
-        if (d.Contains("PAIE") || d.Contains("SALAIRE") || d.Contains("BULLETIN")) return "PAIE";
-        if (d.Contains("COMPTAB") || d.Contains("TENUE")) return "COMPTABILITE";
-        if (d.Contains("JURIDIQ") || d.Contains("DROIT")) return "JURIDIQUE";
-        if (d.Contains("BILAN") || d.Contains("SYNTHESE")) return "BILAN";
-        if (d.Contains("ETAT") && d.Contains("FISC")) return "ETATSFISCAUX";
-        if (d.Contains("AUDIT")) return "AUDITCOMPTABLE";
-        if (d.Contains("CONSEIL") && d.Contains("FISC")) return "CONSEILFISCAL";
-
+        if (dto.ClientId <= 0)
+            return "Le client est requis.";
+        if (!dto.DateDebutContrat.HasValue)
+            return "La date de début du contrat est obligatoire.";
+        if (!dto.DateFinContrat.HasValue)
+            return "La date de fin du contrat est obligatoire.";
+        if (dto.DateFinContrat.Value.Date < dto.DateDebutContrat.Value.Date)
+            return "La date de fin doit être postérieure ou égale à la date de début.";
         return null;
     }
 
+    /// <summary>
+    /// Returns the Reference of another Valide/Actif contract for the same client
+    /// whose date window overlaps [debut, fin] (inclusive), or null if none.
+    /// </summary>
+    private async Task<string?> FindOverlappingActiveContratReferenceAsync(
+        int clientId,
+        int cabinetId,
+        DateTime? debut,
+        DateTime? fin,
+        int? excludeContratId = null)
+    {
+        if (!debut.HasValue || !fin.HasValue)
+            return null;
+
+        var start = debut.Value.Date;
+        var end = fin.Value.Date;
+        var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
+
+        var query = _db.ContratsCommerciaux
+            .AsNoTracking()
+            .Where(c => c.ClientId == clientId
+                && c.CabinetId == cabinetId
+                && !c.IsDeleted
+                && activeStatuses.Contains(c.Statut)
+                && c.DateDebutContrat != null
+                && c.DateFinContrat != null
+                && c.DateDebutContrat.Value.Date <= end
+                && c.DateFinContrat.Value.Date >= start);
+
+        if (excludeContratId.HasValue)
+            query = query.Where(c => c.Id != excludeContratId.Value);
+
+        return await query
+            .OrderByDescending(c => c.DateValidation)
+            .Select(c => c.Reference)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Fiduciary fee line: Net HT = PU HT × Qty × (1 − Remise%), TTC = Net HT × (1 + TVA%).
+    /// Quantity defaults to 1 for freeform retainer/fee lines.
+    /// </summary>
+    private static (decimal MontantHT, decimal MontantTVA, decimal MontantTTC, decimal Remise) CalculerLigneHonoraires(LigneDocumentCommercialCreateDto l)
+    {
+        var qty = l.Quantite <= 0 ? 1m : l.Quantite;
+        var brut = qty * l.PrixUnitaireHT;
+        var remisePct = Math.Clamp(l.RemisePourcentage ?? 0m, 0m, 100m);
+        var remise = brut * remisePct / 100m + (l.RemiseMontant ?? 0m);
+        if (remise > brut) remise = brut;
+        var montantHT = Math.Round(brut - remise, 2, MidpointRounding.AwayFromZero);
+        var tauxTva = l.TauxTVA == 0m ? 0m : l.TauxTVA; // 20% or 0% in Moroccan fiduciary deals
+        var montantTVA = Math.Round(montantHT * tauxTva / 100m, 2, MidpointRounding.AwayFromZero);
+        var montantTTC = montantHT + montantTVA;
+        return (montantHT, montantTVA, montantTTC, Math.Round(remise, 2, MidpointRounding.AwayFromZero));
+    }
 
     private static string GetServiceLabel(string typeService)
     {
         return typeService?.ToUpperInvariant() switch
         {
-            RefCodes.TypeService.TVA => "Taxe sur la Valeur Ajoutée",
-            RefCodes.TypeService.IS => "Impôt sur les Sociétés",
-            RefCodes.TypeService.IR => "Impôt sur le Revenu",
-            RefCodes.TypeService.CNSS => "Caisse Nationale de Sécurité Sociale",
-            RefCodes.TypeService.Paie => "Gestion de la Paie",
-            RefCodes.TypeService.Juridique => "Dossiers Juridiques",
-            RefCodes.TypeService.Comptabilite => "Tenue Comptable",
-            RefCodes.TypeService.Bilan => "Bilan & États de Synthèse",
-            RefCodes.TypeService.EtatsFiscaux => "États Fiscaux",
-            RefCodes.TypeService.AuditComptable => "Audit Comptable",
-            RefCodes.TypeService.ConseilFiscal => "Conseil Fiscal",
+            "TVA" => "TVA – Taxe sur la Valeur Ajoutée",
+            "CM" => "CM – Cotisation Minimale",
+            "DRF" => "D.R.F – Déclaration du Résultat Fiscal",
+            "ACOMPTES" => "Acomptes IS (trimestriels)",
+            "REG_IS" => "Régularisation / Solde IS",
+            "IR_SAL" => "IR / Salaires – Retenue à la source",
+            "RAS_FONC" => "RAS / Foncier",
+            "RAS_DIV" => "RAS / Dividendes",
+            "EG" => "E.G – État Descriptif du Gasoil",
+            "CNSS" => "CNSS – Déclarations Damancom",
+            "DTS" => "D.T.S / État 9421",
+            "PAIE" => "Bulletins de paie & traitement de la paie",
+            "PV_AGO" => "PV AGO & Rapport de gestion",
+            "DEPOT_RC" => "Dépôt des comptes au greffe du tribunal de commerce",
+            "COMPTABILITE" => "Tenue comptable, saisie & rapprochements",
+            "TRESORERIE" => "Trésorerie & rapprochements bancaires",
+            "BILAN" => "Bilan, CPC & états de synthèse",
+            "ETATSFISCAUX" => "États fiscaux (CPC, ESG, TFT)",
+            "LIASSEFISCALE" => "Liasse fiscale",
+            "JURIDIQUE" => "Dossiers Juridiques",
             _ => typeService ?? ""
         };
     }
@@ -1946,11 +2219,13 @@ public class CommercialService : ICommercialService
     {
         return typeService?.ToUpperInvariant() switch
         {
-            RefCodes.TypeService.TVA or RefCodes.TypeService.IS or RefCodes.TypeService.IR or RefCodes.TypeService.EtatsFiscaux => RefCodes.CategorieService.Fiscal,
-            RefCodes.TypeService.CNSS or RefCodes.TypeService.Paie => RefCodes.CategorieService.Social,
-            RefCodes.TypeService.Comptabilite or RefCodes.TypeService.Bilan => RefCodes.CategorieService.Comptable,
-            RefCodes.TypeService.Juridique => RefCodes.CategorieService.Juridique,
-            RefCodes.TypeService.AuditComptable or RefCodes.TypeService.ConseilFiscal => RefCodes.CategorieService.Conseil,
+            "TVA" or "CM" or "DRF" or "ACOMPTES" or "REG_IS" or "IR_SAL" or "RAS_FONC" or "RAS_DIV"
+                or "EG" or "DT" or "DEI_TP" or "DRVT" or "CSS_SOL" or "ETATSFISCAUX" or "LIASSEFISCALE"
+                => RefCodes.CategorieService.Fiscal,
+            "CNSS" or "DTS" or "PAIE" or "DCH_ETS" => RefCodes.CategorieService.Social,
+            "COMPTABILITE" or "TRESORERIE" or "IMMOBILISATION" or "BILAN" => RefCodes.CategorieService.Comptable,
+            "PV_AGO" or "DEPOT_RC" or "JURIDIQUE" => RefCodes.CategorieService.Juridique,
+            "AUDITCOMPTABLE" or "CONSEILFISCAL" => RefCodes.CategorieService.Conseil,
             _ => RefCodes.CategorieService.Autre
         };
     }
@@ -1959,17 +2234,12 @@ public class CommercialService : ICommercialService
     {
         return typeService?.ToUpperInvariant() switch
         {
-            RefCodes.TypeService.TVA => typeTVA == RefCodes.Frequence.Trimestrielle ? RefCodes.Frequence.Trimestrielle : RefCodes.Frequence.Mensuelle,
-            RefCodes.TypeService.IS => RefCodes.Frequence.Annuelle,
-            RefCodes.TypeService.IR => RefCodes.Frequence.Annuelle,
-            RefCodes.TypeService.CNSS => RefCodes.Frequence.Mensuelle,
-            RefCodes.TypeService.Paie => RefCodes.Frequence.Mensuelle,
-            RefCodes.TypeService.Comptabilite => RefCodes.Frequence.Mensuelle,
-            RefCodes.TypeService.Bilan => RefCodes.Frequence.Annuelle,
-            RefCodes.TypeService.EtatsFiscaux => RefCodes.Frequence.Annuelle,
-            RefCodes.TypeService.Juridique => RefCodes.Frequence.Ponctuelle,
-            RefCodes.TypeService.AuditComptable => RefCodes.Frequence.Annuelle,
-            RefCodes.TypeService.ConseilFiscal => RefCodes.Frequence.Ponctuelle,
+            "TVA" => typeTVA == RefCodes.Frequence.Trimestrielle ? RefCodes.Frequence.Trimestrielle : RefCodes.Frequence.Mensuelle,
+            "IR_SAL" or "CNSS" or "PAIE" or "COMPTABILITE" or "TRESORERIE" => RefCodes.Frequence.Mensuelle,
+            "ACOMPTES" => RefCodes.Frequence.Trimestrielle,
+            "CM" or "DRF" or "REG_IS" or "BILAN" or "LIASSEFISCALE" or "ETATSFISCAUX" or "DTS" or "PV_AGO" or "DEPOT_RC" or "EG"
+                => RefCodes.Frequence.Annuelle,
+            "RAS_FONC" or "RAS_DIV" => RefCodes.Frequence.Mensuelle,
             _ => RefCodes.Frequence.Mensuelle
         };
     }
@@ -1979,20 +2249,49 @@ public class CommercialService : ICommercialService
         switch (sc.TypeService?.ToUpperInvariant())
         {
             case "TVA":
-                sc.JourLimiteDeclaration = 20;
+                sc.JourLimiteDeclaration = 30; // 30th of following month (SIMPL)
                 sc.DelaiDeclarationMois = 1;
                 break;
-            case "IS":
-                sc.JourLimiteDeclaration = 31;
-                sc.DelaiDeclarationMois = 3;
-                break;
-            case "IR":
-                sc.JourLimiteDeclaration = 28;
-                sc.DelaiDeclarationMois = 2;
+            case "IR_SAL":
+                sc.JourLimiteDeclaration = 30;
+                sc.DelaiDeclarationMois = 1;
                 break;
             case "CNSS":
-                sc.JourLimiteDeclaration = 10;
+                sc.JourLimiteDeclaration = 10; // 10th of following month (Damancom)
                 sc.DelaiDeclarationMois = 1;
+                break;
+            case "PAIE":
+                sc.JourLimiteDeclaration = 5;
+                sc.DelaiDeclarationMois = 1;
+                break;
+            case "DTS":
+                sc.JourLimiteDeclaration = 28; // End of February
+                sc.DelaiDeclarationMois = 2;
+                break;
+            case "ACOMPTES":
+                sc.JourLimiteDeclaration = 31; // Mar/Jun/Sep/Dec
+                sc.DelaiDeclarationMois = 0;
+                break;
+            case "CM":
+            case "DRF":
+            case "REG_IS":
+            case "BILAN":
+            case "LIASSEFISCALE":
+            case "ETATSFISCAUX":
+                sc.JourLimiteDeclaration = 31; // March 31
+                sc.DelaiDeclarationMois = 3;
+                break;
+            case "PV_AGO":
+                sc.JourLimiteDeclaration = 30; // June 30
+                sc.DelaiDeclarationMois = 6;
+                break;
+            case "DEPOT_RC":
+                sc.JourLimiteDeclaration = 31; // July 31
+                sc.DelaiDeclarationMois = 7;
+                break;
+            case "EG":
+                sc.JourLimiteDeclaration = 31;
+                sc.DelaiDeclarationMois = 3;
                 break;
         }
     }

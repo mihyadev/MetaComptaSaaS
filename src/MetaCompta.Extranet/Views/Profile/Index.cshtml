@@ -1,0 +1,162 @@
+@model MetaCompta.Application.DTOs.ClientDto
+@{
+    ViewData["Title"] = "Mon Entreprise";
+}
+
+<div class="ex-page-hero">
+    <div>
+        <h4>Mon entreprise</h4>
+        <p class="ex-sub">Identifiants fiscaux, contacts et services fiduciaires.</p>
+    </div>
+    <a href="/MessagesExtranet" class="btn btn-primary btn-sm d-none d-md-inline-flex align-items-center gap-1"><i class="bi bi-chat-dots"></i>Contacter le cabinet</a>
+</div>
+
+@{
+    var initials = string.Concat(Model.RaisonSociale.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => w[0])).ToUpper();
+}
+<div class="ex-company-banner">
+    <div class="ex-co-mark">@initials</div>
+    <div class="flex-grow-1">
+        <h3 class="mb-1 fw-bold" style="font-size:1.35rem;">@Model.RaisonSociale</h3>
+        <div class="ex-meta-row">
+            @if (!string.IsNullOrEmpty(Model.FormeJuridique)) { <span><i class="bi bi-briefcase"></i>@Model.FormeJuridique</span> }
+            @if (!string.IsNullOrEmpty(Model.SecteurActivite)) { <span><i class="bi bi-tag"></i>@Model.SecteurActivite</span> }
+            @if (!string.IsNullOrEmpty(Model.ICE)) { <span><i class="bi bi-upc"></i>ICE @Model.ICE</span> }
+            <span class="badge @(Model.Statut == "Active" ? "bg-success" : "bg-secondary") rounded-pill">@Model.Statut</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Employés actifs</div><div class="fs-3 fw-bold">@Model.EmployeeCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-people fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Déclarations</div><div class="fs-3 fw-bold text-info">@Model.DeclarationCount</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-file-earmark-text fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div><div class="small text-muted text-uppercase fw-semibold">Services actifs</div><div class="fs-3 fw-bold text-success">@(Model.ServicesFiduciaires?.Count(s => s.EstActifAujourdhui) ?? 0)</div></div>
+                <div class="rounded-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-clipboard-check fs-5"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-hash text-primary me-2"></i>Identifiants Fiscaux</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">ICE</div><div class="fw-semibold">@(Model.ICE ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Identifiant Fiscal</div><div class="fw-semibold">@(Model.IF ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Registre Commerce</div><div class="fw-semibold">@(Model.RC ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">CNSS</div><div class="fw-semibold">@(Model.NumeroCNSS ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Patente</div><div class="fw-semibold">@(Model.NumeroPatente ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Code Activité</div><div class="fw-semibold">@(Model.CodeActivite ?? "-")</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle text-info me-2"></i>Informations Générales</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Forme Juridique</div><div class="fw-semibold">@(Model.FormeJuridique ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Secteur d'Activité</div><div class="fw-semibold">@(Model.SecteurActivite ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Capital Social</div><div class="fw-semibold">@(Model.CapitalSocial?.ToString("N2") ?? "-") MAD</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Date Création</div><div class="fw-semibold">@(Model.DateCreation?.ToString("dd/MM/yyyy") ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Type TVA</div><div class="fw-semibold">@Model.TypeTVA</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Mois Clôture</div><div class="fw-semibold">@(new DateTime(2000, Model.MoisClotureExercice, 1).ToString("MMMM", new System.Globalization.CultureInfo("fr-FR")))</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-geo-alt text-danger me-2"></i>Coordonnées</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-12"><div class="small text-muted text-uppercase fw-semibold mb-1">Adresse</div><div class="fw-semibold">@(Model.AdresseSiegeSocial ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Ville</div><div class="fw-semibold">@(Model.VilleSiegeSocial ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Téléphone</div><div class="fw-semibold">@(Model.TelephonePrincipal ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Email</div><div class="fw-semibold">@(Model.EmailPrincipal ?? "-")</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-person-badge text-success me-2"></i>Contact Principal</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Nom</div><div class="fw-semibold">@(Model.ContactNom ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Fonction</div><div class="fw-semibold">@(Model.ContactFonction ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Téléphone</div><div class="fw-semibold">@(Model.ContactTelephone ?? "-")</div></div>
+                    <div class="col-6"><div class="small text-muted text-uppercase fw-semibold mb-1">Email</div><div class="fw-semibold">@(Model.ContactEmail ?? "-")</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.ManagerPrincipalName))
+{
+    <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-person-workspace text-primary me-2"></i>Votre Comptable</h6>
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary text-white" style="width:52px;height:52px;">
+                    <i class="bi bi-person-fill fs-4"></i>
+                </div>
+                <div>
+                    <div class="fw-semibold">@Model.ManagerPrincipalName</div>
+                    <div class="small text-muted">Responsable de votre dossier</div>
+                </div>
+                <a href="/MessagesExtranet" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-chat-dots me-1"></i>Contacter</a>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.ServicesFiduciaires != null && Model.ServicesFiduciaires.Any())
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-clipboard-check text-warning me-2"></i>Services Fiduciaires</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light"><tr><th class="ps-4">Service</th><th>Catégorie</th><th>Fréquence</th><th>Statut</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in Model.ServicesFiduciaires)
+                        {
+                            <tr>
+                                <td class="ps-4 fw-medium">@s.LibelleService</td>
+                                <td><span class="badge bg-info bg-opacity-10 text-info rounded-pill">@s.Categorie</span></td>
+                                <td>@s.Frequence</td>
+                                <td><span class="badge @(s.EstActifAujourdhui ? "bg-success" : "bg-secondary") rounded-pill">@(s.EstActifAujourdhui ? "Actif" : "Inactif")</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+

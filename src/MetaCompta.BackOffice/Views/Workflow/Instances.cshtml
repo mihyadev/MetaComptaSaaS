@@ -1,1 +1,192 @@
-﻿
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.WorkflowInstanceDto>
+@{
+    ViewData["Title"] = "Instances de workflow";
+}
+
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-diagram-3 me-2"></i>Instances de workflow</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Workflow")">Workflow</a></li>
+                <li class="breadcrumb-item active">Instances</li>
+            </ol>
+        </nav>
+    </div>
+    @if (ViewBag.CanWorkflowCreate as bool? ?? false)
+    {
+        <a href="@Url.Action("StartWorkflow", "Workflow")" class="btn btn-primary">
+            <i class="bi bi-play-circle me-1"></i>Demarrer un workflow
+        </a>
+    }
+</div>
+
+<!-- Stats -->
+@if (Model?.Items != null)
+{
+    var active = Model.Items.Count(i => i.Status == "Active");
+    var completed = Model.Items.Count(i => i.Status == "Completed");
+    var paused = Model.Items.Count(i => i.Status == "Paused");
+    var cancelled = Model.Items.Count(i => i.Status == "Cancelled");
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="mc-card p-3 text-center">
+                <div class="fs-2 fw-bold text-primary">@active</div>
+                <div class="text-muted small">Actifs</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="mc-card p-3 text-center">
+                <div class="fs-2 fw-bold text-success">@completed</div>
+                <div class="text-muted small">Termines</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="mc-card p-3 text-center">
+                <div class="fs-2 fw-bold text-warning">@paused</div>
+                <div class="text-muted small">En pause</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="mc-card p-3 text-center">
+                <div class="fs-2 fw-bold text-secondary">@cancelled</div>
+                <div class="text-muted small">Annules</div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Filters -->
+<div class="mc-card mb-4">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Statut</label>
+                <select name="status" class="form-select">
+                    <option value="">Tous</option>
+                    <option value="Active" selected="@(ViewBag.Status?.ToString() == "Active")">Actif</option>
+                    <option value="Completed" selected="@(ViewBag.Status?.ToString() == "Completed")">Termine</option>
+                    <option value="Paused" selected="@(ViewBag.Status?.ToString() == "Paused")">En pause</option>
+                    <option value="Cancelled" selected="@(ViewBag.Status?.ToString() == "Cancelled")">Annule</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Client ID</label>
+                <input type="number" name="clientId" class="form-control" value="@ViewBag.ClientId" placeholder="ID client" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Declaration ID</label>
+                <input type="number" name="declarationId" class="form-control" value="@ViewBag.DeclarationId" placeholder="ID declaration" />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Instances Table -->
+<div class="mc-card">
+    <div class="card-header"><i class="bi bi-list-columns me-2"></i>Workflows (@(Model?.TotalCount ?? 0))</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Type</th>
+                        <th>Periode</th>
+                        <th>Etape actuelle</th>
+                        <th>Progression</th>
+                        <th>Demarre par</th>
+                        <th>Date</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.Items != null && Model.Items.Any())
+                    {
+                        foreach (var inst in Model.Items)
+                        {
+                            var statusClass = inst.Status switch
+                            {
+                                "Active" => "primary",
+                                "Completed" => "success",
+                                "Paused" => "warning",
+                                "Cancelled" => "secondary",
+                                _ => "dark"
+                            };
+                            <tr>
+                                <td class="fw-medium">@inst.ClientName</td>
+                                <td><span class="badge bg-info bg-opacity-10 text-info">@inst.DeclarationType</span></td>
+                                <td>@inst.DeclarationPeriode</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(inst.CurrentStepName))
+                                    {
+                                        <span class="d-flex align-items-center gap-1">
+                                            <span class="badge bg-primary bg-opacity-10 text-primary">@inst.CurrentStepOrder</span>
+                                            @inst.CurrentStepName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td style="min-width: 150px;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress flex-grow-1" style="height: 8px;">
+                                            <div class="progress-bar bg-@statusClass" style="width: @inst.ProgressPercent%"></div>
+                                        </div>
+                                        <small class="text-muted">@inst.ProgressPercent%</small>
+                                    </div>
+                                    <small class="text-muted">@inst.CompletedSteps / @inst.TotalSteps etapes</small>
+                                </td>
+                                <td class="small">@inst.StartedByUserName</td>
+                                <td class="small">@inst.StartedAt.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge bg-@statusClass">@inst.Status</span></td>
+                                <td>
+                                    <a href="@Url.Action("InstanceDetails", "Workflow", new { id = inst.Id })" class="btn btn-sm btn-outline-primary" title="Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                <i class="bi bi-diagram-3 fs-1 d-block mb-2"></i>
+                                Aucune instance de workflow trouvee.
+                                <div class="mt-2">
+                                    @if (ViewBag.CanWorkflowCreate as bool? ?? false)
+                                    {
+                                        <a href="@Url.Action("StartWorkflow", "Workflow")" class="btn btn-sm btn-primary">Demarrer un workflow</a>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination -->
+@if (Model != null && Model.TotalPages > 1)
+{
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <li class="page-item @(i == Model.Page ? "active" : "")">
+                    <a class="page-link" href="@Url.Action("Instances", "Workflow", new { page = i, status = ViewBag.Status, clientId = ViewBag.ClientId, declarationId = ViewBag.DeclarationId })">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}

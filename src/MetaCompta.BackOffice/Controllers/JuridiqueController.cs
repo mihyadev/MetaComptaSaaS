@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -25,18 +26,20 @@ public class JuridiqueController : BaseController
         _clients = clients;
     }
 
+    [RequirePermission(ClaimDefinitions.JuridiqueDetail)]
     public async Task<IActionResult> Index(int? clientId = null, string? type = null, string? statut = null, int page = 1, string? search = null)
     {
         clientId ??= SelectedClientId;
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE", "STATUT_DOSSIER");
         var result = await _juridique.GetAllAsync(clientId, type, statut, page, search);
-        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
+        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.TypeDossier = type;
         ViewBag.Statut = statut;
         ViewBag.Search = search;
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.JuridiqueDetail)]
     public async Task<IActionResult> Details(int id)
     {
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE", "STATUT_DOSSIER");
@@ -46,6 +49,7 @@ public class JuridiqueController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.JuridiqueCreate)]
     public async Task<IActionResult> Create()
     {
         await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE");
@@ -55,6 +59,7 @@ public class JuridiqueController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.JuridiqueCreate)]
     public async Task<IActionResult> Create(DossierJuridiqueCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -77,6 +82,7 @@ public class JuridiqueController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.JuridiqueEdit)]
     public async Task<IActionResult> ChangeStatus(int id, string statut)
     {
         var result = await _juridique.ChangeStatusAsync(id, statut);

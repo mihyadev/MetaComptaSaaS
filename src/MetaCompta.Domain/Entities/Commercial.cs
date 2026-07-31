@@ -199,10 +199,30 @@ public class ContratCommercial : TenantEntity
     public string? PiecesJointesJson { get; set; }
     public string? Notes { get; set; }
 
+    // ── Services fiduciaires activés (JSON: [{typeService, honoraires, autoGenerer}]) ──
+    /// <summary>JSON array of enabled fiduciary services for this contract, each with optional per-service honoraires.</summary>
+    public string? ServicesActivesJson { get; set; }
+
     // ── Navigation ──
+    public virtual ICollection<ContratMembre> Membres { get; set; } = new List<ContratMembre>();
     public virtual ICollection<LigneDocumentCommercial> Lignes { get; set; } = new List<LigneDocumentCommercial>();
     public virtual ICollection<DocumentCommercialHistorique> Historique { get; set; } = new List<DocumentCommercialHistorique>();
     public virtual ICollection<Facture> Factures { get; set; } = new List<Facture>();
+}
+
+/// <summary>
+/// Team member assigned to a commercial contract (organizational visibility).
+/// </summary>
+public class ContratMembre : TenantEntity
+{
+    public int ContratId { get; set; }
+    public virtual ContratCommercial? Contrat { get; set; }
+
+    public string UserId { get; set; } = string.Empty;
+    public virtual ApplicationUser? User { get; set; }
+
+    /// <summary>Optional label (e.g. Collaborateur, Superviseur).</summary>
+    public string? RoleLabel { get; set; }
 }
 
 /// <summary>
@@ -317,6 +337,9 @@ public class LigneDocumentCommercial : TenantEntity
     // ── Totaux ──
     public decimal MontantHT { get; set; }
     public decimal MontantTTC { get; set; }
+
+    // ── Mode de facturation de la ligne (Mensuel, Trimestriel, Semestriel, Annuel, Ponctuel) ──
+    public string? ModeFacturation { get; set; }
 
     // ── Pour Régie : suivi de consommation ──
     public decimal? QuantiteConsommee { get; set; }

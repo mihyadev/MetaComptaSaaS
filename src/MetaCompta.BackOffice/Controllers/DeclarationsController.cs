@@ -1,6 +1,8 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
 using System.Xml.Linq;
@@ -10,30 +12,47 @@ namespace MetaCompta.BackOffice.Controllers;
 [RequireSelectedClient]
 public class DeclarationsController : BaseController
 {
-    // Statuts dans lesquels la declaration est modifiable
+    // Statuts dans lesquels la déclaration est modifiable (inclut étapes WF TVA: contrôle / calcul)
     private static readonly HashSet<string> EditableStatuts = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Brouillon", "ACompleter", "EnCours", "EnPreparation"
+        RefCodes.StatutDeclaration.Brouillon,
+        RefCodes.StatutDeclaration.ACompleter,
+        RefCodes.StatutDeclaration.EnCours,
+        RefCodes.StatutDeclaration.EnPreparation,
+        RefCodes.StatutDeclaration.CreeeParSysteme,
+        RefCodes.StatutDeclaration.DocumentsDemandes,
+        RefCodes.StatutDeclaration.DocumentsRecus,
+        RefCodes.StatutDeclaration.ControleEnCours,
+        RefCodes.StatutDeclaration.CalculTVA,
+        RefCodes.StatutDeclaration.EnAttenteCorrection,
+        RefCodes.StatutDeclaration.ACorriger,
     };
 
     private readonly IDeclarationFacade _declarations;
     private readonly IClientFacade _clients;
     private readonly IWorkflowFacade _workflow;
+    private readonly IDocumentFacade _documents;
+    private readonly IMessageFacade _messages;
 
     public DeclarationsController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IDeclarationFacade declarations,
         IClientFacade clients,
-        IWorkflowFacade workflow)
+        IWorkflowFacade workflow,
+        IDocumentFacade documents,
+        IMessageFacade messages)
         : base(referenceData, contextAccessor)
     {
         _declarations = declarations;
         _clients = clients;
         _workflow = workflow;
+        _documents = documents;
+        _messages = messages;
     }
 
     // ── INDEX (all types) ───────────────────────────────────────
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
     public async Task<IActionResult> Index(string? type = null, string? statut = null, int page = 1)
     {
         var clientId = SelectedClientId;
@@ -41,25 +60,20 @@ public class DeclarationsController : BaseController
         await LoadReferenceDataToViewBagAsync("TYPE_DECLARATION", "STATUT_DECLARATION");
         ViewBag.Type = type;
         ViewBag.Statut = statut;
-
-        // Contract status from session — gates create/edit buttons
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        ViewBag.HasActiveContract = hasActiveContract;
+        PopulateContractAccessViewBag();
 
         return View(result);
     }
 
     // ── DETAILS ─────────────────────────────────────────────────
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
     public async Task<IActionResult> Details(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);
         if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
         ViewBag.Type = declaration.Type;
         await LoadReferenceDataToViewBagAsync("STATUT_DECLARATION");
-
-        // Contract status from session — gates edit/status buttons in the view
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        ViewBag.HasActiveContract = hasActiveContract;
+        PopulateContractAccessViewBag();
 
         // Load type-specific data
         switch (declaration.Type)
@@ -102,16 +116,108 @@ public class DeclarationsController : BaseController
         // Populate ActionBar ViewBag
         await LoadWorkflowActionBarAsync(declaration);
 
+        // Load documents for this declaration
+        try
+        {
+            ViewBag.Documents = await _documents.GetByDeclarationIdAsync(id) ?? new List<DocumentDto>();
+        }
+        catch { ViewBag.Documents = new List<DocumentDto>(); }
+
+        // Load messages for this declaration
+        try
+        {
+            ViewBag.Messages = await _messages.GetByDeclarationAsync(id) ?? new List<MessageDto>();
+        }
+        catch { ViewBag.Messages = new List<MessageDto>(); }
+
+        // Timeline: workflow history + declaration status history
+        try
+        {
+            if (ViewBag.WorkflowInstance is WorkflowInstanceDto wi)
+                ViewBag.WorkflowHistory = await _workflow.GetHistoryAsync(wi.Id) ?? new List<WorkflowHistoryDto>();
+            else
+                ViewBag.WorkflowHistory = new List<WorkflowHistoryDto>();
+        }
+        catch { ViewBag.WorkflowHistory = new List<WorkflowHistoryDto>(); }
+
+        try
+        {
+            ViewBag.DeclarationStatusHistory = await _declarations.GetStatusHistoryAsync(id) ?? new List<DeclarationHistoryDto>();
+        }
+        catch { ViewBag.DeclarationStatusHistory = new List<DeclarationHistoryDto>(); }
+
         return View(declaration);
+    }
+
+    /// <summary>Prendre / Ouvrir the current workflow step (exclusive soft lock).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClaimWorkflowStep(int declarationId, int workflowInstanceId, bool forceOverride = false, string? reason = null)
+    {
+        var result = await _workflow.ClaimStepAsync(workflowInstanceId, forceOverride, reason);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Étape prise en charge.";
+        else
+            TempData["Error"] = result?.Message ?? "Impossible de prendre cette étape.";
+        return RedirectToAction("Details", new { id = declarationId });
+    }
+
+    // ── SEND MESSAGE ────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationView, ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> SendMessage(int declarationId, int clientId, string sujet, string contenu)
+    {
+        if (string.IsNullOrWhiteSpace(contenu))
+        {
+            TempData["Error"] = "Le message ne peut pas être vide.";
+            return RedirectToAction("Details", new { id = declarationId });
+        }
+        var dto = new SendMessageDto
+        {
+            ClientId = clientId,
+            DeclarationId = declarationId,
+            Sujet = sujet,
+            Contenu = contenu
+        };
+        await _messages.SendAsync(dto);
+        TempData["Success"] = "Message envoyé.";
+        return RedirectToAction("Details", new { id = declarationId });
+    }
+
+    // ── UPLOAD DOCUMENT ─────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DocumentUpload)]
+    public async Task<IActionResult> UploadDocument(int declarationId, IFormFile file, string titre, string categorie)
+    {
+        if (file == null || file.Length == 0)
+        {
+            TempData["Error"] = "Veuillez sélectionner un fichier.";
+            return RedirectToAction("Details", new { id = declarationId });
+        }
+
+        var declaration = await _declarations.GetByIdAsync(declarationId);
+        using var stream = file.OpenReadStream();
+        var result = await _documents.UploadAsync(stream, file.FileName, file.ContentType, file.Length,
+            titre ?? file.FileName, categorie ?? "Fiscal", declaration?.ClientId, declarationId);
+
+        TempData[result?.Success == true ? "Success" : "Error"] =
+            result?.Success == true ? "Document uploadé avec succès." : (result?.Message ?? "Erreur lors de l'upload.");
+        return RedirectToAction("Details", new { id = declarationId });
     }
 
     // ── CREATE (generic via modal) ──────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
     public async Task<IActionResult> Create(string type, int? anneeFiscale = null)
     {
         var clientId = SelectedClientId ?? 0;
         if (clientId == 0) { TempData["Error"] = "Aucun client sélectionné."; return RedirectToAction("Index"); }
+        if (!RequiresManageAccess()) return RedirectToAction("Index", new { type });
+        if (!RequiresPermission(PermissionHelper.Declaration.Create)) return RedirectToAction("Index", new { type });
+
         ApiResponse<DeclarationDto>? result = null;
 
         switch (type.ToUpper())
@@ -156,6 +262,7 @@ public class DeclarationsController : BaseController
     // ── LEGACY TVA CREATE (backward compat) ─────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
     public async Task<IActionResult> CreateTVA()
     {
         return await Create("TVA", null);
@@ -164,8 +271,17 @@ public class DeclarationsController : BaseController
     // ── DELETE ───────────────────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationDelete)]
     public async Task<IActionResult> Delete(int id)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Index");
+        var canDelete = PermissionHelper.HasPermission(HttpContext.Session, PermissionHelper.Declaration.Delete)
+            || PermissionHelper.HasPermission(HttpContext.Session, PermissionHelper.Declaration.Edit);
+        if (!canDelete)
+        {
+            TempData["Error"] = "Vous n'avez pas la permission de supprimer cette déclaration.";
+            return RedirectToAction("Details", new { id });
+        }
         var result = await _declarations.DeleteAsync(id);
         SetApiResult(result, "Déclaration supprimée.", "Erreur lors de la suppression.");
         return RedirectToAction("Index");
@@ -175,14 +291,21 @@ public class DeclarationsController : BaseController
     //  TVA EDIT
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.TvaEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditTVA(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);
         if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
-        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé. Seuls Brouillon, À Compléter, En Cours et En Préparation sont modifiables."; return RedirectToAction("Details", new { id }); }
+        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé (déjà validée / soumise / clôturée)."; return RedirectToAction("Details", new { id }); }
         ViewBag.Type = "TVA";
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        if (!hasActiveContract) { TempData["Error"] = "Modification impossible : aucun contrat actif pour ce client."; return RedirectToAction("Details", new { id }); }
+        PopulateContractAccessViewBag();
+        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
+        {
+            TempData["Error"] = ViewBag.IsConsultMode == true
+                ? (ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible : mode consultation.")
+                : "Vous n'avez pas la permission de modifier cette déclaration.";
+            return RedirectToAction("Details", new { id });
+        }
         ViewBag.Declaration = declaration;
         if (declaration.ClientId > 0)
             ViewBag.Client = await _clients.GetByIdAsync(declaration.ClientId);
@@ -194,14 +317,16 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.TvaEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditTVA(int id, DeclarationTVADto dto)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
         var declCheck = await _declarations.GetByIdAsync(id);
         if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
         { TempData["Error"] = "Modification interdite dans ce statut."; return RedirectToAction("Details", new { id }); }
-        // Only update manual adjustment fields (Immobilisations + Crédit Précédent),
-        // then recalculate totals from lines. Never overwrite line-calculated totals.
-        var result = await _declarations.SaveTVAAjustementsAsync(id, dto.TVARecuperableImmobilisations, dto.CreditPrecedent);
+        // Maroc: Facturée − Déductible − Crédit déclaration précédente
+        var result = await _declarations.SaveTVAAjustementsAsync(id, dto.TVACollecteeTotale, dto.TVARecuperableTotale, dto.CreditPrecedent);
         if (result?.Success == true)
         {
             TempData["Success"] = "Ajustements TVA enregistrés et totaux recalculés.";
@@ -221,14 +346,21 @@ public class DeclarationsController : BaseController
     //  IS EDIT
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.IsEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditIS(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);
         if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
-        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé. Seuls Brouillon, À Compléter, En Cours et En Préparation sont modifiables."; return RedirectToAction("Details", new { id }); }
+        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé (déjà validée / soumise / clôturée)."; return RedirectToAction("Details", new { id }); }
         ViewBag.Type = "IS";
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        if (!hasActiveContract) { TempData["Error"] = "Modification impossible : aucun contrat actif pour ce client."; return RedirectToAction("Details", new { id }); }
+        PopulateContractAccessViewBag();
+        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
+        {
+            TempData["Error"] = ViewBag.IsConsultMode == true
+                ? (ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible : mode consultation.")
+                : "Vous n'avez pas la permission de modifier cette déclaration.";
+            return RedirectToAction("Details", new { id });
+        }
         ViewBag.Declaration = declaration;
         await LoadWorkflowActionBarAsync(declaration);
         var isData = await _declarations.GetISDataAsync(id);
@@ -237,8 +369,11 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.IsEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditIS(int id, DeclarationISDto dto)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
         var declCheck = await _declarations.GetByIdAsync(id);
         if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
         { TempData["Error"] = "Modification interdite dans ce statut."; return RedirectToAction("Details", new { id }); }
@@ -258,14 +393,21 @@ public class DeclarationsController : BaseController
     //  IR EDIT
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.IrEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditIR(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);
         if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
-        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé. Seuls Brouillon, À Compléter, En Cours et En Préparation sont modifiables."; return RedirectToAction("Details", new { id }); }
+        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé (déjà validée / soumise / clôturée)."; return RedirectToAction("Details", new { id }); }
         ViewBag.Type = "IR";
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        if (!hasActiveContract) { TempData["Error"] = "Modification impossible : aucun contrat actif pour ce client."; return RedirectToAction("Details", new { id }); }
+        PopulateContractAccessViewBag();
+        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
+        {
+            TempData["Error"] = ViewBag.IsConsultMode == true
+                ? (ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible : mode consultation.")
+                : "Vous n'avez pas la permission de modifier cette déclaration.";
+            return RedirectToAction("Details", new { id });
+        }
         ViewBag.Declaration = declaration;
         await LoadWorkflowActionBarAsync(declaration);
         var irData = await _declarations.GetIRDataAsync(id);
@@ -274,8 +416,11 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.IrEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditIR(int id, DeclarationIRDto dto)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
         var declCheck = await _declarations.GetByIdAsync(id);
         if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
         { TempData["Error"] = "Modification interdite dans ce statut."; return RedirectToAction("Details", new { id }); }
@@ -295,14 +440,21 @@ public class DeclarationsController : BaseController
     //  CNSS EDIT
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditCNSS(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);
         if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
-        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé. Seuls Brouillon, À Compléter, En Cours et En Préparation sont modifiables."; return RedirectToAction("Details", new { id }); }
+        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé (déjà validée / soumise / clôturée)."; return RedirectToAction("Details", new { id }); }
         ViewBag.Type = "CNSS";
-        var hasActiveContract = bool.TryParse(HttpContext.Session.GetString("HasActiveContract"), out var hac) && hac;
-        if (!hasActiveContract) { TempData["Error"] = "Modification impossible : aucun contrat actif pour ce client."; return RedirectToAction("Details", new { id }); }
+        PopulateContractAccessViewBag();
+        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
+        {
+            TempData["Error"] = ViewBag.IsConsultMode == true
+                ? (ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible : mode consultation.")
+                : "Vous n'avez pas la permission de modifier cette déclaration.";
+            return RedirectToAction("Details", new { id });
+        }
         ViewBag.Declaration = declaration;
         await LoadWorkflowActionBarAsync(declaration);
         var cnssData = await _declarations.GetCNSSDataAsync(id);
@@ -311,8 +463,11 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditCNSS(int id, DeclarationCNSSDto dto)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
         var declCheck = await _declarations.GetByIdAsync(id);
         if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
         { TempData["Error"] = "Modification interdite dans ce statut."; return RedirectToAction("Details", new { id }); }
@@ -330,6 +485,7 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> CalculateCNSS(int id)
     {
         var cnssData = await _declarations.CalculateCNSSAsync(id);
@@ -348,8 +504,19 @@ public class DeclarationsController : BaseController
     // ── STATUS ──────────────────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit, ClaimDefinitions.DeclarationSubmit, ClaimDefinitions.DeclarationValidate)]
     public async Task<IActionResult> ChangeStatus(int id, string newStatut, string? comment = null)
     {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresAnyPermission(
+                PermissionHelper.Declaration.Edit,
+                PermissionHelper.Declaration.Submit,
+                PermissionHelper.Declaration.Validate))
+        {
+            TempData["Error"] = "Vous n'avez pas la permission de modifier le statut.";
+            return RedirectToAction("Details", new { id });
+        }
+
         var result = await _declarations.ChangeStatusAsync(id, newStatut, comment);
         SetApiResult(result, null, "Erreur lors du changement de statut.");
         return RedirectToAction("Details", new { id });
@@ -362,6 +529,7 @@ public class DeclarationsController : BaseController
     /// <summary>Start a workflow for a specific declaration.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCreate)]
     public async Task<IActionResult> StartWorkflow(int declarationId, int? workflowTemplateId = null)
     {
         var declaration = await _declarations.GetByIdAsync(declarationId);
@@ -389,7 +557,10 @@ public class DeclarationsController : BaseController
         return RedirectToAction("Details", new { id = declarationId });
     }
 
-    /// <summary>Advance the current workflow step for a declaration.</summary>
+    /// <summary>
+    /// Advance the current workflow step for a declaration.
+    /// Authenticated BackOffice users only; API/service enforces assignee-only.
+    /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AdvanceWorkflowStep(int declarationId, int workflowInstanceId, string? notes = null, string? comment = null, bool forceSkip = false)
@@ -410,6 +581,7 @@ public class DeclarationsController : BaseController
     /// <summary>Pause the workflow for a declaration.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
     public async Task<IActionResult> PauseDeclarationWorkflow(int declarationId, int workflowInstanceId)
     {
         var result = await _workflow.PauseWorkflowAsync(workflowInstanceId);
@@ -421,6 +593,7 @@ public class DeclarationsController : BaseController
     /// <summary>Resume the workflow for a declaration.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowAdvance)]
     public async Task<IActionResult> ResumeDeclarationWorkflow(int declarationId, int workflowInstanceId)
     {
         var result = await _workflow.ResumeWorkflowAsync(workflowInstanceId);
@@ -432,6 +605,7 @@ public class DeclarationsController : BaseController
     /// <summary>Cancel the workflow for a declaration.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
     public async Task<IActionResult> CancelDeclarationWorkflow(int declarationId, int workflowInstanceId, string reason = "")
     {
         var result = await _workflow.CancelWorkflowAsync(workflowInstanceId, reason);
@@ -445,6 +619,7 @@ public class DeclarationsController : BaseController
     // ═══════════════════════════════════════════════════════════
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.TvaEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> AddTVALigne(int declarationId, TVALigneFactureDto ligne)
     {
         ligne.DeclarationTVAId = declarationId;
@@ -460,6 +635,7 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.TvaEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> DeleteTVALigne(int declarationId, int ligneId)
     {
         var result = await _declarations.DeleteTVALigneAsync(declarationId, ligneId);
@@ -475,6 +651,7 @@ public class DeclarationsController : BaseController
     //  CSV IMPORT / TEMPLATE for TVA Invoice Lines
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit)]
     public IActionResult DownloadTVATemplate()
     {
         var csv = new StringBuilder();
@@ -488,6 +665,7 @@ public class DeclarationsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.TvaEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> ImportTVALignes(int declarationId, IFormFile fichierCSV)
     {
         if (fichierCSV == null || fichierCSV.Length == 0)
@@ -569,6 +747,7 @@ public class DeclarationsController : BaseController
     //  EDI XML EXPORT - Télédéclaration TVA Maroc
     // ═══════════════════════════════════════════════════════════
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.DeclarationSubmit)]
     public async Task<IActionResult> ExportTVAXml(int id)
     {
         var declaration = await _declarations.GetByIdAsync(id);

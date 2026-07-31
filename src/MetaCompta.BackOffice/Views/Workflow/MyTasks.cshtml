@@ -8,127 +8,22 @@
 }
 
 <style>
-    .req-header {
-        background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #7c3aed 100%);
-        border-radius: 18px;
-        color: #fff;
-        padding: 2rem 2.2rem;
-        position: relative;
-        overflow: hidden;
-    }
-    .req-header::before {
-        content: '';
-        position: absolute;
-        top: -60%;
-        right: -10%;
-        width: 350px;
-        height: 350px;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.05);
-    }
-    .req-card {
-        background: rgba(255,255,255,0.95);
-        backdrop-filter: blur(20px);
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        transition: all .35s cubic-bezier(.4,0,.2,1);
-        overflow: hidden;
-        position: relative;
-    }
-    .req-card:hover {
-        box-shadow: 0 16px 48px rgba(0,0,0,0.1);
-        transform: translateY(-4px);
-        border-color: #c7d2fe;
-    }
-    .req-card .top-stripe {
-        height: 4px;
-        width: 100%;
-    }
-    .req-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.2rem 0.65rem;
-        border-radius: 20px;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-    }
-    .req-section-title {
-        font-size: 0.82rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.85rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .req-client-tag {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.18rem 0.6rem;
-        border-radius: 8px;
-        font-size: 0.73rem;
-        font-weight: 600;
-        background: linear-gradient(135deg, #ede9fe, #f0f4ff);
-        color: #5b21b6;
-        border: 1px solid #e0e7ff;
-    }
-    .req-decl-tag {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.18rem 0.6rem;
-        border-radius: 8px;
-        font-size: 0.73rem;
-        font-weight: 600;
-        background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
-        color: #047857;
-        border: 1px solid #d1fae5;
-    }
-    .req-action-desc {
-        font-size: 0.78rem;
-        color: #475569;
-        padding: 0.5rem 0.7rem;
-        background: #f8fafc;
-        border-radius: 10px;
-        border-left: 3px solid #7c3aed;
-        margin: 0.6rem 0;
-    }
-    .btn-action-validate { background: linear-gradient(135deg, #059669, #10b981); color: #fff; border: none; }
-    .btn-action-validate:hover { background: linear-gradient(135deg, #047857, #059669); color: #fff; box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
-    .btn-action-submit { background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff; border: none; }
-    .btn-action-submit:hover { background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
-    .btn-action-approve { background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: #fff; border: none; }
-    .btn-action-approve:hover { background: linear-gradient(135deg, #6d28d9, #7c3aed); color: #fff; box-shadow: 0 4px 12px rgba(124,58,237,0.3); }
-    .btn-action-complete { background: linear-gradient(135deg, #0891b2, #06b6d4); color: #fff; border: none; }
-    .btn-action-complete:hover { background: linear-gradient(135deg, #0e7490, #0891b2); color: #fff; box-shadow: 0 4px 12px rgba(8,145,178,0.3); }
-    .btn-action-default { background: linear-gradient(135deg, #1e3a5f, #2563eb); color: #fff; border: none; }
-    .btn-action-default:hover { background: linear-gradient(135deg, #1e3a5f, #1d4ed8); color: #fff; box-shadow: 0 4px 12px rgba(30,58,95,0.3); }
-    .overdue-pulse {
-        animation: reqPulse 2s ease-in-out infinite;
-    }
-    @@keyframes reqPulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0) }
-        50% { box-shadow: 0 0 0 8px rgba(220,38,38,0.08) }
-    }
-    .req-stat-card {
-        background: rgba(255,255,255,0.15);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
-        padding: 0.8rem 1.2rem;
-        border: 1px solid rgba(255,255,255,0.15);
-    }
-    .req-stat-card .stat-value {
-        font-size: 1.6rem;
-        font-weight: 800;
-    }
-    .req-stat-card .stat-label {
-        font-size: 0.75rem;
-        opacity: 0.8;
-    }
+    .req-header { background: var(--monday-blue); border-radius: 18px; color: #fff; padding: 2rem 2.2rem; }
+    .req-card { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; overflow: hidden; position: relative; }
+    .req-card .top-stripe { height: 4px; width: 100%; }
+    .req-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.65rem; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
+    .req-section-title { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.5rem; color: var(--monday-text); }
+    .req-client-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.18rem 0.6rem; border-radius: 8px; font-size: 0.73rem; font-weight: 600; background: var(--monday-bg); color: var(--monday-text); border: 1px solid var(--monday-border); }
+    .req-decl-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.18rem 0.6rem; border-radius: 8px; font-size: 0.73rem; font-weight: 600; background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); color: var(--monday-green); border: 1px solid var(--monday-border); }
+    .req-action-desc { font-size: 0.78rem; color: var(--monday-muted); padding: 0.5rem 0.7rem; background: var(--monday-bg); border-radius: 10px; border-left: 3px solid var(--monday-blue); margin: 0.6rem 0; }
+    .btn-action-validate { background: var(--monday-green); color: #fff; border: none; }
+    .btn-action-submit { background: var(--monday-blue); color: #fff; border: none; }
+    .btn-action-approve { background: var(--monday-blue); color: #fff; border: none; }
+    .btn-action-complete { background: var(--monday-blue); color: #fff; border: none; }
+    .btn-action-default { background: var(--monday-blue); color: #fff; border: none; }
+    .req-stat-card { background: rgba(255,255,255,0.15); border-radius: 12px; padding: 0.8rem 1.2rem; border: 1px solid rgba(255,255,255,0.15); }
+    .req-stat-card .stat-value { font-size: 1.6rem; font-weight: 800; }
+    .req-stat-card .stat-label { font-size: 0.75rem; opacity: 0.8; }
 </style>
 
 <!-- Header -->

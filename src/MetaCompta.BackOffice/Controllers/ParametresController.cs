@@ -1,4 +1,6 @@
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
@@ -19,6 +21,7 @@ public class ParametresController : BaseController
         _parametres = parametres;
     }
 
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public async Task<IActionResult> Index()
     {
         var settings = await _parametres.GetAllAsync();
@@ -27,6 +30,7 @@ public class ParametresController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public async Task<IActionResult> UpdateSetting(string cle, string valeur)
     {
         var result = await _parametres.UpdateSettingAsync(cle, valeur);
@@ -37,6 +41,7 @@ public class ParametresController : BaseController
         return RedirectToAction("Index");
     }
 
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public async Task<IActionResult> Templates()
     {
         var templates = await _parametres.GetTemplatesAsync();
@@ -45,6 +50,7 @@ public class ParametresController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public async Task<IActionResult> UpdateTemplate(int id, string contenu)
     {
         var result = await _parametres.UpdateTemplateAsync(id, contenu);
@@ -55,16 +61,19 @@ public class ParametresController : BaseController
         return RedirectToAction("Templates");
     }
 
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public IActionResult Notifications()
     {
         return View();
     }
 
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public IActionResult Integrations()
     {
         return View();
     }
 
+    [RequirePermission(ClaimDefinitions.SystemAdmin)]
     public IActionResult Periodes()
     {
         return View();

@@ -46,10 +46,14 @@
                     <hr />
                     <div class="d-flex gap-2 justify-content-end">
                         <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
-                        <button type="submit" class="btn btn-mc-primary rounded-pill px-4"><i class="bi bi-check-circle me-2"></i>Créer</button>
+                        @if (ViewBag.CanDepartmentCreate as bool? ?? false)
+                        {
+                            <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-circle me-2"></i>Créer</button>
+                        }
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+

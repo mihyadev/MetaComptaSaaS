@@ -66,6 +66,9 @@ public class Employee : TenantEntity
     public virtual ICollection<PaySlip> PaySlips { get; set; } = new List<PaySlip>();
     public virtual ICollection<EmployeeAbsence> Absences { get; set; } = new List<EmployeeAbsence>();
     public virtual ICollection<Document> Documents { get; set; } = new List<Document>();
+    public virtual ICollection<VariableEmploye> Variables { get; set; } = new List<VariableEmploye>();
+    public virtual ICollection<CumulEmploye> Cumuls { get; set; } = new List<CumulEmploye>();
+    public virtual ICollection<AffectationRubrique> Affectations { get; set; } = new List<AffectationRubrique>();
 }
 
 /// <summary>

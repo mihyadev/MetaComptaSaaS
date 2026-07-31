@@ -1,4 +1,5 @@
 using MetaCompta.Application.DTOs;
+using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +30,7 @@ public class ClientsController : BaseController
         _workflow = workflow;
     }
 
+    [RequirePermission(ClaimDefinitions.ClientList)]
     public async Task<IActionResult> Index(int page = 1, string? search = null, string? formeJuridique = null, string? statut = null)
     {
         var result = await _clients.GetAllAsync(page, search, statut);
@@ -40,6 +42,7 @@ public class ClientsController : BaseController
         return View(result);
     }
 
+    [RequirePermission(ClaimDefinitions.ClientDetail)]
     public async Task<IActionResult> Details(int id)
     {
         try
@@ -56,6 +59,13 @@ public class ClientsController : BaseController
             // Load validated contracts for sync button display
             var contrats = await _commercial.GetContratsAsync(clientId: id, statut: RefCodes.StatutContrat.Valide);
             ViewBag.ContratsValides = contrats?.Items ?? new List<ContratCommercialDto>();
+
+            // Load all contracts for this client (Contrats tab)
+            var allContrats = await _commercial.GetContratsAsync(clientId: id, statut: null);
+            ViewBag.AllContrats = allContrats?.Items ?? new List<ContratCommercialDto>();
+
+            // Load client users (Extranet users)
+            ViewBag.ClientUsers = await _clients.GetClientUsersAsync(id);
 
             // ── Workflow data (embedded tab) ──
             try
@@ -88,6 +98,7 @@ public class ClientsController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.ClientDetail)]
     public async Task<IActionResult> DetailsJson(int id)
     {
         var client = await _clients.GetByIdAsync(id);
@@ -95,6 +106,7 @@ public class ClientsController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.ClientCreate)]
     public async Task<IActionResult> Create()
     {
         await LoadReferenceDataToViewBagAsync(ClientRefCategories);
@@ -103,6 +115,7 @@ public class ClientsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ClientCreate)]
     public async Task<IActionResult> Create(ClientCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -122,6 +135,7 @@ public class ClientsController : BaseController
     }
 
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.ClientEdit)]
     public async Task<IActionResult> Edit(int id)
     {
         var client = await _clients.GetByIdAsync(id);
@@ -168,6 +182,7 @@ public class ClientsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ClientEdit)]
     public async Task<IActionResult> Edit(int id, ClientCreateDto dto)
     {
         if (!ModelState.IsValid)
@@ -190,6 +205,7 @@ public class ClientsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ClientDelete)]
     public async Task<IActionResult> Delete(int id)
     {
         var result = await _clients.DeleteAsync(id);
@@ -204,6 +220,7 @@ public class ClientsController : BaseController
     /// Called from the topbar client selector dropdown.
     /// </summary>
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.ClientList)]
     public async Task<IActionResult> SetClientContext(int? clientId)
     {
         if (clientId.HasValue)
@@ -213,30 +230,46 @@ public class ClientsController : BaseController
             {
                 HttpContext.Session.SetString("SelectedClientId", client.Id.ToString());
                 HttpContext.Session.SetString("SelectedClientName", client.RaisonSociale);
+                // Enter dossier-client workspace mode (dynamic client menu)
+                HttpContext.Session.SetString("WorkspaceMode", "Client");
 
-                // Store active services in session for sidebar menu filtering
-                var activeServices = await _clients.GetActiveServicesAsync(clientId.Value);
-                HttpContext.Session.SetString("ActiveServices", System.Text.Json.JsonSerializer.Serialize(activeServices));
+                // Store active services + contract access for dossier Manage/Consult
+                var access = await _clients.GetContractAccessAsync(clientId.Value);
+                HttpContext.Session.SetString("ActiveServices", System.Text.Json.JsonSerializer.Serialize(access.ActiveServices));
+                HttpContext.Session.SetString("HasActiveContract", access.AllowsManage.ToString());
+                HttpContext.Session.SetString("ContractAccessMode", access.Mode);
+                HttpContext.Session.SetString("ContractAccessReason", access.Reason);
+                HttpContext.Session.SetString("ContractAccessReasonLabel", access.ReasonLabel ?? "");
 
-                // Store contract status — gates declaration create/edit in sidebar & views
-                var hasActiveContract = await _clients.HasActiveContractAsync(clientId.Value);
-                HttpContext.Session.SetString("HasActiveContract", hasActiveContract.ToString());
-
-                return Json(new { success = true, clientName = client.RaisonSociale, clientId = client.Id, activeServices, hasActiveContract });
+                return Json(new
+                {
+                    success = true,
+                    clientName = client.RaisonSociale,
+                    clientId = client.Id,
+                    activeServices = access.ActiveServices,
+                    hasActiveContract = access.AllowsManage,
+                    contractAccessMode = access.Mode,
+                    contractAccessReason = access.Reason
+                });
             }
         }
-        // Clear selection
+        // Clear selection — return to workspace gateway
         HttpContext.Session.Remove("SelectedClientId");
         HttpContext.Session.Remove("SelectedClientName");
         HttpContext.Session.Remove("ActiveServices");
         HttpContext.Session.Remove("HasActiveContract");
-        return Json(new { success = true, clientName = (string?)null, clientId = (int?)null, activeServices = new List<string>(), hasActiveContract = false });
+        HttpContext.Session.Remove("ContractAccessMode");
+        HttpContext.Session.Remove("ContractAccessReason");
+        HttpContext.Session.Remove("ContractAccessReasonLabel");
+        HttpContext.Session.Remove("WorkspaceMode");
+        return Json(new { success = true, clientName = (string?)null, clientId = (int?)null, activeServices = new List<string>(), hasActiveContract = false, redirectToWorkspace = true });
     }
 
     /// <summary>
     /// AJAX endpoint — returns all clients for the topbar dropdown search.
     /// </summary>
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.ClientList)]
     public async Task<IActionResult> SearchClients(string? q)
     {
         var clients = await _clients.GetAllForDropdownAsync();
@@ -253,6 +286,7 @@ public class ClientsController : BaseController
     /// Called from Edit page "Générer Déclarations" button.
     /// </summary>
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
     public async Task<IActionResult> GenerateDeclarations(int clientId, int exercice)
     {
         var request = new Application.DTOs.GenerateDeclarationsRequestDto
@@ -272,6 +306,7 @@ public class ClientsController : BaseController
     /// AJAX endpoint — get service contracts for a client.
     /// </summary>
     [HttpGet]
+    [RequirePermission(ClaimDefinitions.CommercialDetail, ClaimDefinitions.ClientDetail)]
     public async Task<IActionResult> GetServiceContrats(int clientId, int? exerciceFiscal = null)
     {
         var services = await _clients.GetServiceContratsAsync(clientId, exerciceFiscal);
@@ -283,6 +318,7 @@ public class ClientsController : BaseController
     /// Re-activates services for clients whose contracts were validated before the contract-driven architecture.
     /// </summary>
     [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialEdit)]
     public async Task<IActionResult> SyncServicesFromContrat(int contratId)
     {
         var result = await _commercial.SyncServicesFromContratAsync(contratId);
@@ -291,5 +327,53 @@ public class ClientsController : BaseController
             return Json(new { success = true, count = result.Data, message = result.Message });
         }
         return Json(new { success = false, message = result?.Message ?? "Erreur lors de la synchronisation." });
+    }
+
+    // ── Client Users (Extranet) ────────────────
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.UserManage)]
+    public async Task<IActionResult> CreateClientUser(int clientId, string email, string password, string firstName, string lastName, string? telephone)
+    {
+        var dto = new ClientUserCreateDto
+        {
+            Email = email,
+            Password = password,
+            FirstName = firstName,
+            LastName = lastName,
+            Telephone = telephone
+        };
+        var result = await _clients.CreateClientUserAsync(clientId, dto);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message;
+        else
+            TempData["Error"] = result?.Message ?? "Erreur lors de la création de l'utilisateur.";
+        return RedirectToAction("Details", new { id = clientId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.UserManage)]
+    public async Task<IActionResult> ToggleClientUser(int clientId, string userId)
+    {
+        var result = await _clients.ToggleClientUserActiveAsync(clientId, userId);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message;
+        else
+            TempData["Error"] = result?.Message ?? "Erreur lors de la mise à jour.";
+        return RedirectToAction("Details", new { id = clientId });
+    }
+
+    // ── Contrats Clients ────────────────
+
+    [RequirePermission(ClaimDefinitions.CommercialDetail, ClaimDefinitions.ClientDetail)]
+    public async Task<IActionResult> Contrats(int? clientId, string? statut, int page = 1)
+    {
+        var contrats = await _commercial.GetContratsAsync(clientId: clientId, statut: statut, page: page);
+        ViewBag.Clients = await _clients.GetAllForDropdownAsync();
+        ViewBag.SelectedClientId = clientId;
+        ViewBag.SelectedStatut = statut;
+        return View(contrats);
     }
 }

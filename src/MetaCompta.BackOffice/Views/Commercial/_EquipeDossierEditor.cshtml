@@ -1,0 +1,218 @@
+@{
+    var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new List<CabinetEmployeeDto>();
+    var activeEmployees = employees.Where(x => x.EstActif).ToList();
+    if (!activeEmployees.Any()) { activeEmployees = employees.ToList(); }
+
+    var initial = ViewBag.InitialMembres as IEnumerable<ContratMembreDto>
+        ?? Enumerable.Empty<ContratMembreDto>();
+    var initialInputs = ViewBag.InitialMembreInputs as IEnumerable<ContratMembreInputDto>
+        ?? Enumerable.Empty<ContratMembreInputDto>();
+
+    var rows = initial.Select(m => new
+    {
+        m.UserId,
+        Name = m.UserName
+            ?? activeEmployees.FirstOrDefault(e => e.Id == m.UserId)?.NomComplet
+            ?? m.UserId,
+        Pole = m.Departement
+            ?? activeEmployees.FirstOrDefault(e => e.Id == m.UserId)?.Departement
+            ?? "—",
+        Role = m.RoleLabel ?? ""
+    }).ToList();
+
+    if (!rows.Any() && initialInputs.Any())
+    {
+        rows = initialInputs.Select(m =>
+        {
+            var emp = activeEmployees.FirstOrDefault(e => e.Id == m.UserId);
+            return new
+            {
+                m.UserId,
+                Name = emp?.NomComplet ?? m.UserId,
+                Pole = emp?.Departement ?? "—",
+                Role = m.RoleLabel ?? ""
+            };
+        }).ToList();
+    }
+
+    var roles = new[] { "Chef de mission", "Collaborateur", "Superviseur", "Contrôleur qualité" };
+    var editorId = (ViewBag.EditorId as string) ?? "equipeDossier";
+    var showActions = ViewBag.ShowActions as bool? ?? true;
+}
+
+@if (!activeEmployees.Any())
+{
+    <div class="alert alert-warning rounded-3 mb-0">
+        Aucun collaborateur trouvé. Créez des employés dans
+        <a asp-controller="Cabinet" asp-action="Index">Cabinet</a>
+        avant d'affecter l'équipe du dossier.
+    </div>
+}
+else if (showActions)
+{
+    <div class="row g-2 align-items-end mb-3" id="@(editorId)-addRow">
+        <div class="col-md-5">
+            <label class="form-label small text-body-secondary mb-1" for="@(editorId)-picker">Collaborateur</label>
+            <select id="@(editorId)-picker" class="form-select form-select-sm">
+                <option value="">— Sélectionner —</option>
+                @foreach (var e in activeEmployees.OrderBy(x => x.NomComplet))
+                {
+                    <option value="@e.Id"
+                            data-name="@e.NomComplet"
+                            data-pole="@(e.Departement ?? "—")">
+                        @e.NomComplet@(string.IsNullOrWhiteSpace(e.Departement) ? "" : " · " + e.Departement)
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small text-body-secondary mb-1" for="@(editorId)-role">Rôle sur le dossier</label>
+            <select id="@(editorId)-role" class="form-select form-select-sm">
+                <option value="Collaborateur">Collaborateur</option>
+                @foreach (var r in roles.Where(x => x != "Collaborateur"))
+                {
+                    <option value="@r">@r</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="@(editorId)-addBtn">
+                <i class="bi bi-plus-lg me-1"></i>Ajouter
+            </button>
+        </div>
+    </div>
+}
+
+<div class="table-responsive border rounded-3">
+    <table class="table table-sm align-middle mb-0" id="@(editorId)-table">
+        <thead class="table-light">
+            <tr class="small text-body-secondary text-uppercase">
+                <th class="ps-3 fw-semibold border-0">Collaborateur</th>
+                <th class="fw-semibold border-0">Pôle</th>
+                <th class="fw-semibold border-0">Rôle</th>
+                @if (showActions)
+                {
+                    <th class="fw-semibold border-0 text-end pe-3" style="width:4rem;"></th>
+                }
+            </tr>
+        </thead>
+        <tbody id="@(editorId)-tbody">
+            @if (!rows.Any())
+            {
+                <tr class="@(editorId)-empty">
+                    <td colspan="@(showActions ? 4 : 3)" class="text-body-secondary small ps-3 py-3">
+                        Aucun collaborateur affecté à ce dossier.
+                    </td>
+                </tr>
+            }
+            else
+            {
+                var i = 0;
+                foreach (var row in rows)
+                {
+                    <tr data-user-id="@row.UserId">
+                        <td class="ps-3">
+                            <div class="fw-semibold">@row.Name</div>
+                            <input type="hidden" name="Membres[@i].UserId" value="@row.UserId" />
+                            <input type="hidden" name="Membres[@i].RoleLabel" value="@row.Role" class="equipe-role-input" />
+                        </td>
+                        <td class="text-body-secondary small">@row.Pole</td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(row.Role) ? "—" : row.Role)</td>
+                        @if (showActions)
+                        {
+                            <td class="text-end pe-3">
+                                <button type="button" class="btn btn-link btn-sm text-danger p-0 equipe-remove" title="Retirer">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </td>
+                        }
+                    </tr>
+                    i++;
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (showActions)
+{
+    <script>
+        (function () {
+            const id = '@editorId';
+            const picker = document.getElementById(id + '-picker');
+            const roleSel = document.getElementById(id + '-role');
+            const addBtn = document.getElementById(id + '-addBtn');
+            const tbody = document.getElementById(id + '-tbody');
+            if (!picker || !addBtn || !tbody) return;
+
+            function reindex() {
+                const rows = tbody.querySelectorAll('tr[data-user-id]');
+                rows.forEach(function (tr, idx) {
+                    const inputs = tr.querySelectorAll('input[type="hidden"]');
+                    if (inputs[0]) inputs[0].name = 'Membres[' + idx + '].UserId';
+                    if (inputs[1]) inputs[1].name = 'Membres[' + idx + '].RoleLabel';
+                });
+            }
+
+            function syncEmpty() {
+                const has = tbody.querySelectorAll('tr[data-user-id]').length > 0;
+                const empty = tbody.querySelector('tr.' + id + '-empty');
+                if (!has && !empty) {
+                    const tr = document.createElement('tr');
+                    tr.className = id + '-empty';
+                    tr.innerHTML = '<td colspan="4" class="text-body-secondary small ps-3 py-3">Aucun collaborateur affecté à ce dossier.</td>';
+                    tbody.appendChild(tr);
+                } else if (has && empty) {
+                    empty.remove();
+                }
+            }
+
+            function addRow(userId, name, pole, role) {
+                if (!userId) return;
+                if (tbody.querySelector('tr[data-user-id="' + CSS.escape(userId) + '"]')) return;
+                const tr = document.createElement('tr');
+                tr.dataset.userId = userId;
+                tr.innerHTML =
+                    '<td class="ps-3"><div class="fw-semibold"></div>' +
+                    '<input type="hidden" name="Membres[0].UserId" value="" />' +
+                    '<input type="hidden" name="Membres[0].RoleLabel" value="" class="equipe-role-input" /></td>' +
+                    '<td class="text-body-secondary small"></td>' +
+                    '<td class="small"></td>' +
+                    '<td class="text-end pe-3"><button type="button" class="btn btn-link btn-sm text-danger p-0 equipe-remove" title="Retirer"><i class="bi bi-x-lg"></i></button></td>';
+                tr.querySelector('.fw-semibold').textContent = name || userId;
+                tr.querySelectorAll('td')[1].textContent = pole || '—';
+                tr.querySelectorAll('td')[2].textContent = role || '—';
+                const inputs = tr.querySelectorAll('input[type="hidden"]');
+                inputs[0].value = userId;
+                inputs[1].value = role || '';
+                tbody.appendChild(tr);
+                reindex();
+                syncEmpty();
+            }
+
+            addBtn.addEventListener('click', function () {
+                const opt = picker.options[picker.selectedIndex];
+                if (!opt || !opt.value) return;
+                addRow(
+                    opt.value,
+                    opt.getAttribute('data-name') || opt.textContent.trim(),
+                    opt.getAttribute('data-pole') || '—',
+                    roleSel ? roleSel.value : 'Collaborateur'
+                );
+                picker.value = '';
+            });
+
+            tbody.addEventListener('click', function (e) {
+                const btn = e.target.closest('.equipe-remove');
+                if (!btn) return;
+                const tr = btn.closest('tr');
+                if (tr) tr.remove();
+                reindex();
+                syncEmpty();
+            });
+
+            reindex();
+            syncEmpty();
+        })();
+    </script>
+}

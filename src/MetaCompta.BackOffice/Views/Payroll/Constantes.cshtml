@@ -1,0 +1,177 @@
+﻿@using MetaCompta.Application.DTOs
+@model List<ConstanteGlobaleDto>
+@{
+    ViewData["Title"] = "Constantes & Taux";
+    var canPayrollEdit = ViewBag.CanPayrollEdit as bool? ?? false;
+    var canSystemAdmin = ViewBag.CanSystemAdmin as bool? ?? false;
+    var categories = Model.Select(c => c.Categorie).Where(c => !string.IsNullOrEmpty(c)).Distinct().OrderBy(c => c).ToList();
+    var catBadges = new Dictionary<string, string> {
+        {"CNSS","bg-info-subtle text-info"}, {"AMO","bg-primary-subtle text-primary"}, {"IR","bg-warning-subtle text-warning"},
+        {"CIMR","bg-success-subtle text-success"}, {"General","bg-secondary-subtle text-secondary"}, {"Plafond","bg-dark-subtle text-dark"}
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/Payroll"><i class="bi bi-cash-stack me-1"></i>Paie</a></li>
+                <li class="breadcrumb-item active">Constantes & Taux</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-1"><i class="bi bi-sliders text-primary me-2"></i>Constantes & Taux</h4>
+        <p class="text-muted mb-0">Param&#232;tres l&#233;gaux et taux de calcul &#8212; <strong>@Model.Count</strong> constante(s)</p>
+    </div>
+    <div class="d-flex gap-2">
+        @if (!Model.Any() && canSystemAdmin)
+        {
+            <form asp-action="SeedConstantes" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-success rounded-pill px-3" onclick="return confirm('Charger les constantes marocaines par d\u00e9faut (CNSS, AMO, IR, CIMR) ?')">
+                    <i class="bi bi-database-add me-1"></i> Charger par d&#233;faut
+                </button>
+            </form>
+        }
+        @if (canPayrollEdit)
+        {
+            <a asp-action="CreateConstante" class="btn btn-primary rounded-pill px-3">
+                <i class="bi bi-plus-circle me-1"></i> Nouvelle Constante
+            </a>
+        }
+    </div>
+</div>
+
+@* KPI Cards *@
+<div class="row g-3 mb-4">
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-primary fw-bold fs-4">@Model.Count</div>
+            <small class="text-muted">Total</small>
+        </div>
+    </div>
+    <div class="col-md-2 col-6">
+        <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+            <div class="text-success fw-bold fs-4">@Model.Count(c => c.Actif)</div>
+            <small class="text-muted">Actives</small>
+        </div>
+    </div>
+    @foreach (var cat in categories.Take(4))
+    {
+        var badge = catBadges.GetValueOrDefault(cat, "bg-secondary-subtle text-secondary");
+        <div class="col-md-2 col-6">
+            <div class="card border-0 shadow-sm rounded-4 text-center p-3">
+                <div class="fw-bold fs-4"><span class="badge @badge">@Model.Count(c => c.Categorie == cat)</span></div>
+                <small class="text-muted">@cat</small>
+            </div>
+        </div>
+    }
+</div>
+
+@* Category Tabs *@
+@if (categories.Any())
+{
+    <ul class="nav nav-pills mb-3 gap-1" id="catTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active rounded-pill px-3 py-1" data-bs-toggle="pill" data-bs-target="#cat-all">Toutes</button>
+        </li>
+        @foreach (var cat in categories)
+        {
+            <li class="nav-item">
+                <button class="nav-link rounded-pill px-3 py-1" data-bs-toggle="pill" data-bs-target="#cat-@cat">@cat (@Model.Count(c => c.Categorie == cat))</button>
+            </li>
+        }
+    </ul>
+}
+
+<div class="tab-content">
+    @{
+        var groups = new List<(string Id, string Label, List<ConstanteGlobaleDto> Items)>();
+        groups.Add(("cat-all", "Toutes", Model.OrderBy(c => c.Categorie).ThenBy(c => c.Code).ToList()));
+        foreach (var cat in categories)
+        {
+            groups.Add(("cat-" + cat, cat, Model.Where(c => c.Categorie == cat).OrderBy(c => c.Code).ToList()));
+        }
+    }
+    @foreach (var grp in groups)
+    {
+        <div class="tab-pane fade @(grp.Id == "cat-all" ? "show active" : "")" id="@grp.Id">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Code</th>
+                                    <th>Libell&#233;</th>
+                                    <th>Cat&#233;gorie</th>
+                                    <th class="text-end">Valeur</th>
+                                    <th class="text-center">Date Effet</th>
+                                    <th class="text-center">Statut</th>
+                                    <th class="text-center" style="width:160px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (grp.Items.Any())
+                                {
+                                    @foreach (var c in grp.Items)
+                                    {
+                                        var cBadge = catBadges.GetValueOrDefault(c.Categorie ?? "", "bg-secondary-subtle text-secondary");
+                                        <tr>
+                                            <td class="ps-4"><code class="fw-bold">@c.Code</code></td>
+                                            <td>@c.Libelle</td>
+                                            <td><span class="badge @cBadge rounded-pill">@(c.Categorie ?? "&#8212;")</span></td>
+                                            <td class="text-end font-monospace fw-bold">@c.Valeur.ToString("N4")</td>
+                                            <td class="text-center">@(c.DateEffet == DateTime.MinValue ? "&#8212;" : c.DateEffet.ToString("dd/MM/yyyy"))</td>
+                                            <td class="text-center">
+                                                <span class="badge @(c.Actif ? "bg-success-subtle text-success" : "bg-secondary-subtle text-secondary") rounded-pill">
+                                                    @(c.Actif ? "Active" : "Inactive")
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="d-flex gap-1 justify-content-center">
+                                                    @if (canPayrollEdit)
+                                                    {
+                                                        <a asp-action="EditConstante" asp-route-id="@c.Id" class="btn btn-outline-primary btn-sm rounded-pill" title="Modifier">
+                                                            <i class="bi bi-pencil me-1"></i>Modifier
+                                                        </a>
+                                                        <form asp-action="DeleteConstante" asp-route-id="@c.Id" method="post" class="d-inline" onsubmit="return confirm('Supprimer la constante @c.Code ?')">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill" title="Supprimer">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr><td colspan="7" class="text-center py-4 text-muted">Aucune constante dans cette cat&#233;gorie.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (!Model.Any())
+{
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-sliders display-4 d-block mb-2 opacity-25"></i>
+        <p class="mb-2">Aucune constante configur&#233;e.</p>
+        @if (canSystemAdmin)
+        {
+            <form asp-action="SeedConstantes" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-success rounded-pill px-4" onclick="return confirm('Charger les constantes marocaines par d\u00e9faut ?')">
+                    <i class="bi bi-database-add me-1"></i> Charger les constantes par d&#233;faut
+                </button>
+            </form>
+        }
+    </div>
+}

@@ -31,6 +31,13 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<DeclarationHistory> DeclarationHistories => Set<DeclarationHistory>();
     public DbSet<PayrollPeriod> PayrollPeriods => Set<PayrollPeriod>();
     public DbSet<PaySlip> PaySlips => Set<PaySlip>();
+    public DbSet<Rubrique> Rubriques => Set<Rubrique>();
+    public DbSet<ConstanteGlobale> ConstantesGlobales => Set<ConstanteGlobale>();
+    public DbSet<VariableEmploye> VariablesEmployes => Set<VariableEmploye>();
+    public DbSet<RegleCalcul> ReglesCalcul => Set<RegleCalcul>();
+    public DbSet<BulletinLigne> BulletinLignes => Set<BulletinLigne>();
+    public DbSet<CumulEmploye> CumulsEmployes => Set<CumulEmploye>();
+    public DbSet<AffectationRubrique> AffectationsRubriques => Set<AffectationRubrique>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
@@ -47,10 +54,15 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<WorkflowHistory> WorkflowHistories => Set<WorkflowHistory>();
     public DbSet<ClientWorkflowConfig> ClientWorkflowConfigs => Set<ClientWorkflowConfig>();
 
+    // Exclusive unit takes (generic claim lock)
+    public DbSet<UnitType> UnitTypes => Set<UnitType>();
+    public DbSet<UnitTake> UnitTakes => Set<UnitTake>();
+
     // Commercial & Facturation
     public DbSet<Devis> Devis => Set<Devis>();
     public DbSet<BonCommande> BonsCommande => Set<BonCommande>();
     public DbSet<ContratCommercial> ContratsCommerciaux => Set<ContratCommercial>();
+    public DbSet<ContratMembre> ContratMembres => Set<ContratMembre>();
     public DbSet<Facture> Factures => Set<Facture>();
     public DbSet<LigneDocumentCommercial> LignesDocumentsCommerciaux => Set<LigneDocumentCommercial>();
     public DbSet<Paiement> Paiements => Set<Paiement>();
@@ -256,6 +268,73 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasOne(ps => ps.PayrollPeriod).WithMany(pp => pp.PaySlips).HasForeignKey(ps => ps.PayrollPeriodId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        // ===== Rubrique (PayrollEngine) =====
+        builder.Entity<Rubrique>(e =>
+        {
+            e.HasIndex(r => new { r.CabinetId, r.Code }).IsUnique();
+            e.Property(r => r.Code).HasMaxLength(50);
+            e.Property(r => r.Libelle).HasMaxLength(200);
+            e.Property(r => r.Type).HasMaxLength(50);
+            e.Property(r => r.Section).HasMaxLength(50);
+            e.Property(r => r.FormuleBase).HasMaxLength(1000);
+            e.Property(r => r.FormuleTaux).HasMaxLength(1000);
+            e.Property(r => r.FormuleMontant).HasMaxLength(1000);
+            e.Property(r => r.FormuleGain).HasMaxLength(1000);
+            e.Property(r => r.FormuleRetenue).HasMaxLength(1000);
+            e.Property(r => r.DependsDe).HasMaxLength(500);
+            e.HasOne(r => r.Client).WithMany().HasForeignKey(r => r.ClientId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ===== ConstanteGlobale =====
+        builder.Entity<ConstanteGlobale>(e =>
+        {
+            e.HasIndex(c => new { c.CabinetId, c.Code, c.DateEffet }).IsUnique();
+            e.Property(c => c.Code).HasMaxLength(100);
+            e.Property(c => c.Libelle).HasMaxLength(200);
+            e.Property(c => c.Categorie).HasMaxLength(100);
+            e.Property(c => c.Valeur).HasPrecision(18, 6);
+        });
+
+        // ===== VariableEmploye =====
+        builder.Entity<VariableEmploye>(e =>
+        {
+            e.HasIndex(v => new { v.EmployeeId, v.RubriqueCode, v.DateEffet }).IsUnique();
+            e.Property(v => v.RubriqueCode).HasMaxLength(50);
+            e.Property(v => v.Valeur).HasPrecision(18, 6);
+            e.HasOne(v => v.Employee).WithMany(emp => emp.Variables).HasForeignKey(v => v.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ===== RegleCalcul =====
+        builder.Entity<RegleCalcul>(e =>
+        {
+            e.Property(r => r.Formule).HasMaxLength(2000);
+            e.Property(r => r.Condition).HasMaxLength(1000);
+            e.HasOne(r => r.Rubrique).WithMany(rub => rub.Regles).HasForeignKey(r => r.RubriqueId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ===== BulletinLigne =====
+        builder.Entity<BulletinLigne>(e =>
+        {
+            e.Property(l => l.RubriqueCode).HasMaxLength(50);
+            e.Property(l => l.Libelle).HasMaxLength(200);
+            e.Property(l => l.Section).HasMaxLength(50);
+            e.Property(l => l.Type).HasMaxLength(50);
+            e.Property(l => l.Base).HasPrecision(18, 2);
+            e.Property(l => l.Taux).HasPrecision(18, 6);
+            e.Property(l => l.Gain).HasPrecision(18, 2);
+            e.Property(l => l.Retenue).HasPrecision(18, 2);
+            e.HasOne(l => l.PaySlip).WithMany(ps => ps.BulletinLignes).HasForeignKey(l => l.PaySlipId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(l => l.Rubrique).WithMany(r => r.BulletinLignes).HasForeignKey(l => l.RubriqueId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ===== CumulEmploye =====
+        builder.Entity<CumulEmploye>(e =>
+        {
+            e.HasIndex(c => new { c.EmployeeId, c.RubriqueCode, c.Annee, c.Mois }).IsUnique();
+            e.Property(c => c.RubriqueCode).HasMaxLength(50);
+            e.Property(c => c.Valeur).HasPrecision(18, 2);
+            e.HasOne(c => c.Employee).WithMany(emp => emp.Cumuls).HasForeignKey(c => c.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+        });
         // ===== PayrollPeriod =====
         builder.Entity<PayrollPeriod>(e =>
         {
@@ -374,6 +453,35 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasQueryFilter(cwc => !cwc.IsDeleted);
         });
 
+        // ===== Unit types & exclusive takes (generic claim lock) =====
+        builder.Entity<UnitType>(e =>
+        {
+            e.ToTable("UnitTypes");
+            e.HasIndex(t => t.Code).IsUnique();
+            e.Property(t => t.Code).HasMaxLength(50).IsRequired();
+            e.Property(t => t.Name).HasMaxLength(150).IsRequired();
+            e.Property(t => t.Description).HasMaxLength(500);
+            e.Property(t => t.EntityTable).HasMaxLength(100);
+            e.HasQueryFilter(t => !t.IsDeleted);
+        });
+
+        builder.Entity<UnitTake>(e =>
+        {
+            e.ToTable("UnitTakes");
+            e.Property(t => t.TakenByUserId).HasMaxLength(450).IsRequired();
+            e.Property(t => t.Status).HasMaxLength(30).IsRequired();
+            e.Property(t => t.Comment).HasMaxLength(1000);
+            e.HasIndex(t => new { t.CabinetId, t.UnitTypeId, t.UnitEntityId, t.ClosedAt });
+            e.HasIndex(t => new { t.CabinetId, t.TakenByUserId, t.Status });
+            e.HasOne(t => t.UnitType).WithMany(ut => ut.Takes).HasForeignKey(t => t.UnitTypeId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(t => t.TakenByUser).WithMany().HasForeignKey(t => t.TakenByUserId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.TaskItem).WithMany().HasForeignKey(t => t.TaskItemId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.WorkflowStepInstance).WithMany().HasForeignKey(t => t.WorkflowStepInstanceId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.Declaration).WithMany().HasForeignKey(t => t.DeclarationId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.Cabinet).WithMany().HasForeignKey(t => t.CabinetId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(t => !t.IsDeleted);
+        });
+
         // ════════════════════════════════════════════════════════════════════
         //  COMMERCIAL & FACTURATION
         // ════════════════════════════════════════════════════════════════════
@@ -435,12 +543,24 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(c => c.MontantTTC).HasPrecision(18, 2);
             e.Property(c => c.MontantRemise).HasPrecision(18, 2);
             e.Property(c => c.TauxChange).HasPrecision(18, 6);
+            e.Property(c => c.ServicesActivesJson).HasMaxLength(4000);
             e.HasQueryFilter(c => !c.IsDeleted);
             e.HasOne(c => c.Client).WithMany(cl => cl.ContratsCommerciaux).HasForeignKey(c => c.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.BonCommande).WithOne(b => b.Contrat).HasForeignKey<ContratCommercial>(c => c.BonCommandeId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.Devis).WithOne(d => d.ContratDirect).HasForeignKey<ContratCommercial>(c => c.DevisId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.Responsable).WithMany().HasForeignKey(c => c.ResponsableId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(c => c.ValidateurUser).WithMany().HasForeignKey(c => c.ValidateurId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<ContratMembre>(e =>
+        {
+            e.ToTable("ContratMembres");
+            e.HasIndex(m => new { m.ContratId, m.UserId }).IsUnique();
+            e.Property(m => m.UserId).HasMaxLength(450).IsRequired();
+            e.Property(m => m.RoleLabel).HasMaxLength(100);
+            e.HasQueryFilter(m => !m.IsDeleted);
+            e.HasOne(m => m.Contrat).WithMany(c => c.Membres).HasForeignKey(m => m.ContratId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // ===== Facture =====
@@ -483,6 +603,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(l => l.MontantHT).HasPrecision(18, 2);
             e.Property(l => l.MontantTTC).HasPrecision(18, 2);
             e.Property(l => l.QuantiteConsommee).HasPrecision(18, 4);
+            e.Property(l => l.ModeFacturation).HasMaxLength(30);
             e.HasOne(l => l.Devis).WithMany(d => d.Lignes).HasForeignKey(l => l.DevisId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(l => l.BonCommande).WithMany(b => b.Lignes).HasForeignKey(l => l.BonCommandeId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(l => l.Contrat).WithMany(c => c.Lignes).HasForeignKey(l => l.ContratId).OnDelete(DeleteBehavior.NoAction);
@@ -669,6 +790,22 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             new ReferenceData { Id = 301, Category = "STATUT_DECLARATION", Code = "EnPreparation", Label = "En Préparation", SortOrder = 9, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#8b5cf6", CssClass = "badge-enrevision", Icone = "bi-gear" },
             new ReferenceData { Id = 302, Category = "STATUT_DECLARATION", Code = "Payee", Label = "Payée", SortOrder = 10, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#047857", CssClass = "badge-soumise", Icone = "bi-cash-coin" },
             new ReferenceData { Id = 303, Category = "STATUT_DECLARATION", Code = "Rejetee", Label = "Rejetée", SortOrder = 11, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#b91c1c", CssClass = "badge-refusee", Icone = "bi-x-octagon" },
+            // TVA end-to-end lifecycle statuses
+            new ReferenceData { Id = 340, Category = "STATUT_DECLARATION", Code = "ACreer", Label = "À créer", SortOrder = 20, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#94a3b8", CssClass = "badge-brouillon", Icone = "bi-plus-circle" },
+            new ReferenceData { Id = 341, Category = "STATUT_DECLARATION", Code = "CreeeParSysteme", Label = "Créée par le système", SortOrder = 21, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#64748b", CssClass = "badge-brouillon", Icone = "bi-cpu" },
+            new ReferenceData { Id = 342, Category = "STATUT_DECLARATION", Code = "DocumentsDemandes", Label = "Documents demandés", SortOrder = 22, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "badge-acompleter", Icone = "bi-folder-symlink" },
+            new ReferenceData { Id = 343, Category = "STATUT_DECLARATION", Code = "DocumentsRecus", Label = "Documents reçus", SortOrder = 23, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0ea5e9", CssClass = "badge-completee", Icone = "bi-folder-check" },
+            new ReferenceData { Id = 344, Category = "STATUT_DECLARATION", Code = "ControleEnCours", Label = "Contrôle en cours", SortOrder = 24, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "badge-completee", Icone = "bi-search" },
+            new ReferenceData { Id = 345, Category = "STATUT_DECLARATION", Code = "EnAttenteCorrection", Label = "En attente correction", SortOrder = 25, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f97316", CssClass = "badge-acompleter", Icone = "bi-arrow-repeat" },
+            new ReferenceData { Id = 346, Category = "STATUT_DECLARATION", Code = "CalculTVA", Label = "Calcul TVA", SortOrder = 26, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0891b2", CssClass = "badge-completee", Icone = "bi-calculator" },
+            new ReferenceData { Id = 347, Category = "STATUT_DECLARATION", Code = "EnRevueSuperviseur", Label = "En revue superviseur", SortOrder = 27, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "badge-enrevision", Icone = "bi-eye" },
+            new ReferenceData { Id = 348, Category = "STATUT_DECLARATION", Code = "ACorriger", Label = "À corriger", SortOrder = 28, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#ea580c", CssClass = "badge-acompleter", Icone = "bi-exclamation-triangle" },
+            new ReferenceData { Id = 349, Category = "STATUT_DECLARATION", Code = "EnvoyeeSimplTva", Label = "Envoyée à SIMPL-TVA", SortOrder = 29, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#166534", CssClass = "badge-soumise", Icone = "bi-cloud-upload" },
+            new ReferenceData { Id = 350, Category = "STATUT_DECLARATION", Code = "Deposee", Label = "Déposée", SortOrder = 30, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "badge-validee", Icone = "bi-send-check" },
+            new ReferenceData { Id = 351, Category = "STATUT_DECLARATION", Code = "APayer", Label = "À payer", SortOrder = 31, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#ca8a04", CssClass = "badge-acompleter", Icone = "bi-cash" },
+            new ReferenceData { Id = 352, Category = "STATUT_DECLARATION", Code = "Rapprochee", Label = "Rapprochée", SortOrder = 32, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0f766e", CssClass = "badge-validee", Icone = "bi-link-45deg" },
+            new ReferenceData { Id = 353, Category = "STATUT_DECLARATION", Code = "Archivee", Label = "Archivée", SortOrder = 33, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#475569", CssClass = "badge-brouillon", Icone = "bi-archive" },
+            new ReferenceData { Id = 354, Category = "STATUT_DECLARATION", Code = "Cloturee", Label = "Clôturée", SortOrder = 34, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#334155", CssClass = "badge-soumise", Icone = "bi-lock" },
 
             // Type TVA (régime)
             new ReferenceData { Id = 61, Category = "TYPE_TVA", Code = "Mensuelle", Label = "Mensuelle", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "bg-primary-subtle text-primary" },
@@ -829,37 +966,59 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             new ReferenceData { Id = 264, Category = "MODE_PAIEMENT_COMMERCIAL", Code = "Prelevement", Label = "Prélèvement automatique", SortOrder = 5, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Icone = "bi-arrow-repeat" },
 
             // ════════════════════════════════════════════════════════════════
-            // TYPE DE SERVICE (ServiceContrat.TypeService)
+            // TYPE DE SERVICE — liste officielle des déclarations cabinet
             // ════════════════════════════════════════════════════════════════
-            new ReferenceData { Id = 270, Category = "TYPE_SERVICE", Code = "TVA", Label = "Taxe sur la Valeur Ajoutée", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "bg-primary-subtle text-primary", Icone = "bi-receipt" },
-            new ReferenceData { Id = 271, Category = "TYPE_SERVICE", Code = "IS", Label = "Impôt sur les Sociétés", SortOrder = 2, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "bg-purple-subtle text-purple", Icone = "bi-building" },
-            new ReferenceData { Id = 272, Category = "TYPE_SERVICE", Code = "IR", Label = "Impôt sur le Revenu", SortOrder = 3, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success", Icone = "bi-person" },
-            new ReferenceData { Id = 273, Category = "TYPE_SERVICE", Code = "CNSS", Label = "Caisse Nationale de Sécurité Sociale", SortOrder = 4, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0891b2", CssClass = "bg-info-subtle text-info", Icone = "bi-shield" },
-            new ReferenceData { Id = 274, Category = "TYPE_SERVICE", Code = "PAIE", Label = "Gestion de la Paie", SortOrder = 5, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#d97706", CssClass = "bg-warning-subtle text-warning", Icone = "bi-cash-stack" },
-            new ReferenceData { Id = 275, Category = "TYPE_SERVICE", Code = "JURIDIQUE", Label = "Dossiers Juridiques", SortOrder = 6, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#dc2626", CssClass = "bg-danger-subtle text-danger", Icone = "bi-briefcase" },
-            new ReferenceData { Id = 276, Category = "TYPE_SERVICE", Code = "COMPTABILITE", Label = "Tenue Comptable", SortOrder = 7, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#14b8a6", CssClass = "bg-teal-subtle text-teal", Icone = "bi-journal-text" },
-            new ReferenceData { Id = 277, Category = "TYPE_SERVICE", Code = "BILAN", Label = "Bilan & États de Synthèse", SortOrder = 8, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#6366f1", CssClass = "bg-indigo-subtle text-indigo", Icone = "bi-bar-chart-line" },
-            new ReferenceData { Id = 278, Category = "TYPE_SERVICE", Code = "ETATSFISCAUX", Label = "États Fiscaux", SortOrder = 9, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#ec4899", CssClass = "bg-pink-subtle text-pink", Icone = "bi-file-earmark-spreadsheet" },
-            new ReferenceData { Id = 279, Category = "TYPE_SERVICE", Code = "AUDITCOMPTABLE", Label = "Audit Comptable", SortOrder = 10, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#64748b", CssClass = "bg-secondary-subtle text-secondary", Icone = "bi-search" },
-            new ReferenceData { Id = 280, Category = "TYPE_SERVICE", Code = "CONSEILFISCAL", Label = "Conseil Fiscal", SortOrder = 11, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "bg-warning-subtle text-warning", Icone = "bi-lightbulb" },
+            // ── Groupe Fiscal – TVA ──
+            new ReferenceData { Id = 270, Category = "TYPE_SERVICE", Code = "TVA",      Label = "TVA – Taxe sur la Valeur Ajoutée",                              SortOrder = 1,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-receipt" },
+            // ── Groupe Fiscal – IS ──
+            new ReferenceData { Id = 271, Category = "TYPE_SERVICE", Code = "CM",       Label = "CM – Cotisation Minimale",                                      SortOrder = 2,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-calculator" },
+            new ReferenceData { Id = 272, Category = "TYPE_SERVICE", Code = "DRF",      Label = "D.R.F – Déclaration du Résultat Fiscal",                        SortOrder = 3,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-file-earmark-text" },
+            new ReferenceData { Id = 273, Category = "TYPE_SERVICE", Code = "ACOMPTES", Label = "Acomptes IS",                                                   SortOrder = 4,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-calendar-range" },
+            new ReferenceData { Id = 274, Category = "TYPE_SERVICE", Code = "REG_IS",   Label = "Régularisation IS – Reliquat d'Impôt",                          SortOrder = 5,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-arrow-repeat" },
+            // ── Groupe Fiscal – IR ──
+            new ReferenceData { Id = 275, Category = "TYPE_SERVICE", Code = "IR_SAL",   Label = "I.R/SALAIRE – IR Revenus Salariaux et assimilés",               SortOrder = 6,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-person-lines-fill" },
+            new ReferenceData { Id = 276, Category = "TYPE_SERVICE", Code = "DRG",      Label = "D.R.G – Déclaration du Revenu Global",                          SortOrder = 7,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-person-badge" },
+            new ReferenceData { Id = 277, Category = "TYPE_SERVICE", Code = "IR_COMP",  Label = "IR/COMP – Versement de l'Impôt sur le Revenu",                  SortOrder = 8,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-send" },
+            new ReferenceData { Id = 278, Category = "TYPE_SERVICE", Code = "RAS_FONC", Label = "R.A.S/FONCIER – Retenue à la source sur Revenus Fonciers",      SortOrder = 9,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-house" },
+            new ReferenceData { Id = 279, Category = "TYPE_SERVICE", Code = "RAS_DIV",  Label = "RAS/DIV – Retenue à la source sur Revenus de Capitaux",         SortOrder = 10, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-graph-up-arrow" },
+            // ── Groupe Fiscal – Autres ──
+            new ReferenceData { Id = 280, Category = "TYPE_SERVICE", Code = "DT",       Label = "D.T – Droits de Timbre",                                        SortOrder = 11, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-stamp" },
+            new ReferenceData { Id = 281, Category = "TYPE_SERVICE", Code = "DEI_TP",   Label = "D.E.I/TP – Déclaration des Éléments Imposables (Taxe Prof.)",   SortOrder = 12, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-geo-alt" },
+            new ReferenceData { Id = 282, Category = "TYPE_SERVICE", Code = "EG",       Label = "E.G – État Descriptif du Gasoil",                               SortOrder = 13, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-fuel-pump" },
+            new ReferenceData { Id = 283, Category = "TYPE_SERVICE", Code = "DRVT",     Label = "D.R.V.T – Déclaration des Rémunérations versées à des Tiers",   SortOrder = 14, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-people" },
+            new ReferenceData { Id = 284, Category = "TYPE_SERVICE", Code = "CSS_SOL",  Label = "C.S.S – Contribution Sociale de Solidarité sur Bénéfices",      SortOrder = 15, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#c2410c", CssClass = "bg-orange-subtle text-orange",   Icone = "bi-heart" },
+            // ── Groupe Social – CNSS ──
+            new ReferenceData { Id = 285, Category = "TYPE_SERVICE", Code = "CNSS",     Label = "C.N.S.S – Caisse Nationale de Sécurité Sociale",                SortOrder = 20, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#065f46", CssClass = "bg-success-subtle text-success", Icone = "bi-shield-shaded" },
+            // ── Groupe Social – Paie & Emploi ──
+            new ReferenceData { Id = 286, Category = "TYPE_SERVICE", Code = "DTS",      Label = "D.T.S/État 9421 – Déclaration des Traitements et Salaires",     SortOrder = 21, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#065f46", CssClass = "bg-success-subtle text-success", Icone = "bi-file-earmark-person" },
+            new ReferenceData { Id = 287, Category = "TYPE_SERVICE", Code = "DCH_ETS",  Label = "D.CH.ETS – Déclaration de Chômage d'Établissement",             SortOrder = 22, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#065f46", CssClass = "bg-success-subtle text-success", Icone = "bi-building-x" },
+            // ── Groupe Juridique ──
+            new ReferenceData { Id = 288, Category = "TYPE_SERVICE", Code = "PV_AGO",   Label = "PV AGO – Procès Verbal Assemblée Générale Ordinaire",           SortOrder = 30, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#be123c", CssClass = "bg-danger-subtle text-danger",   Icone = "bi-card-checklist" },
+            // ── Groupe Tenue Comptable & États Financiers ──
+            new ReferenceData { Id = 289, Category = "TYPE_SERVICE", Code = "COMPTABILITE",  Label = "Saisie Comptable & Journaux",                                   SortOrder = 40, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#1d4ed8", CssClass = "bg-primary-subtle text-primary",  Icone = "bi-journal-bookmark" },
+            new ReferenceData { Id = 290, Category = "TYPE_SERVICE", Code = "TRESORERIE",    Label = "Gestion de Trésorerie & Rapprochement Bancaire",                 SortOrder = 41, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#1d4ed8", CssClass = "bg-primary-subtle text-primary",  Icone = "bi-safe2" },
+            new ReferenceData { Id = 291, Category = "TYPE_SERVICE", Code = "IMMOBILISATION", Label = "Gestion des Immobilisations & Amortissements",                  SortOrder = 42, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#1d4ed8", CssClass = "bg-primary-subtle text-primary",  Icone = "bi-box-seam" },
+            new ReferenceData { Id = 292, Category = "TYPE_SERVICE", Code = "BILAN",         Label = "Bilan & États de Synthèse",                                     SortOrder = 43, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#6d28d9", CssClass = "bg-indigo-subtle text-indigo",    Icone = "bi-clipboard-data" },
+            new ReferenceData { Id = 293, Category = "TYPE_SERVICE", Code = "ETATSFISCAUX",  Label = "États Fiscaux (CPC, ESG, TFT)",                                 SortOrder = 44, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#6d28d9", CssClass = "bg-indigo-subtle text-indigo",    Icone = "bi-file-earmark-spreadsheet" },
+            new ReferenceData { Id = 294, Category = "TYPE_SERVICE", Code = "LIASSEFISCALE", Label = "Liasse Fiscale",                                                 SortOrder = 45, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#6d28d9", CssClass = "bg-indigo-subtle text-indigo",    Icone = "bi-files" },
 
             // ════════════════════════════════════════════════════════════════
             // CATEGORIE DE SERVICE
             // ════════════════════════════════════════════════════════════════
-            new ReferenceData { Id = 285, Category = "CATEGORIE_SERVICE", Code = "Fiscal", Label = "Fiscal", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "bg-purple-subtle text-purple", Icone = "bi-calculator" },
-            new ReferenceData { Id = 286, Category = "CATEGORIE_SERVICE", Code = "Social", Label = "Social", SortOrder = 2, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0891b2", CssClass = "bg-info-subtle text-info", Icone = "bi-people" },
-            new ReferenceData { Id = 287, Category = "CATEGORIE_SERVICE", Code = "Comptable", Label = "Comptable", SortOrder = 3, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success", Icone = "bi-journal-text" },
-            new ReferenceData { Id = 288, Category = "CATEGORIE_SERVICE", Code = "Juridique", Label = "Juridique", SortOrder = 4, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#dc2626", CssClass = "bg-danger-subtle text-danger", Icone = "bi-briefcase" },
-            new ReferenceData { Id = 289, Category = "CATEGORIE_SERVICE", Code = "Conseil", Label = "Conseil", SortOrder = 5, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "bg-warning-subtle text-warning", Icone = "bi-lightbulb" },
-            new ReferenceData { Id = 290, Category = "CATEGORIE_SERVICE", Code = "Autre", Label = "Autre", SortOrder = 99, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#64748b", CssClass = "bg-secondary-subtle text-secondary", Icone = "bi-three-dots" },
+            new ReferenceData { Id = 320, Category = "CATEGORIE_SERVICE", Code = "Fiscal",    Label = "Fiscal",    SortOrder = 1,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "bg-purple-subtle text-purple",    Icone = "bi-calculator" },
+            new ReferenceData { Id = 321, Category = "CATEGORIE_SERVICE", Code = "Social",    Label = "Social",    SortOrder = 2,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0891b2", CssClass = "bg-info-subtle text-info",         Icone = "bi-people" },
+            new ReferenceData { Id = 322, Category = "CATEGORIE_SERVICE", Code = "Comptable", Label = "Comptable", SortOrder = 3,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success",   Icone = "bi-journal-text" },
+            new ReferenceData { Id = 323, Category = "CATEGORIE_SERVICE", Code = "Juridique", Label = "Juridique", SortOrder = 4,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#dc2626", CssClass = "bg-danger-subtle text-danger",     Icone = "bi-briefcase" },
+            new ReferenceData { Id = 324, Category = "CATEGORIE_SERVICE", Code = "Conseil",   Label = "Conseil",   SortOrder = 5,  IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "bg-warning-subtle text-warning",   Icone = "bi-lightbulb" },
+            new ReferenceData { Id = 325, Category = "CATEGORIE_SERVICE", Code = "Autre",     Label = "Autre",     SortOrder = 99, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#64748b", CssClass = "bg-secondary-subtle text-secondary", Icone = "bi-three-dots" },
 
             // ════════════════════════════════════════════════════════════════
             // FREQUENCE
             // ════════════════════════════════════════════════════════════════
-            new ReferenceData { Id = 295, Category = "FREQUENCE", Code = "Mensuelle", Label = "Mensuelle", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "bg-primary-subtle text-primary", Icone = "bi-calendar-month" },
-            new ReferenceData { Id = 296, Category = "FREQUENCE", Code = "Trimestrielle", Label = "Trimestrielle", SortOrder = 2, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "bg-purple-subtle text-purple", Icone = "bi-calendar3" },
-            new ReferenceData { Id = 297, Category = "FREQUENCE", Code = "Annuelle", Label = "Annuelle", SortOrder = 3, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success", Icone = "bi-calendar-event" },
-            new ReferenceData { Id = 298, Category = "FREQUENCE", Code = "Ponctuelle", Label = "Ponctuelle", SortOrder = 4, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "bg-warning-subtle text-warning", Icone = "bi-calendar-check" }
+            new ReferenceData { Id = 330, Category = "FREQUENCE", Code = "Mensuelle",     Label = "Mensuelle",     SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "bg-primary-subtle text-primary",    Icone = "bi-calendar-month" },
+            new ReferenceData { Id = 331, Category = "FREQUENCE", Code = "Trimestrielle", Label = "Trimestrielle", SortOrder = 2, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#7c3aed", CssClass = "bg-purple-subtle text-purple",      Icone = "bi-calendar3" },
+            new ReferenceData { Id = 332, Category = "FREQUENCE", Code = "Annuelle",      Label = "Annuelle",      SortOrder = 3, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success",    Icone = "bi-calendar-event" },
+            new ReferenceData { Id = 333, Category = "FREQUENCE", Code = "Ponctuelle",    Label = "Ponctuelle",    SortOrder = 4, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#f59e0b", CssClass = "bg-warning-subtle text-warning",    Icone = "bi-calendar-check" }
         );
     }
 

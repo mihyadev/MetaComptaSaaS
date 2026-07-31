@@ -1,4 +1,4 @@
-ï»¿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.AuditLogDto>
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.AuditLogDto>
 @{
     ViewData["Title"] = "Historique de connexion";
 }
@@ -29,14 +29,14 @@
                 <select name="action" class="form-select">
                     <option value="">Toutes</option>
                     <option value="Connexion" selected="@(ViewBag.Action?.ToString() == "Connexion")">Connexion</option>
-                    <option value="Deconnexion" selected="@(ViewBag.Action?.ToString() == "Deconnexion")">DÃ©connexion</option>
-                    <option value="Creation" selected="@(ViewBag.Action?.ToString() == "Creation")">CrÃ©ation</option>
+                    <option value="Deconnexion" selected="@(ViewBag.Action?.ToString() == "Deconnexion")">Déconnexion</option>
+                    <option value="Creation" selected="@(ViewBag.Action?.ToString() == "Creation")">Création</option>
                     <option value="Modification" selected="@(ViewBag.Action?.ToString() == "Modification")">Modification</option>
                     <option value="Suppression" selected="@(ViewBag.Action?.ToString() == "Suppression")">Suppression</option>
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label">Date dÃ©but</label>
+                <label class="form-label">Date début</label>
                 <input type="date" name="dateDebut" class="form-control" value="@(ViewBag.DateDebut != null ? ((DateTime)ViewBag.DateDebut).ToString("yyyy-MM-dd") : "")" />
             </div>
             <div class="col-md-2">
@@ -44,7 +44,7 @@
                 <input type="date" name="dateFin" class="form-control" value="@(ViewBag.DateFin != null ? ((DateTime)ViewBag.DateFin).ToString("yyyy-MM-dd") : "")" />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>
@@ -61,7 +61,7 @@
                         <th>Date & Heure</th>
                         <th>Utilisateur</th>
                         <th>Action</th>
-                        <th>DÃ©tails</th>
+                        <th>Détails</th>
                         <th>Adresse IP</th>
                     </tr>
                 </thead>
@@ -96,7 +96,7 @@
                         <tr>
                             <td colspan="5" class="text-center py-4 text-muted">
                                 <i class="bi bi-clock-history fs-1 d-block mb-2"></i>
-                                Aucun log trouvÃ©.
+                                Aucun log trouvé.
                             </td>
                         </tr>
                     }
@@ -105,3 +105,4 @@
         </div>
     </div>
 </div>
+

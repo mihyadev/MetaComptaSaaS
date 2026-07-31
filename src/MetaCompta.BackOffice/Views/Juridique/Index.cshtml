@@ -1,4 +1,4 @@
-﻿@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DossierJuridiqueDto>
+@model MetaCompta.Application.DTOs.PagedResult<MetaCompta.Application.DTOs.DossierJuridiqueDto>
 @{
     ViewData["Title"] = "Juridique";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
@@ -14,9 +14,12 @@
             </ol>
         </nav>
     </div>
-    <a href="@Url.Action("Create", "Juridique")" class="btn btn-mc-primary">
-        <i class="bi bi-plus-circle me-1"></i> Nouveau dossier
-    </a>
+    @if (ViewBag.CanJuridiqueCreate as bool? ?? false)
+    {
+        <a href="@Url.Action("Create", "Juridique")" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Nouveau dossier
+        </a>
+    }
 </div>
 
 @if (client != null)
@@ -60,7 +63,7 @@
                 <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Référence..." />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-mc-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>

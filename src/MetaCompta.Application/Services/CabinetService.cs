@@ -16,15 +16,18 @@ public class CabinetService : ICabinetService
     private readonly MetaComptaDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly IEffectivePermissionService _permissions;
 
     public CabinetService(
         MetaComptaDbContext db,
         UserManager<ApplicationUser> userManager,
-        RoleManager<ApplicationRole> roleManager)
+        RoleManager<ApplicationRole> roleManager,
+        IEffectivePermissionService permissions)
     {
         _db = db;
         _userManager = userManager;
         _roleManager = roleManager;
+        _permissions = permissions;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -234,8 +237,18 @@ public class CabinetService : ICabinetService
             await _userManager.AddToRoleAsync(user, dto.Role);
         }
 
-        // Assign permissions as claims
-        await SyncUserPermissionsAsync(user, dto.Permissions);
+        // Assign permissions as exclusive employee claims (UI checkboxes).
+        // If none selected, seed from role matrix so removals later are effective.
+        var perms = dto.Permissions?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                    ?? new List<string>();
+        if (perms.Count == 0 && !string.IsNullOrWhiteSpace(dto.Role))
+        {
+            if (string.Equals(dto.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                perms = ClaimDefinitions.All.ToList();
+            else if (CabinetRolePermissionMatrix.ByRole.TryGetValue(dto.Role, out var matrix))
+                perms = matrix.ToList();
+        }
+        await SyncUserPermissionsAsync(user, perms);
 
         await LogAuditAsync(cabinetId, userId, "Creation", "CabinetEmployee",
             $"Employé '{user.FullName}' ({user.Email}) créé avec le rôle '{dto.Role}'.");
@@ -490,29 +503,8 @@ public class CabinetService : ICabinetService
 
     private async Task<List<string>> GetUserPermissionsAsync(ApplicationUser user)
     {
-        var permissions = new List<string>();
-        var roles = await _userManager.GetRolesAsync(user);
-
-        foreach (var roleName in roles)
-        {
-            var role = await _roleManager.Roles
-                .Include(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
-                .FirstOrDefaultAsync(r => r.Name == roleName);
-
-            if (role != null)
-            {
-                permissions.AddRange(
-                    role.RolePermissions
-                        .Where(rp => rp.Permission != null)
-                        .Select(rp => rp.Permission!.Name));
-            }
-        }
-
-        // Also include direct user claims with type "Permission"
-        var userClaims = await _userManager.GetClaimsAsync(user);
-        permissions.AddRange(userClaims.Where(c => c.Type == "Permission").Select(c => c.Value));
-
-        return permissions.Distinct().OrderBy(p => p).ToList();
+        var list = await _permissions.GetEffectivePermissionsAsync(user.Id);
+        return list.ToList();
     }
 
     private async Task SyncUserPermissionsAsync(ApplicationUser user, List<string> newPermissions)
@@ -523,12 +515,17 @@ public class CabinetService : ICabinetService
         if (permClaims.Any())
             await _userManager.RemoveClaimsAsync(user, permClaims);
 
-        // Add new Permission claims
+        // Add new Permission claims — this list becomes the exclusive effective set
         if (newPermissions.Any())
         {
-            var claims = newPermissions.Select(p => new System.Security.Claims.Claim("Permission", p));
+            var claims = newPermissions
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(p => new System.Security.Claims.Claim("Permission", p.Trim().ToLowerInvariant()));
             await _userManager.AddClaimsAsync(user, claims);
         }
+
+        _permissions.InvalidateUser(user.Id);
     }
 
     private async Task SyncRolePermissionsAsync(ApplicationRole role, List<string> permissionNames)
@@ -537,13 +534,11 @@ public class CabinetService : ICabinetService
         var existing = await _db.RolePermissions.Where(rp => rp.RoleId == role.Id).ToListAsync();
         _db.RolePermissions.RemoveRange(existing);
 
-        // Add new permissions
-        foreach (var permName in permissionNames)
+        foreach (var permName in permissionNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var perm = await _db.Permissions.FirstOrDefaultAsync(p => p.Name == permName);
             if (perm == null)
             {
-                // Auto-create the permission if it doesn't exist
                 var parts = permName.Split('.');
                 perm = new Permission
                 {
@@ -564,6 +559,8 @@ public class CabinetService : ICabinetService
         }
 
         await _db.SaveChangesAsync();
+        // Role change impacts all members still on role-fallback (no direct claims)
+        _permissions.InvalidateAll();
     }
 
     private async Task LogAuditAsync(int cabinetId, string userId, string action, string entityType, string details)

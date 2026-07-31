@@ -5,12 +5,25 @@
     var refTypes = ViewData["Ref_TYPE_DECLARATION"] as List<ReferenceDataDto> ?? new();
     var refStatuts = ViewData["Ref_STATUT_DECLARATION"] as List<ReferenceDataDto> ?? new();
     var hasActiveContract = ViewBag.HasActiveContract as bool? ?? false;
+    var canCreate = ViewBag.CanCreateDeclaration as bool? ?? false;
+    var canEdit = ViewBag.CanEditDeclaration as bool? ?? false;
+    var reasonLabel = ViewBag.ContractAccessReasonLabel as string ?? "Mode consultation uniquement.";
     var currentType = ViewBag.Type?.ToString();  // "TVA", "IS", "IR", "CNSS" or null (Historique)
 
-    // Read active services from session (same logic as _Layout.cshtml)
+    // Fail-closed: empty ActiveServices does NOT unlock all types
+    // Map declaration types ↔ contract service codes ∩ role claims
     var activeServicesJson = Context.Session.GetString("ActiveServices") ?? "[]";
     var activeServices = System.Text.Json.JsonSerializer.Deserialize<List<string>>(activeServicesJson) ?? new List<string>();
-    bool HasService(string code) => activeServices.Count == 0 || activeServices.Contains(code, StringComparer.OrdinalIgnoreCase);
+    bool HasCode(string code) => activeServices.Contains(code, StringComparer.OrdinalIgnoreCase);
+    bool HasClaimDomain(string domain) => PermissionHelper.HasAnyDomain(Context.Session, domain);
+    bool HasService(string declarationType) => declarationType?.ToUpperInvariant() switch
+    {
+        "TVA" => HasClaimDomain("tva") && HasCode("TVA"),
+        "IS" => HasClaimDomain("is") && (HasCode("IS") || HasCode("ACOMPTES") || HasCode("REG_IS") || HasCode("DRF") || HasCode("CM")),
+        "IR" => HasClaimDomain("ir") && (HasCode("IR") || HasCode("IR_SAL") || HasCode("RAS_FONC") || HasCode("RAS_DIV")),
+        "CNSS" => HasClaimDomain("cnss") && HasCode("CNSS"),
+        _ => false
+    };
 
     // Section-specific metadata
     var sectionTitles = new Dictionary<string, string>
@@ -45,7 +58,7 @@
     var pageTitle = currentType != null && sectionTitles.ContainsKey(currentType) ? sectionTitles[currentType] : "Déclarations Fiscales & Sociales";
     var pageSubtitle = currentType != null && sectionSubtitles.ContainsKey(currentType) ? sectionSubtitles[currentType] : "Suivi de toutes les déclarations : TVA, IS, IR, CNSS";
     var pageIcon = currentType != null && sectionIcons.ContainsKey(currentType) ? sectionIcons[currentType] : "bi-file-earmark-text text-primary";
-    var btnColor = currentType != null && sectionBtnColors.ContainsKey(currentType) ? sectionBtnColors[currentType] : "btn-mc-primary";
+    var btnColor = currentType != null && sectionBtnColors.ContainsKey(currentType) ? sectionBtnColors[currentType] : "btn-primary";
     var needsAnnee = currentType == "IS" || currentType == "IR";
     var hasServiceForType = currentType == null || HasService(currentType);
 }
@@ -57,7 +70,7 @@
         <p class="text-muted mb-0">@pageSubtitle</p>
     </div>
     <div>
-        @if (hasActiveContract && hasServiceForType)
+        @if (canCreate && hasServiceForType)
         {
             @if (currentType != null)
             {
@@ -122,8 +135,14 @@
         }
         else if (!hasActiveContract)
         {
-            <span class="btn btn-outline-secondary rounded-pill px-4 disabled" title="Un contrat actif est requis pour créer une déclaration">
-                <i class="bi bi-lock me-2"></i> Nouvelle Déclaration
+            <span class="btn btn-outline-secondary rounded-pill px-4 disabled" title="@reasonLabel">
+                <i class="bi bi-lock me-2"></i> Consultation
+            </span>
+        }
+        else if (!canCreate)
+        {
+            <span class="btn btn-outline-secondary rounded-pill px-4 disabled" title="Permission declaration.create requise">
+                <i class="bi bi-lock me-2"></i> Création non autorisée
             </span>
         }
         else
@@ -137,12 +156,20 @@
 
 @if (!hasActiveContract)
 {
-    <div class="alert alert-warning rounded-3 d-flex align-items-center mb-4" role="alert" style="border-left: 4px solid #f59e0b;">
+    <div class="alert alert-warning rounded-3 d-flex align-items-center mb-4" role="alert">
         <i class="bi bi-exclamation-triangle-fill text-warning me-3 fs-5"></i>
         <div>
-            <strong>Mode consultation uniquement.</strong> Aucun contrat actif ou validé n'est associé à ce client.
-            Pour créer ou modifier des déclarations, veuillez d'abord valider un contrat commercial.
+            <strong>Mode consultation.</strong> @reasonLabel
             <a href="@Url.Action("Contrats", "Commercial")" class="alert-link ms-1"><i class="bi bi-arrow-right me-1"></i>Gérer les contrats</a>
+        </div>
+    </div>
+}
+else if (!canCreate)
+{
+    <div class="alert alert-info rounded-3 d-flex align-items-center mb-4" role="alert">
+        <i class="bi bi-info-circle-fill text-info me-3 fs-5"></i>
+        <div>
+            <strong>Création désactivée.</strong> Votre rôle ne dispose pas de la permission <code>declaration.create</code>.
         </div>
     </div>
 }
@@ -151,45 +178,59 @@
 @if (Model != null)
 {
     var total = Model.TotalCount;
-    var enAttente = Model.Items?.Count(d => d.Statut == RefCodes.StatutDeclaration.Brouillon || d.Statut == RefCodes.StatutDeclaration.EnCours || d.Statut == RefCodes.StatutDeclaration.ACompleter) ?? 0;
-    var validees = Model.Items?.Count(d => d.Statut == RefCodes.StatutDeclaration.Validee || d.Statut == RefCodes.StatutDeclaration.Soumise) ?? 0;
-    var overdue = Model.Items?.Count(d => d.DateLimite < DateTime.Today && d.Statut != RefCodes.StatutDeclaration.Payee && d.Statut != RefCodes.StatutDeclaration.Soumise) ?? 0;
+    var enAttente = Model.Items?.Count(d => d.Statut == RefCodes.StatutDeclaration.Brouillon
+        || d.Statut == RefCodes.StatutDeclaration.EnCours
+        || d.Statut == RefCodes.StatutDeclaration.ACompleter
+        || d.Statut == RefCodes.StatutDeclaration.CreeeParSysteme
+        || d.Statut == RefCodes.StatutDeclaration.DocumentsDemandes
+        || d.Statut == RefCodes.StatutDeclaration.EnAttenteCorrection
+        || d.Statut == RefCodes.StatutDeclaration.ACorriger) ?? 0;
+    var validees = Model.Items?.Count(d => d.Statut == RefCodes.StatutDeclaration.Validee
+        || d.Statut == RefCodes.StatutDeclaration.Soumise
+        || d.Statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+        || d.Statut == RefCodes.StatutDeclaration.Deposee) ?? 0;
+    var overdue = Model.Items?.Count(d => d.DateLimite < DateTime.Today
+        && d.Statut != RefCodes.StatutDeclaration.Payee
+        && d.Statut != RefCodes.StatutDeclaration.Soumise
+        && d.Statut != RefCodes.StatutDeclaration.Deposee
+        && d.Statut != RefCodes.StatutDeclaration.Cloturee
+        && d.Statut != RefCodes.StatutDeclaration.Archivee) ?? 0;
 
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-primary);">
+            <div class="stat-card" style="border-left: 4px solid var(--primary);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">Total Déclarations</div>
                         <div class="stat-value">@total</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(37,99,235,0.1); color: var(--mc-primary);">
+                    <div class="stat-icon" style="background: rgba(14,165,233,0.1); color: var(--primary);">
                         <i class="bi bi-file-earmark-text"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-accent);">
+            <div class="stat-card" style="border-left: 4px solid var(--warning);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">En Attente / En Cours</div>
                         <div class="stat-value">@enAttente</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--mc-accent);">
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.1); color: var(--warning);">
                         <i class="bi bi-hourglass-split"></i>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="stat-card" style="border-left: 4px solid var(--mc-secondary);">
+            <div class="stat-card" style="border-left: 4px solid var(--secondary);">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="stat-label">Validées / Soumises</div>
                         <div class="stat-value">@validees</div>
                     </div>
-                    <div class="stat-icon" style="background: rgba(5,150,105,0.1); color: var(--mc-secondary);">
+                    <div class="stat-icon" style="background: rgba(16,185,129,0.1); color: var(--secondary);">
                         <i class="bi bi-check-circle"></i>
                     </div>
                 </div>
@@ -342,20 +383,8 @@
                                     }
                                     else
                                     {
-                                        var statusClass = dec.Statut switch
-                                        {
-                                            RefCodes.StatutDeclaration.Brouillon => "badge-brouillon",
-                                            RefCodes.StatutDeclaration.ACompleter => "badge-acompleter",
-                                            RefCodes.StatutDeclaration.EnCours => "badge-acompleter",
-                                            RefCodes.StatutDeclaration.Completee => "badge-completee",
-                                            RefCodes.StatutDeclaration.EnRevision => "badge-enrevision",
-                                            RefCodes.StatutDeclaration.Validee => "badge-validee",
-                                            RefCodes.StatutDeclaration.Soumise => "badge-soumise",
-                                            RefCodes.StatutDeclaration.Payee => "badge-soumise",
-                                            RefCodes.StatutDeclaration.Rejetee => "badge-refusee",
-                                            _ => "bg-secondary"
-                                        };
-                                        <span class="badge @statusClass rounded-pill">@dec.Statut</span>
+                                        var statusClass = RefCodes.StatutDeclaration.BadgeClass(dec.Statut);
+                                        <span class="badge @statusClass rounded-pill">@RefCodes.StatutDeclaration.Label(dec.Statut)</span>
                                     }
                                 </td>
                                 <td class="text-end pe-4">
@@ -363,7 +392,11 @@
                                         <a asp-action="Details" asp-route-id="@dec.Id" class="btn btn-outline-primary" title="Détails">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        @if (hasActiveContract && (dec.Statut == RefCodes.StatutDeclaration.Brouillon || dec.Statut == RefCodes.StatutDeclaration.ACompleter || dec.Statut == RefCodes.StatutDeclaration.EnCours))
+                                        @if (canEdit && hasActiveContract && (dec.Statut == RefCodes.StatutDeclaration.Brouillon || dec.Statut == RefCodes.StatutDeclaration.ACompleter || dec.Statut == RefCodes.StatutDeclaration.EnCours
+                                            || dec.Statut == RefCodes.StatutDeclaration.CreeeParSysteme || dec.Statut == RefCodes.StatutDeclaration.DocumentsDemandes
+                                            || dec.Statut == RefCodes.StatutDeclaration.DocumentsRecus || dec.Statut == RefCodes.StatutDeclaration.ControleEnCours
+                                            || dec.Statut == RefCodes.StatutDeclaration.CalculTVA || dec.Statut == RefCodes.StatutDeclaration.ACorriger
+                                            || dec.Statut == RefCodes.StatutDeclaration.EnAttenteCorrection))
                                         {
                                             @switch (dec.Type)
                                             {
@@ -392,7 +425,7 @@
                             <td colspan="8" class="text-center py-5 text-muted">
                                 <i class="bi bi-file-earmark-text display-4 d-block mb-2 opacity-25"></i>
                                 <p class="mb-2">Aucune déclaration trouvée.</p>
-                                @if (hasActiveContract && hasServiceForType)
+                                @if (canCreate && hasActiveContract && hasServiceForType)
                                 {
                                     @if (currentType != null && !needsAnnee)
                                     {
@@ -418,6 +451,10 @@
                                 else if (!hasActiveContract)
                                 {
                                     <span class="text-warning"><i class="bi bi-lock me-1"></i>Un contrat actif est requis pour créer des déclarations.</span>
+                                }
+                                else if (!canCreate)
+                                {
+                                    <span class="text-warning"><i class="bi bi-lock me-1"></i>Permission declaration.create requise.</span>
                                 }
                                 else
                                 {

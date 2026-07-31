@@ -61,24 +61,26 @@ builder.Services.AddAuthentication(options =>
 // ===== Authorization Policies =====
 builder.Services.AddAuthorization(options =>
 {
-    // Single source of truth: lowercase domain.action claim policies from ClaimDefinitions
-    // Note: ASP.NET Core's PolicyMap uses StringComparer.OrdinalIgnoreCase,
-    // so we MUST use only one naming convention to avoid silent overwrites.
+    // Live DB permission checks (not stale JWT Permission claims)
     foreach (var claim in ClaimDefinitions.All)
     {
-        options.AddPolicy(claim, policy => policy.RequireClaim("Permission", claim));
+        options.AddPolicy(claim, policy =>
+            policy.Requirements.Add(new MetaCompta.API.Authorization.PermissionRequirement(claim)));
     }
 
-    options.AddPolicy("BackOfficeAccess", policy => policy.RequireRole("SuperAdmin", "Manager", "Assistant", "Comptable", "Fiscaliste"));
+    options.AddPolicy("BackOfficeAccess", policy => policy.RequireRole(CabinetRolePermissionMatrix.BackOfficeRoles));
     options.AddPolicy("ExtranetAccess", policy => policy.RequireRole("Client"));
     options.AddPolicy("AdminAccess", policy => policy.RequireRole("PlatformAdmin"));
 });
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, MetaCompta.API.Authorization.DynamicPermissionHandler>();
+builder.Services.AddScoped<IEffectivePermissionService, EffectivePermissionService>();
 
 // ===== AutoMapper =====
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 // ===== Services (DI) =====
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IContractAccessService, ContractAccessService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IDeclarationService, DeclarationService>();
@@ -89,8 +91,13 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ICabinetService, CabinetService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
+builder.Services.AddScoped<IUnitTakeService, UnitTakeService>();
 builder.Services.AddScoped<ICommercialService, CommercialService>();
 builder.Services.AddScoped<IWorkflowSchedulerService, WorkflowSchedulerService>();
+builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IClientUserService, ClientUserService>();
 
 // ===== Hangfire (Background Jobs) =====
 builder.Services.AddHangfire(config => config
@@ -182,6 +189,256 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<MetaComptaDbContext>();
     await db.Database.MigrateAsync();
 
+    // ===== Patch: Users HR/profile columns (present in model, missing from InitialCreate) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('Users', 'Poste') IS NULL ALTER TABLE [Users] ADD [Poste] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'Departement') IS NULL ALTER TABLE [Users] ADD [Departement] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'CIN') IS NULL ALTER TABLE [Users] ADD [CIN] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'Adresse') IS NULL ALTER TABLE [Users] ADD [Adresse] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'DateNaissance') IS NULL ALTER TABLE [Users] ADD [DateNaissance] datetime2 NULL;
+        IF COL_LENGTH('Users', 'LieuNaissance') IS NULL ALTER TABLE [Users] ADD [LieuNaissance] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'Sexe') IS NULL ALTER TABLE [Users] ADD [Sexe] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'SituationFamiliale') IS NULL ALTER TABLE [Users] ADD [SituationFamiliale] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'NumeroCNSS') IS NULL ALTER TABLE [Users] ADD [NumeroCNSS] nvarchar(max) NULL;
+        IF COL_LENGTH('Users', 'DateEmbauche') IS NULL ALTER TABLE [Users] ADD [DateEmbauche] datetime2 NULL;
+        IF COL_LENGTH('Users', 'TypeContrat') IS NULL ALTER TABLE [Users] ADD [TypeContrat] nvarchar(max) NULL;
+    ");
+    Console.WriteLine("[Startup] Users profile columns check/add complete.");
+
+    // ===== Patch: TVA invoice lines table (in model/snapshot but never created by a migration) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'TVALignesFactures')
+        BEGIN
+            CREATE TABLE [TVALignesFactures] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [DeclarationTVAId] int NOT NULL,
+                [TypePiece] nvarchar(50) NOT NULL,
+                [NumeroFacture] nvarchar(100) NULL,
+                [DateFacture] datetime2 NOT NULL,
+                [FournisseurClient] nvarchar(300) NULL,
+                [ICE] nvarchar(20) NULL,
+                [IdentifiantFiscal] nvarchar(50) NULL,
+                [Description] nvarchar(500) NULL,
+                [MontantHT] decimal(18,2) NOT NULL,
+                [TauxTVA] decimal(5,2) NOT NULL,
+                [MontantTVA] decimal(18,2) NOT NULL,
+                [MontantTTC] decimal(18,2) NOT NULL,
+                [TypeOperation] nvarchar(50) NOT NULL,
+                [IsProrata] bit NOT NULL DEFAULT 0,
+                [ProrataPercent] decimal(5,2) NULL,
+                [Regime] nvarchar(50) NULL,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE INDEX [IX_TVALignesFactures_CabinetId] ON [TVALignesFactures]([CabinetId]);
+            CREATE INDEX [IX_TVALignesFactures_DeclarationTVAId] ON [TVALignesFactures]([DeclarationTVAId]);
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DeclarationsTVA')
+                ALTER TABLE [TVALignesFactures] ADD CONSTRAINT [FK_TVALignesFactures_DeclarationsTVA_DeclarationTVAId]
+                    FOREIGN KEY ([DeclarationTVAId]) REFERENCES [DeclarationsTVA]([Id]) ON DELETE CASCADE;
+        END
+    ");
+    Console.WriteLine("[Startup] TVALignesFactures table check/create complete.");
+
+    // ===== Patch: UnitTypes / UnitTakes (generic exclusive claim lock) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'UnitTypes')
+        BEGIN
+            CREATE TABLE [UnitTypes] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [Code] nvarchar(50) NOT NULL,
+                [Name] nvarchar(150) NOT NULL,
+                [Description] nvarchar(500) NULL,
+                [EntityTable] nvarchar(100) NULL,
+                [IsActive] bit NOT NULL CONSTRAINT [DF_UnitTypes_IsActive] DEFAULT 1,
+                [IsDeleted] bit NOT NULL CONSTRAINT [DF_UnitTypes_IsDeleted] DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL CONSTRAINT [DF_UnitTypes_CreatedAt] DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE UNIQUE INDEX [IX_UnitTypes_Code] ON [UnitTypes]([Code]);
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM [UnitTypes] WHERE [Code] = N'DECLARATION')
+            INSERT INTO [UnitTypes] ([Code],[Name],[Description],[EntityTable],[IsActive],[IsDeleted],[CreatedAt])
+            VALUES (N'DECLARATION', N'Déclaration', N'Unité déclaration (TVA, IS, CNSS, …)', N'Declarations', 1, 0, '2026-01-01');
+        IF NOT EXISTS (SELECT 1 FROM [UnitTypes] WHERE [Code] = N'WORKFLOW_STEP')
+            INSERT INTO [UnitTypes] ([Code],[Name],[Description],[EntityTable],[IsActive],[IsDeleted],[CreatedAt])
+            VALUES (N'WORKFLOW_STEP', N'Étape workflow', N'Prise d''une étape d''instance workflow', N'WorkflowStepInstances', 1, 0, '2026-01-01');
+        IF NOT EXISTS (SELECT 1 FROM [UnitTypes] WHERE [Code] = N'TASK')
+            INSERT INTO [UnitTypes] ([Code],[Name],[Description],[EntityTable],[IsActive],[IsDeleted],[CreatedAt])
+            VALUES (N'TASK', N'Tâche', N'Prise d''une tâche (TaskItem)', N'TaskItems', 1, 0, '2026-01-01');
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'UnitTakes')
+        BEGIN
+            CREATE TABLE [UnitTakes] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [UnitTypeId] int NOT NULL,
+                [UnitEntityId] int NOT NULL,
+                [TakenByUserId] nvarchar(450) NOT NULL,
+                [TakenAt] datetime2 NOT NULL,
+                [ClosedAt] datetime2 NULL,
+                [Status] nvarchar(30) NOT NULL,
+                [Comment] nvarchar(1000) NULL,
+                [TaskItemId] int NULL,
+                [WorkflowStepInstanceId] int NULL,
+                [DeclarationId] int NULL,
+                [IsDeleted] bit NOT NULL CONSTRAINT [DF_UnitTakes_IsDeleted] DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL CONSTRAINT [DF_UnitTakes_CreatedAt] DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                CONSTRAINT [FK_UnitTakes_UnitTypes_UnitTypeId] FOREIGN KEY ([UnitTypeId]) REFERENCES [UnitTypes]([Id]),
+                CONSTRAINT [FK_UnitTakes_Cabinets_CabinetId] FOREIGN KEY ([CabinetId]) REFERENCES [Cabinets]([Id]),
+                CONSTRAINT [FK_UnitTakes_Users_TakenByUserId] FOREIGN KEY ([TakenByUserId]) REFERENCES [Users]([Id])
+            );
+            CREATE INDEX [IX_UnitTakes_Cabinet_Type_Entity_Closed] ON [UnitTakes]([CabinetId],[UnitTypeId],[UnitEntityId],[ClosedAt]);
+            CREATE INDEX [IX_UnitTakes_Cabinet_User_Status] ON [UnitTakes]([CabinetId],[TakenByUserId],[Status]);
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'TaskItems')
+                ALTER TABLE [UnitTakes] ADD CONSTRAINT [FK_UnitTakes_TaskItems_TaskItemId]
+                    FOREIGN KEY ([TaskItemId]) REFERENCES [TaskItems]([Id]);
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'WorkflowStepInstances')
+                ALTER TABLE [UnitTakes] ADD CONSTRAINT [FK_UnitTakes_WorkflowStepInstances_WorkflowStepInstanceId]
+                    FOREIGN KEY ([WorkflowStepInstanceId]) REFERENCES [WorkflowStepInstances]([Id]);
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Declarations')
+                ALTER TABLE [UnitTakes] ADD CONSTRAINT [FK_UnitTakes_Declarations_DeclarationId]
+                    FOREIGN KEY ([DeclarationId]) REFERENCES [Declarations]([Id]);
+        END
+    ");
+    Console.WriteLine("[Startup] UnitTypes/UnitTakes table check/create complete.");
+
+    // ===== Patch: Messages.DeclarationId (+ SenderRole if missing) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Messages')
+        BEGIN
+            IF COL_LENGTH('Messages', 'DeclarationId') IS NULL
+                ALTER TABLE [Messages] ADD [DeclarationId] int NULL;
+            IF COL_LENGTH('Messages', 'SenderRole') IS NULL
+                ALTER TABLE [Messages] ADD [SenderRole] nvarchar(50) NOT NULL CONSTRAINT [DF_Messages_SenderRole] DEFAULT N'Cabinet';
+            IF COL_LENGTH('Messages', 'IsReadByRecipient') IS NULL
+                ALTER TABLE [Messages] ADD [IsReadByRecipient] bit NOT NULL CONSTRAINT [DF_Messages_IsReadByRecipient] DEFAULT 0;
+            IF COL_LENGTH('Messages', 'ReadAt') IS NULL
+                ALTER TABLE [Messages] ADD [ReadAt] datetime2 NULL;
+            IF COL_LENGTH('Messages', 'ParentMessageId') IS NULL
+                ALTER TABLE [Messages] ADD [ParentMessageId] int NULL;
+            IF COL_LENGTH('Messages', 'PiecesJointesJson') IS NULL
+                ALTER TABLE [Messages] ADD [PiecesJointesJson] nvarchar(max) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Messages_DeclarationId' AND object_id = OBJECT_ID('Messages'))
+                CREATE INDEX [IX_Messages_DeclarationId] ON [Messages]([DeclarationId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Messages_Declarations_DeclarationId')
+               AND EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Declarations')
+               AND COL_LENGTH('Messages', 'DeclarationId') IS NOT NULL
+                ALTER TABLE [Messages] ADD CONSTRAINT [FK_Messages_Declarations_DeclarationId]
+                    FOREIGN KEY ([DeclarationId]) REFERENCES [Declarations]([Id]);
+        END
+    ");
+    Console.WriteLine("[Startup] Messages DeclarationId column check/add complete.");
+
+    // ===== Patch: Create missing payroll tables (skip EF migration) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ConstantesGlobales')
+        CREATE TABLE [ConstantesGlobales] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [CabinetId] int NOT NULL, [Code] nvarchar(50) NOT NULL, [Libelle] nvarchar(200) NOT NULL,
+            [Categorie] nvarchar(100) NULL, [Valeur] decimal(18,4) NOT NULL, [DateEffet] datetime2 NOT NULL,
+            [DateFin] datetime2 NULL, [Actif] bit NOT NULL DEFAULT 1, [Description] nvarchar(max) NULL,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'VariablesEmployes')
+        CREATE TABLE [VariablesEmployes] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [CabinetId] int NOT NULL, [EmployeeId] int NOT NULL, [RubriqueCode] nvarchar(50) NOT NULL,
+            [Valeur] decimal(18,4) NOT NULL, [LibellePersonnalise] nvarchar(200) NULL,
+            [Actif] bit NOT NULL DEFAULT 1, [DateEffet] datetime2 NULL, [DateFin] datetime2 NULL,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ReglesCalcul')
+        CREATE TABLE [ReglesCalcul] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [CabinetId] int NOT NULL, [RubriqueId] int NOT NULL, [Priorite] int NOT NULL DEFAULT 0,
+            [Condition] nvarchar(max) NULL, [Formule] nvarchar(max) NULL, [Description] nvarchar(max) NULL,
+            [Actif] bit NOT NULL DEFAULT 1,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'BulletinLignes')
+        CREATE TABLE [BulletinLignes] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [PaySlipId] int NOT NULL, [RubriqueId] int NULL, [RubriqueCode] nvarchar(50) NOT NULL,
+            [Libelle] nvarchar(200) NOT NULL, [Section] nvarchar(100) NULL, [Type] nvarchar(50) NULL,
+            [OrdreAffichage] int NOT NULL DEFAULT 0, [Base] decimal(18,4) NOT NULL DEFAULT 0,
+            [Taux] decimal(18,6) NOT NULL DEFAULT 0, [Gain] decimal(18,4) NOT NULL DEFAULT 0,
+            [Retenue] decimal(18,4) NOT NULL DEFAULT 0, [AfficherSurBulletin] bit NOT NULL DEFAULT 1,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'CumulsEmployes')
+        CREATE TABLE [CumulsEmployes] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [CabinetId] int NOT NULL, [EmployeeId] int NOT NULL, [RubriqueCode] nvarchar(50) NOT NULL,
+            [Mois] int NOT NULL, [Annee] int NOT NULL, [Valeur] decimal(18,4) NOT NULL DEFAULT 0,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+    ");
+    // AffectationsRubriques table
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'AffectationsRubriques')
+        CREATE TABLE [AffectationsRubriques] (
+            [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+            [CabinetId] int NOT NULL, [EmployeeId] int NOT NULL, [RubriqueId] int NOT NULL,
+            [RubriqueCode] nvarchar(50) NOT NULL, [ValeurDefaut] decimal(18,4) NOT NULL DEFAULT 0,
+            [Actif] bit NOT NULL DEFAULT 1, [DateEffet] datetime2 NULL, [DateFin] datetime2 NULL,
+            [IsDeleted] bit NOT NULL DEFAULT 0, [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+            [CreatedBy] nvarchar(max) NULL, [UpdatedAt] datetime2 NULL, [UpdatedBy] nvarchar(max) NULL, [DeletedAt] datetime2 NULL, [DeletedBy] nvarchar(max) NULL
+        );
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_AffectationsRubriques_Employee_Rubrique')
+        CREATE UNIQUE INDEX [IX_AffectationsRubriques_Employee_Rubrique] ON [AffectationsRubriques]([EmployeeId],[RubriqueId]) WHERE [IsDeleted]=0;
+    ");
+
+    Console.WriteLine("[Startup] Payroll tables check/create complete.");
+
+    // ===== Patch: ContratMembres (contract team assignment) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ContratMembres')
+        BEGIN
+            CREATE TABLE [ContratMembres] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ContratId] int NOT NULL,
+                [UserId] nvarchar(450) NOT NULL,
+                [RoleLabel] nvarchar(100) NULL,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                      CONSTRAINT [FK_ContratMembres_ContratsCommerciaux_ContratId]
+                          FOREIGN KEY ([ContratId]) REFERENCES [ContratsCommerciaux]([Id]) ON DELETE CASCADE,
+                      CONSTRAINT [FK_ContratMembres_Users_UserId]
+                          FOREIGN KEY ([UserId]) REFERENCES [Users]([Id]) ON DELETE NO ACTION
+                  );
+                  CREATE UNIQUE INDEX [IX_ContratMembres_ContratId_UserId] ON [ContratMembres]([ContratId],[UserId]);
+                  CREATE INDEX [IX_ContratMembres_UserId] ON [ContratMembres]([UserId]);
+              END
+    ");
+    Console.WriteLine("[Startup] ContratMembres table check/create complete.");
+
     // ===== Patch: Add missing ReferenceData columns (Couleur, CssClass, Icone) =====
     await db.Database.ExecuteSqlRawAsync(@"
         IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReferenceData') AND name = 'Couleur')
@@ -227,7 +484,7 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=39)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(39,'FORME_JURIDIQUE','ASSOCIATION','Association',8,1,0,'2026-01-01',GETUTCDATE(),'#ec4899','bg-pink-subtle text-pink');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=40)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(40,'FORME_JURIDIQUE','COOPERATIVE',N'Coopérative',9,1,0,'2026-01-01',GETUTCDATE(),'#14b8a6','bg-teal-subtle text-teal');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(40,'FORME_JURIDIQUE','COOPERATIVE',N'CoopÃ©rative',9,1,0,'2026-01-01',GETUTCDATE(),'#14b8a6','bg-teal-subtle text-teal');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=41)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(41,'FORME_JURIDIQUE','EI','Entreprise Individuelle',10,1,0,'2026-01-01',GETUTCDATE(),'#6366f1','bg-indigo-subtle text-indigo');
 
@@ -253,9 +510,9 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=49)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(49,'TYPE_DECLARATION','TVA','TVA',1,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','bg-primary-subtle text-primary','bi-receipt');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=50)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(50,'TYPE_DECLARATION','IS',N'Impôt sur les Sociétés',2,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','bg-purple-subtle text-purple','bi-building');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(50,'TYPE_DECLARATION','IS',N'ImpÃ´t sur les SociÃ©tÃ©s',2,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','bg-purple-subtle text-purple','bi-building');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=51)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(51,'TYPE_DECLARATION','IR',N'Impôt sur le Revenu',3,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-person');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(51,'TYPE_DECLARATION','IR',N'ImpÃ´t sur le Revenu',3,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-person');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=52)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(52,'TYPE_DECLARATION','CNSS','CNSS',4,1,0,'2026-01-01',GETUTCDATE(),'#0891b2','bg-info-subtle text-info','bi-shield');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=53)
@@ -265,17 +522,49 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=54)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(54,'STATUT_DECLARATION','Brouillon','Brouillon',1,1,0,'2026-01-01',GETUTCDATE(),'#94a3b8','badge-brouillon','bi-pencil');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=55)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(55,'STATUT_DECLARATION','ACompleter',N'À Compléter',2,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','badge-acompleter','bi-exclamation-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(55,'STATUT_DECLARATION','ACompleter',N'Ã€ ComplÃ©ter',2,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','badge-acompleter','bi-exclamation-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=56)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(56,'STATUT_DECLARATION','Completee',N'Complétée',3,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','badge-completee','bi-check');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(56,'STATUT_DECLARATION','Completee',N'ComplÃ©tÃ©e',3,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','badge-completee','bi-check');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=57)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(57,'STATUT_DECLARATION','EnRevision',N'En Révision',4,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','badge-enrevision','bi-eye');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(57,'STATUT_DECLARATION','EnRevision',N'En RÃ©vision',4,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','badge-enrevision','bi-eye');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=58)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(58,'STATUT_DECLARATION','Validee',N'Validée',5,1,0,'2026-01-01',GETUTCDATE(),'#059669','badge-validee','bi-check-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(58,'STATUT_DECLARATION','Validee',N'ValidÃ©e',5,1,0,'2026-01-01',GETUTCDATE(),'#059669','badge-validee','bi-check-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=59)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(59,'STATUT_DECLARATION','Soumise','Soumise',6,1,0,'2026-01-01',GETUTCDATE(),'#166534','badge-soumise','bi-send');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=60)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(60,'STATUT_DECLARATION','Refusee',N'Refusée',7,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','badge-refusee','bi-x-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(60,'STATUT_DECLARATION','Refusee',N'RefusÃ©e',7,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','badge-refusee','bi-x-circle');
+
+        -- TVA lifecycle STATUT_DECLARATION (340-354)
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=340)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(340,'STATUT_DECLARATION','ACreer',N'À créer',20,1,0,'2026-01-01',GETUTCDATE(),'#94a3b8','badge-brouillon','bi-plus-circle');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=341)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(341,'STATUT_DECLARATION','CreeeParSysteme',N'Créée par le système',21,1,0,'2026-01-01',GETUTCDATE(),'#64748b','badge-brouillon','bi-cpu');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=342)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(342,'STATUT_DECLARATION','DocumentsDemandes',N'Documents demandés',22,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','badge-acompleter','bi-folder-symlink');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=343)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(343,'STATUT_DECLARATION','DocumentsRecus',N'Documents reçus',23,1,0,'2026-01-01',GETUTCDATE(),'#0ea5e9','badge-completee','bi-folder-check');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=344)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(344,'STATUT_DECLARATION','ControleEnCours',N'Contrôle en cours',24,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','badge-completee','bi-search');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=345)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(345,'STATUT_DECLARATION','EnAttenteCorrection',N'En attente correction',25,1,0,'2026-01-01',GETUTCDATE(),'#f97316','badge-acompleter','bi-arrow-repeat');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=346)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(346,'STATUT_DECLARATION','CalculTVA','Calcul TVA',26,1,0,'2026-01-01',GETUTCDATE(),'#0891b2','badge-completee','bi-calculator');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=347)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(347,'STATUT_DECLARATION','EnRevueSuperviseur',N'En revue superviseur',27,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','badge-enrevision','bi-eye');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=348)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(348,'STATUT_DECLARATION','ACorriger',N'À corriger',28,1,0,'2026-01-01',GETUTCDATE(),'#ea580c','badge-acompleter','bi-exclamation-triangle');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=349)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(349,'STATUT_DECLARATION','EnvoyeeSimplTva',N'Envoyée à SIMPL-TVA',29,1,0,'2026-01-01',GETUTCDATE(),'#166534','badge-soumise','bi-cloud-upload');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=350)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(350,'STATUT_DECLARATION','Deposee',N'Déposée',30,1,0,'2026-01-01',GETUTCDATE(),'#059669','badge-validee','bi-send-check');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=351)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(351,'STATUT_DECLARATION','APayer',N'À payer',31,1,0,'2026-01-01',GETUTCDATE(),'#ca8a04','badge-acompleter','bi-cash');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=352)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(352,'STATUT_DECLARATION','Rapprochee',N'Rapprochée',32,1,0,'2026-01-01',GETUTCDATE(),'#0f766e','badge-validee','bi-link-45deg');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=353)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(353,'STATUT_DECLARATION','Archivee',N'Archivée',33,1,0,'2026-01-01',GETUTCDATE(),'#475569','badge-brouillon','bi-archive');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=354)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(354,'STATUT_DECLARATION','Cloturee',N'Clôturée',34,1,0,'2026-01-01',GETUTCDATE(),'#334155','badge-soumise','bi-lock');
 
         -- TYPE_TVA (61-63)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=61)
@@ -283,7 +572,7 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=62)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(62,'TYPE_TVA','Trimestrielle','Trimestrielle',2,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','bg-purple-subtle text-purple');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=63)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(63,'TYPE_TVA','Exonere',N'Exonéré',3,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(63,'TYPE_TVA','Exonere',N'ExonÃ©rÃ©',3,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary');
 
         -- VILLES (64-83)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=64)
@@ -293,29 +582,29 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=66)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(66,'VILLE','MARRAKECH','Marrakech',3,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=67)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(67,'VILLE','FES',N'Fès',4,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(67,'VILLE','FES',N'FÃ¨s',4,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=68)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(68,'VILLE','TANGER','Tanger',5,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=69)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(69,'VILLE','AGADIR','Agadir',6,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=70)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(70,'VILLE','MEKNES',N'Meknès',7,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(70,'VILLE','MEKNES',N'MeknÃ¨s',7,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=71)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(71,'VILLE','OUJDA','Oujda',8,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=72)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(72,'VILLE','KENITRA',N'Kénitra',9,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(72,'VILLE','KENITRA',N'KÃ©nitra',9,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=73)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(73,'VILLE','TETOUAN',N'Tétouan',10,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(73,'VILLE','TETOUAN',N'TÃ©touan',10,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=74)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(74,'VILLE','SALE',N'Salé',11,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(74,'VILLE','SALE',N'SalÃ©',11,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=75)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(75,'VILLE','NADOR','Nador',12,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=76)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(76,'VILLE','MOHAMMEDIA',N'Mohammédia',13,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(76,'VILLE','MOHAMMEDIA',N'MohammÃ©dia',13,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=77)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(77,'VILLE','EL_JADIDA','El Jadida',14,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=78)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(78,'VILLE','BENI_MELLAL',N'Béni Mellal',15,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(78,'VILLE','BENI_MELLAL',N'BÃ©ni Mellal',15,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=79)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(79,'VILLE','KHOURIBGA','Khouribga',16,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=80)
@@ -323,17 +612,17 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=81)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(81,'VILLE','SAFI','Safi',18,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=82)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(82,'VILLE','LAAYOUNE',N'Laâyoune',19,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(82,'VILLE','LAAYOUNE',N'LaÃ¢youne',19,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=83)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(83,'VILLE','DAKHLA','Dakhla',20,1,0,'2026-01-01',GETUTCDATE());
 
         -- SITUATION_FAMILIALE (84-87)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=84)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(84,'SITUATION_FAMILIALE','Celibataire',N'Célibataire',1,1,0,'2026-01-01',GETUTCDATE(),'bi-person');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(84,'SITUATION_FAMILIALE','Celibataire',N'CÃ©libataire',1,1,0,'2026-01-01',GETUTCDATE(),'bi-person');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=85)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(85,'SITUATION_FAMILIALE','Marie',N'Marié(e)',2,1,0,'2026-01-01',GETUTCDATE(),'bi-people');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(85,'SITUATION_FAMILIALE','Marie',N'MariÃ©(e)',2,1,0,'2026-01-01',GETUTCDATE(),'bi-people');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=86)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(86,'SITUATION_FAMILIALE','Divorce',N'Divorcé(e)',3,1,0,'2026-01-01',GETUTCDATE(),'bi-person-dash');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(86,'SITUATION_FAMILIALE','Divorce',N'DivorcÃ©(e)',3,1,0,'2026-01-01',GETUTCDATE(),'bi-person-dash');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=87)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(87,'SITUATION_FAMILIALE','Veuf','Veuf(ve)',4,1,0,'2026-01-01',GETUTCDATE(),'bi-person-x');
 
@@ -341,37 +630,37 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=88)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(88,'SEXE','M','Masculin',1,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=89)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(89,'SEXE','F',N'Féminin',2,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(89,'SEXE','F',N'FÃ©minin',2,1,0,'2026-01-01',GETUTCDATE());
 
         -- MODE_PAIEMENT (90-92)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=90)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(90,'MODE_PAIEMENT','Virement','Virement bancaire',1,1,0,'2026-01-01',GETUTCDATE(),'bi-bank');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=91)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(91,'MODE_PAIEMENT','Cheque',N'Chèque',2,1,0,'2026-01-01',GETUTCDATE(),'bi-credit-card');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(91,'MODE_PAIEMENT','Cheque',N'ChÃ¨que',2,1,0,'2026-01-01',GETUTCDATE(),'bi-credit-card');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=92)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(92,'MODE_PAIEMENT','Especes',N'Espèces',3,1,0,'2026-01-01',GETUTCDATE(),'bi-cash');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone) VALUES(92,'MODE_PAIEMENT','Especes',N'EspÃ¨ces',3,1,0,'2026-01-01',GETUTCDATE(),'bi-cash');
 
         -- TYPE_ABSENCE (93-97)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=93)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(93,'TYPE_ABSENCE','Annuel',N'Congé annuel',1,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','bg-primary-subtle text-primary');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(93,'TYPE_ABSENCE','Annuel',N'CongÃ© annuel',1,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','bg-primary-subtle text-primary');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=94)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(94,'TYPE_ABSENCE','Maladie',N'Congé maladie',2,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(94,'TYPE_ABSENCE','Maladie',N'CongÃ© maladie',2,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=95)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(95,'TYPE_ABSENCE','SansSolde',N'Congé sans solde',3,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(95,'TYPE_ABSENCE','SansSolde',N'CongÃ© sans solde',3,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=96)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(96,'TYPE_ABSENCE','Maternite',N'Congé maternité',4,1,0,'2026-01-01',GETUTCDATE(),'#ec4899','bg-pink-subtle text-pink');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(96,'TYPE_ABSENCE','Maternite',N'CongÃ© maternitÃ©',4,1,0,'2026-01-01',GETUTCDATE(),'#ec4899','bg-pink-subtle text-pink');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=97)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(97,'TYPE_ABSENCE','Exceptionnel',N'Congé exceptionnel',5,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','bg-purple-subtle text-purple');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass) VALUES(97,'TYPE_ABSENCE','Exceptionnel',N'CongÃ© exceptionnel',5,1,0,'2026-01-01',GETUTCDATE(),'#7c3aed','bg-purple-subtle text-purple');
 
         -- STATUT_DOCUMENT (98-101)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=98)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(98,'STATUT_DOCUMENT','EnAttente','En attente',1,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning','bi-clock');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=99)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(99,'STATUT_DOCUMENT','Valide',N'Validé',2,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(99,'STATUT_DOCUMENT','Valide',N'ValidÃ©',2,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=100)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(100,'STATUT_DOCUMENT','Rejete',N'Rejeté',3,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger','bi-x-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(100,'STATUT_DOCUMENT','Rejete',N'RejetÃ©',3,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger','bi-x-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=101)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(101,'STATUT_DOCUMENT','Archive',N'Archivé',4,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary','bi-archive');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(101,'STATUT_DOCUMENT','Archive',N'ArchivÃ©',4,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary','bi-archive');
 
         -- PRIORITE_TACHE (102-105)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=102)
@@ -385,15 +674,15 @@ using (var scope = app.Services.CreateScope())
 
         -- STATUT_TACHE (106-110)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=106)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(106,'STATUT_TACHE','AFaire',N'À Faire',1,1,0,'2026-01-01',GETUTCDATE(),'#94a3b8','bg-secondary-subtle text-secondary','bi-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(106,'STATUT_TACHE','AFaire',N'Ã€ Faire',1,1,0,'2026-01-01',GETUTCDATE(),'#94a3b8','bg-secondary-subtle text-secondary','bi-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=107)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(107,'STATUT_TACHE','EnCours','En Cours',2,1,0,'2026-01-01',GETUTCDATE(),'#2563eb','bg-primary-subtle text-primary','bi-play-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=108)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(108,'STATUT_TACHE','EnAttenteRevision',N'En Attente Révision',3,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning','bi-eye');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(108,'STATUT_TACHE','EnAttenteRevision',N'En Attente RÃ©vision',3,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning','bi-eye');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=109)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(109,'STATUT_TACHE','Termine',N'Terminé',4,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(109,'STATUT_TACHE','Termine',N'TerminÃ©',4,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=110)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(110,'STATUT_TACHE','Annule',N'Annulé',5,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger','bi-x-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(110,'STATUT_TACHE','Annule',N'AnnulÃ©',5,1,0,'2026-01-01',GETUTCDATE(),'#dc2626','bg-danger-subtle text-danger','bi-x-circle');
 
         -- STATUT_PAIE (111-115)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=111)
@@ -403,9 +692,9 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=113)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(113,'STATUT_PAIE','EnAttenteValidation','En Attente Validation',3,1,0,'2026-01-01',GETUTCDATE(),'#f59e0b','bg-warning-subtle text-warning','bi-clock');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=114)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(114,'STATUT_PAIE','Validee',N'Validée',4,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(114,'STATUT_PAIE','Validee',N'ValidÃ©e',4,1,0,'2026-01-01',GETUTCDATE(),'#059669','bg-success-subtle text-success','bi-check-circle');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=115)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(115,'STATUT_PAIE','Cloturee',N'Clôturée',5,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary','bi-lock');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(115,'STATUT_PAIE','Cloturee',N'ClÃ´turÃ©e',5,1,0,'2026-01-01',GETUTCDATE(),'#64748b','bg-secondary-subtle text-secondary','bi-lock');
 
         -- SECTEUR_ACTIVITE (116-127)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=116)
@@ -421,21 +710,21 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=121)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(121,'SECTEUR_ACTIVITE','TRANSPORT','Transport & Logistique',6,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=122)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(122,'SECTEUR_ACTIVITE','RESTAURATION',N'Hôtellerie & Restauration',7,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(122,'SECTEUR_ACTIVITE','RESTAURATION',N'HÃ´tellerie & Restauration',7,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=123)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(123,'SECTEUR_ACTIVITE','TECH','Technologies & IT',8,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=124)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(124,'SECTEUR_ACTIVITE','AGRICULTURE','Agriculture',9,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=125)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(125,'SECTEUR_ACTIVITE','SANTE',N'Santé',10,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(125,'SECTEUR_ACTIVITE','SANTE',N'SantÃ©',10,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=126)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(126,'SECTEUR_ACTIVITE','EDUCATION',N'Éducation & Formation',11,1,0,'2026-01-01',GETUTCDATE());
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(126,'SECTEUR_ACTIVITE','EDUCATION',N'Ã‰ducation & Formation',11,1,0,'2026-01-01',GETUTCDATE());
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=127)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt) VALUES(127,'SECTEUR_ACTIVITE','AUTRE','Autre',99,1,0,'2026-01-01',GETUTCDATE());
 
         -- CATEGORIE_DOCUMENT (128-133)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=128)
-        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone,Couleur,CssClass) VALUES(128,'CATEGORIE_DOCUMENT','Legal',N'Documents Légaux',1,1,0,'2026-01-01',GETUTCDATE(),'bi-file-earmark-text','#2563eb','bg-primary-subtle text-primary');
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone,Couleur,CssClass) VALUES(128,'CATEGORIE_DOCUMENT','Legal',N'Documents LÃ©gaux',1,1,0,'2026-01-01',GETUTCDATE(),'bi-file-earmark-text','#2563eb','bg-primary-subtle text-primary');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=129)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Icone,Couleur,CssClass) VALUES(129,'CATEGORIE_DOCUMENT','Fiscal','Documents Fiscaux',2,1,0,'2026-01-01',GETUTCDATE(),'bi-calculator','#7c3aed','bg-purple-subtle text-purple');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=130)
@@ -461,10 +750,51 @@ using (var scope = app.Services.CreateScope())
             UPDATE [WorkflowTemplates] SET [IsSystem] = 1 WHERE [IsDefault] = 1 AND [IsSystem] = 0;
     ");
 
-    // ===== Patch: Seed test declarations for multiple clients (idempotent) =====
+    // ===== Patch: WorkflowStepTemplates columns added to model after AddRefColumnsAndWorkflow =====
     await db.Database.ExecuteSqlRawAsync(@"
-        -- Only seed test declarations if we have less than 60 (the original 53 seeded ones)
+        IF COL_LENGTH('WorkflowStepTemplates', 'IsScheduled') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [IsScheduled] bit NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'CronExpression') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [CronExpression] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'CronDescription') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [CronDescription] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ActionConfigJson') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ActionConfigJson] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ActionOnComplete') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ActionOnComplete] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ActionOnEntry') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ActionOnEntry] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'GotoStepOrder') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [GotoStepOrder] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'MaxRetries') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [MaxRetries] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'OnMaxRetriesAction') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [OnMaxRetriesAction] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'RetryIntervalHours') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [RetryIntervalHours] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'RoutingConditionsJson') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [RoutingConditionsJson] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'RoutingMode') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [RoutingMode] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ServiceContratTypeCode') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ServiceContratTypeCode] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'TriggerSource') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [TriggerSource] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'UseServiceContratAffectation') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [UseServiceContratAffectation] bit NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'AssignedToUserIds') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [AssignedToUserIds] nvarchar(max) NULL;
+    ");
+    Console.WriteLine("[Startup] WorkflowStepTemplates scheduling/action columns check/add complete.");
+
+    // ===== Patch: WorkflowStepInstances relance/routing columns =====
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('WorkflowStepInstances', 'RetryCount') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [RetryCount] int NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepInstances', 'LastRetryAt') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [LastRetryAt] datetime2 NULL;
+        IF COL_LENGTH('WorkflowStepInstances', 'NextRetryAt') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [NextRetryAt] datetime2 NULL;
+        IF COL_LENGTH('WorkflowStepInstances', 'RoutedToStepOrder') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [RoutedToStepOrder] int NULL;
+        IF COL_LENGTH('WorkflowStepInstances', 'TriggerSource') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [TriggerSource] nvarchar(100) NULL;
+        IF COL_LENGTH('WorkflowStepInstances', 'ResultDataJson') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [ResultDataJson] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepInstances', 'BlockReason') IS NULL ALTER TABLE [WorkflowStepInstances] ADD [BlockReason] nvarchar(max) NULL;
+        ");
+        Console.WriteLine("[Startup] WorkflowStepInstances relance/routing columns check/add complete.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup] WorkflowStepInstances column patch skipped or failed: {ex.Message}");
+    }
+
+    // ===== Patch: Seed test declarations for multiple clients (DISABLED - demo data) =====
+
+    await db.Database.ExecuteSqlRawAsync(@"
         IF (SELECT COUNT(*) FROM [Declarations] WHERE CabinetId = 1) < 60
+           AND (SELECT COUNT(*) FROM [Clients] WHERE Id IN (2,3,4,5,6) AND IsDeleted = 0) >= 5
         BEGIN
             DECLARE @now DATETIME2 = GETUTCDATE();
             DECLARE @gerantId NVARCHAR(450) = '11f5aee3-114f-4894-bd4d-64c20ec6f7c6';
@@ -492,11 +822,11 @@ using (var scope = app.Services.CreateScope())
             PRINT '[Startup] Seeded 5 test declarations for clients 2-6.';
         END
     ");
+    // (demo declarations seed disabled)
 
     // Seed default roles
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
-    string[] roles = { "PlatformAdmin", "SuperAdmin", "Manager", "Assistant", "Client" };
-    foreach (var role in roles)
+    foreach (var role in CabinetRolePermissionMatrix.SystemRoles)
     {
         if (!await roleManager.RoleExistsAsync(role))
         {
@@ -553,7 +883,8 @@ using (var scope = app.Services.CreateScope())
         await db.SaveChangesAsync();
     }
 
-    // ===== Seed demo clients (idempotent — only if no clients exist for demo cabinet) =====
+    // ===== DISABLED: Seed demo clients (use Admin portal to create clients) =====
+    if (false)
     {
         var demoCabinet = await db.Cabinets.FirstOrDefaultAsync(c => c.Email == "demo@cabinet-demo.ma");
         if (demoCabinet != null && !await db.Clients.AnyAsync(c => c.CabinetId == demoCabinet.Id))
@@ -563,30 +894,30 @@ using (var scope = app.Services.CreateScope())
 
             var clients = new List<Client>
             {
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ATLAS TEXTILE SARL", ICE = "001567890123456", IF = "10234567", RC = "RC-CASA-123456", NumeroCNSS = "1234567", NumeroPatente = "35678901", FormeJuridique = "SARL", SecteurActivite = "Textile & Confection", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "123, Zone Industrielle Ain Sebaa", TelephonePrincipal = "0522345678", EmailPrincipal = "contact@atlastextile.ma", ContactNom = "Karim Benjelloun", ContactFonction = "Gérant", ContactTelephone = "0661234567", ContactEmail = "karim@atlastextile.ma", CapitalSocial = 500000, DateCreation = new DateTime(2015, 3, 10), DateDebutActivite = new DateTime(2015, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MAROC DIGITAL SA", ICE = "002345678901234", IF = "20345678", RC = "RC-CASA-234567", NumeroCNSS = "2345678", NumeroPatente = "45678902", FormeJuridique = "SA", SecteurActivite = "Technologies de l'Information", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "45, Bd Zerktouni, Maârif", TelephonePrincipal = "0522456789", EmailPrincipal = "info@marocdigital.ma", ContactNom = "Sara Idrissi", ContactFonction = "Directrice Générale", ContactTelephone = "0662345678", ContactEmail = "sara@marocdigital.ma", CapitalSocial = 3000000, DateCreation = new DateTime(2018, 7, 15), DateDebutActivite = new DateTime(2018, 8, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ATLAS TEXTILE SARL", ICE = "001567890123456", IF = "10234567", RC = "RC-CASA-123456", NumeroCNSS = "1234567", NumeroPatente = "35678901", FormeJuridique = "SARL", SecteurActivite = "Textile & Confection", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "123, Zone Industrielle Ain Sebaa", TelephonePrincipal = "0522345678", EmailPrincipal = "contact@atlastextile.ma", ContactNom = "Karim Benjelloun", ContactFonction = "GÃ©rant", ContactTelephone = "0661234567", ContactEmail = "karim@atlastextile.ma", CapitalSocial = 500000, DateCreation = new DateTime(2015, 3, 10), DateDebutActivite = new DateTime(2015, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MAROC DIGITAL SA", ICE = "002345678901234", IF = "20345678", RC = "RC-CASA-234567", NumeroCNSS = "2345678", NumeroPatente = "45678902", FormeJuridique = "SA", SecteurActivite = "Technologies de l'Information", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "45, Bd Zerktouni, MaÃ¢rif", TelephonePrincipal = "0522456789", EmailPrincipal = "info@marocdigital.ma", ContactNom = "Sara Idrissi", ContactFonction = "Directrice GÃ©nÃ©rale", ContactTelephone = "0662345678", ContactEmail = "sara@marocdigital.ma", CapitalSocial = 3000000, DateCreation = new DateTime(2018, 7, 15), DateDebutActivite = new DateTime(2018, 8, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
                 new Client { CabinetId = demoCabinet.Id, RaisonSociale = "COMPTOIR GENERAL DU BATIMENT", ICE = "003456789012345", IF = "30456789", RC = "RC-RABAT-345678", NumeroCNSS = "3456789", NumeroPatente = "56789012", FormeJuridique = "SARL", SecteurActivite = "BTP & Construction", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "Zone Industrielle, Temara", TelephonePrincipal = "0537567890", EmailPrincipal = "contact@cgb.ma", ContactNom = "Ahmed Berrada", ContactFonction = "Directeur Technique", ContactTelephone = "0663456789", ContactEmail = "ahmed@cgb.ma", CapitalSocial = 2000000, DateCreation = new DateTime(2010, 1, 20), DateDebutActivite = new DateTime(2010, 3, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "FOOD INVEST SARL AU", ICE = "004567890123456", IF = "40567890", RC = "RC-TANGER-456789", NumeroCNSS = "4567890", NumeroPatente = "67890123", FormeJuridique = "SARL AU", SecteurActivite = "Agroalimentaire", VilleSiegeSocial = "Tanger", AdresseSiegeSocial = "Zone Franche, Tanger Med", TelephonePrincipal = "0539678901", EmailPrincipal = "info@foodinvest.ma", ContactNom = "Fatima Zahra El Fassi", ContactFonction = "Gérante", ContactTelephone = "0664567890", ContactEmail = "fatima@foodinvest.ma", CapitalSocial = 100000, DateCreation = new DateTime(2020, 6, 5), DateDebutActivite = new DateTime(2020, 7, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "FOOD INVEST SARL AU", ICE = "004567890123456", IF = "40567890", RC = "RC-TANGER-456789", NumeroCNSS = "4567890", NumeroPatente = "67890123", FormeJuridique = "SARL AU", SecteurActivite = "Agroalimentaire", VilleSiegeSocial = "Tanger", AdresseSiegeSocial = "Zone Franche, Tanger Med", TelephonePrincipal = "0539678901", EmailPrincipal = "info@foodinvest.ma", ContactNom = "Fatima Zahra El Fassi", ContactFonction = "GÃ©rante", ContactTelephone = "0664567890", ContactEmail = "fatima@foodinvest.ma", CapitalSocial = 100000, DateCreation = new DateTime(2020, 6, 5), DateDebutActivite = new DateTime(2020, 7, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
                 new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SAHARA LOGISTICS SA", ICE = "005678901234567", IF = "50678901", RC = "RC-AGADIR-567890", NumeroCNSS = "5678901", NumeroPatente = "78901234", FormeJuridique = "SA", SecteurActivite = "Transport & Logistique", VilleSiegeSocial = "Agadir", AdresseSiegeSocial = "Zone Logistique, Ait Melloul", TelephonePrincipal = "0528789012", EmailPrincipal = "contact@saharalogistics.ma", ContactNom = "Omar Tazi", ContactFonction = "PDG", ContactTelephone = "0665678901", ContactEmail = "omar@saharalogistics.ma", CapitalSocial = 5000000, DateCreation = new DateTime(2012, 11, 8), DateDebutActivite = new DateTime(2013, 1, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MOULAY YOUSSEF IMMOBILIER", ICE = "006789012345678", IF = "60789012", RC = "RC-MARRAKECH-678901", NumeroCNSS = "6789012", NumeroPatente = "89012345", FormeJuridique = "SARL", SecteurActivite = "Immobilier & Promotion", VilleSiegeSocial = "Marrakech", AdresseSiegeSocial = "Guéliz, Av. Mohammed V", TelephonePrincipal = "0524890123", EmailPrincipal = "contact@myimmobilier.ma", ContactNom = "Hassan Alaoui", ContactFonction = "Gérant", ContactTelephone = "0666789012", ContactEmail = "hassan@myimmobilier.ma", CapitalSocial = 10000000, DateCreation = new DateTime(2008, 4, 12), DateDebutActivite = new DateTime(2008, 5, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ORIENTAL PHARMA SNC", ICE = "007890123456789", IF = "70890123", RC = "RC-OUJDA-789012", NumeroCNSS = "7890123", NumeroPatente = "90123456", FormeJuridique = "SNC", SecteurActivite = "Pharmacie & Parapharmacie", VilleSiegeSocial = "Oujda", AdresseSiegeSocial = "16, Bd Allal Ben Abdellah", TelephonePrincipal = "0536901234", EmailPrincipal = "contact@orientalpharma.ma", ContactNom = "Leila Bennani", ContactFonction = "Associée Gérante", ContactTelephone = "0667890123", ContactEmail = "leila@orientalpharma.ma", CapitalSocial = 800000, DateCreation = new DateTime(2016, 9, 25), DateDebutActivite = new DateTime(2016, 10, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "GREEN ENERGY MAROC SA", ICE = "008901234567890", IF = "80901234", RC = "RC-FES-890123", NumeroCNSS = "8901234", NumeroPatente = "01234567", FormeJuridique = "SA", SecteurActivite = "Energies Renouvelables", VilleSiegeSocial = "Fès", AdresseSiegeSocial = "Technopolis, Route de Meknès", TelephonePrincipal = "0535012345", EmailPrincipal = "info@greenenergy.ma", ContactNom = "Youssef Amrani", ContactFonction = "Directeur Général", ContactTelephone = "0668901234", ContactEmail = "youssef@greenenergy.ma", CapitalSocial = 15000000, DateCreation = new DateTime(2019, 2, 14), DateDebutActivite = new DateTime(2019, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "BOUTIQUE LUXE MARRAKECH", ICE = "009012345678901", IF = "90012345", RC = "RC-MARRAKECH-901234", NumeroCNSS = "9012345", NumeroPatente = "12345678", FormeJuridique = "SARL", SecteurActivite = "Commerce de Détail", VilleSiegeSocial = "Marrakech", AdresseSiegeSocial = "Av. Mohammed VI, Hivernage", TelephonePrincipal = "0524123456", EmailPrincipal = "contact@boutiqueluxe.ma", ContactNom = "Nadia Chraibi", ContactFonction = "Directrice", ContactTelephone = "0669012345", ContactEmail = "nadia@boutiqueluxe.ma", CapitalSocial = 300000, DateCreation = new DateTime(2021, 5, 3), DateDebutActivite = new DateTime(2021, 6, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "AUTO PIECES DU SUD SARL", ICE = "010123456789012", IF = "10123456", RC = "RC-AGADIR-012345", NumeroCNSS = "0123456", NumeroPatente = "23456789", FormeJuridique = "SARL", SecteurActivite = "Automobile & Pièces Détachées", VilleSiegeSocial = "Agadir", AdresseSiegeSocial = "Zone Industrielle Tassila", TelephonePrincipal = "0528234567", EmailPrincipal = "contact@autopiecesdusud.ma", ContactNom = "Rachid El Mansouri", ContactFonction = "Gérant", ContactTelephone = "0660123456", ContactEmail = "rachid@autopiecesdusud.ma", CapitalSocial = 400000, DateCreation = new DateTime(2014, 8, 20), DateDebutActivite = new DateTime(2014, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "IMPRIMERIE MODERNE DE RABAT", ICE = "011234567890123", IF = "11234567", RC = "RC-RABAT-112345", NumeroCNSS = "1123456", NumeroPatente = "34567890", FormeJuridique = "SARL", SecteurActivite = "Imprimerie & Édition", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "Quartier Industriel, Youssoufia", TelephonePrincipal = "0537345678", EmailPrincipal = "contact@imprimeriemoderne.ma", ContactNom = "Abdelkader Filali", ContactFonction = "Directeur", ContactTelephone = "0661123456", ContactEmail = "abdelkader@imprimeriemoderne.ma", CapitalSocial = 600000, DateCreation = new DateTime(2005, 12, 1), DateDebutActivite = new DateTime(2006, 1, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "HOTEL RIAD PALAIS SAS", ICE = "012345678901234", IF = "12345678", RC = "RC-FES-123456", NumeroCNSS = "2234567", NumeroPatente = "45678901", FormeJuridique = "SAS", SecteurActivite = "Hôtellerie & Tourisme", VilleSiegeSocial = "Fès", AdresseSiegeSocial = "Médina, Derb Zouak", TelephonePrincipal = "0535456789", EmailPrincipal = "reservation@riadpalais.ma", ContactNom = "Amina Kettani", ContactFonction = "Directrice Générale", ContactTelephone = "0662234567", ContactEmail = "amina@riadpalais.ma", CapitalSocial = 8000000, DateCreation = new DateTime(2011, 6, 15), DateDebutActivite = new DateTime(2011, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CLINIQUE DENTAIRE AL AMAL", ICE = "013456789012345", IF = "13456789", RC = "RC-MEKNES-134567", NumeroCNSS = "3345678", NumeroPatente = "56789012", FormeJuridique = "SARL", SecteurActivite = "Santé & Médical", VilleSiegeSocial = "Meknès", AdresseSiegeSocial = "Av. des FAR, Hamria", TelephonePrincipal = "0535567890", EmailPrincipal = "contact@cliniquealmal.ma", ContactNom = "Dr. Mourad Sqalli", ContactFonction = "Directeur Médical", ContactTelephone = "0663345678", ContactEmail = "mourad@cliniquealmal.ma", CapitalSocial = 1500000, DateCreation = new DateTime(2017, 3, 22), DateDebutActivite = new DateTime(2017, 5, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CONSERVERIE DU NORD SARL", ICE = "014567890123456", IF = "14567890", RC = "RC-TANGER-145678", NumeroCNSS = "4456789", NumeroPatente = "67890123", FormeJuridique = "SARL", SecteurActivite = "Agroalimentaire", VilleSiegeSocial = "Tanger", AdresseSiegeSocial = "Zone Industrielle Gzenaya", TelephonePrincipal = "0539678901", EmailPrincipal = "contact@conserveriedunord.ma", ContactNom = "Abdelhak Riffi", ContactFonction = "Gérant", ContactTelephone = "0664456789", ContactEmail = "abdelhak@conserveriedunord.ma", CapitalSocial = 1200000, DateCreation = new DateTime(2009, 7, 10), DateDebutActivite = new DateTime(2009, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ECOLE PRIVEE LES PALMIERS", ICE = "015678901234567", IF = "15678901", RC = "RC-CASA-156789", NumeroCNSS = "5567890", NumeroPatente = "78901234", FormeJuridique = "SARL", SecteurActivite = "Enseignement & Formation", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Hay Hassani, Ain Chock", TelephonePrincipal = "0522789012", EmailPrincipal = "direction@lespalmiers.ma", ContactNom = "Khadija Ouazzani", ContactFonction = "Directrice Pédagogique", ContactTelephone = "0665567890", ContactEmail = "khadija@lespalmiers.ma", CapitalSocial = 2500000, DateCreation = new DateTime(2007, 8, 28), DateDebutActivite = new DateTime(2007, 9, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CABINET D'AVOCATS BENNANI & ASSOCIES", ICE = "016789012345678", IF = "16789012", RC = "RC-RABAT-167890", NumeroCNSS = "6678901", NumeroPatente = "89012345", FormeJuridique = "SNC", SecteurActivite = "Services Juridiques", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "5, Rue Abou Inane, Agdal", TelephonePrincipal = "0537890123", EmailPrincipal = "contact@bennanilaw.ma", ContactNom = "Maître Yassine Bennani", ContactFonction = "Avocat Associé", ContactTelephone = "0666678901", ContactEmail = "yassine@bennanilaw.ma", CapitalSocial = 200000, DateCreation = new DateTime(2013, 10, 5), DateDebutActivite = new DateTime(2013, 11, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "BRASSERIE ARTISANALE DU RIF", ICE = "017890123456789", IF = "17890123", RC = "RC-CHEFCHAOUEN-178901", NumeroCNSS = "7789012", NumeroPatente = "90123456", FormeJuridique = "SARL", SecteurActivite = "Restauration & Boissons", VilleSiegeSocial = "Chefchaouen", AdresseSiegeSocial = "Route de Fès, Km 3", TelephonePrincipal = "0539901234", EmailPrincipal = "contact@brasserierif.ma", ContactNom = "Mehdi Lahrichi", ContactFonction = "Fondateur", ContactTelephone = "0667789012", ContactEmail = "mehdi@brasserierif.ma", CapitalSocial = 150000, DateCreation = new DateTime(2022, 1, 18), DateDebutActivite = new DateTime(2022, 3, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MOULAY YOUSSEF IMMOBILIER", ICE = "006789012345678", IF = "60789012", RC = "RC-MARRAKECH-678901", NumeroCNSS = "6789012", NumeroPatente = "89012345", FormeJuridique = "SARL", SecteurActivite = "Immobilier & Promotion", VilleSiegeSocial = "Marrakech", AdresseSiegeSocial = "GuÃ©liz, Av. Mohammed V", TelephonePrincipal = "0524890123", EmailPrincipal = "contact@myimmobilier.ma", ContactNom = "Hassan Alaoui", ContactFonction = "GÃ©rant", ContactTelephone = "0666789012", ContactEmail = "hassan@myimmobilier.ma", CapitalSocial = 10000000, DateCreation = new DateTime(2008, 4, 12), DateDebutActivite = new DateTime(2008, 5, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ORIENTAL PHARMA SNC", ICE = "007890123456789", IF = "70890123", RC = "RC-OUJDA-789012", NumeroCNSS = "7890123", NumeroPatente = "90123456", FormeJuridique = "SNC", SecteurActivite = "Pharmacie & Parapharmacie", VilleSiegeSocial = "Oujda", AdresseSiegeSocial = "16, Bd Allal Ben Abdellah", TelephonePrincipal = "0536901234", EmailPrincipal = "contact@orientalpharma.ma", ContactNom = "Leila Bennani", ContactFonction = "AssociÃ©e GÃ©rante", ContactTelephone = "0667890123", ContactEmail = "leila@orientalpharma.ma", CapitalSocial = 800000, DateCreation = new DateTime(2016, 9, 25), DateDebutActivite = new DateTime(2016, 10, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "GREEN ENERGY MAROC SA", ICE = "008901234567890", IF = "80901234", RC = "RC-FES-890123", NumeroCNSS = "8901234", NumeroPatente = "01234567", FormeJuridique = "SA", SecteurActivite = "Energies Renouvelables", VilleSiegeSocial = "FÃ¨s", AdresseSiegeSocial = "Technopolis, Route de MeknÃ¨s", TelephonePrincipal = "0535012345", EmailPrincipal = "info@greenenergy.ma", ContactNom = "Youssef Amrani", ContactFonction = "Directeur GÃ©nÃ©ral", ContactTelephone = "0668901234", ContactEmail = "youssef@greenenergy.ma", CapitalSocial = 15000000, DateCreation = new DateTime(2019, 2, 14), DateDebutActivite = new DateTime(2019, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "BOUTIQUE LUXE MARRAKECH", ICE = "009012345678901", IF = "90012345", RC = "RC-MARRAKECH-901234", NumeroCNSS = "9012345", NumeroPatente = "12345678", FormeJuridique = "SARL", SecteurActivite = "Commerce de DÃ©tail", VilleSiegeSocial = "Marrakech", AdresseSiegeSocial = "Av. Mohammed VI, Hivernage", TelephonePrincipal = "0524123456", EmailPrincipal = "contact@boutiqueluxe.ma", ContactNom = "Nadia Chraibi", ContactFonction = "Directrice", ContactTelephone = "0669012345", ContactEmail = "nadia@boutiqueluxe.ma", CapitalSocial = 300000, DateCreation = new DateTime(2021, 5, 3), DateDebutActivite = new DateTime(2021, 6, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "AUTO PIECES DU SUD SARL", ICE = "010123456789012", IF = "10123456", RC = "RC-AGADIR-012345", NumeroCNSS = "0123456", NumeroPatente = "23456789", FormeJuridique = "SARL", SecteurActivite = "Automobile & PiÃ¨ces DÃ©tachÃ©es", VilleSiegeSocial = "Agadir", AdresseSiegeSocial = "Zone Industrielle Tassila", TelephonePrincipal = "0528234567", EmailPrincipal = "contact@autopiecesdusud.ma", ContactNom = "Rachid El Mansouri", ContactFonction = "GÃ©rant", ContactTelephone = "0660123456", ContactEmail = "rachid@autopiecesdusud.ma", CapitalSocial = 400000, DateCreation = new DateTime(2014, 8, 20), DateDebutActivite = new DateTime(2014, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "IMPRIMERIE MODERNE DE RABAT", ICE = "011234567890123", IF = "11234567", RC = "RC-RABAT-112345", NumeroCNSS = "1123456", NumeroPatente = "34567890", FormeJuridique = "SARL", SecteurActivite = "Imprimerie & Ã‰dition", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "Quartier Industriel, Youssoufia", TelephonePrincipal = "0537345678", EmailPrincipal = "contact@imprimeriemoderne.ma", ContactNom = "Abdelkader Filali", ContactFonction = "Directeur", ContactTelephone = "0661123456", ContactEmail = "abdelkader@imprimeriemoderne.ma", CapitalSocial = 600000, DateCreation = new DateTime(2005, 12, 1), DateDebutActivite = new DateTime(2006, 1, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "HOTEL RIAD PALAIS SAS", ICE = "012345678901234", IF = "12345678", RC = "RC-FES-123456", NumeroCNSS = "2234567", NumeroPatente = "45678901", FormeJuridique = "SAS", SecteurActivite = "HÃ´tellerie & Tourisme", VilleSiegeSocial = "FÃ¨s", AdresseSiegeSocial = "MÃ©dina, Derb Zouak", TelephonePrincipal = "0535456789", EmailPrincipal = "reservation@riadpalais.ma", ContactNom = "Amina Kettani", ContactFonction = "Directrice GÃ©nÃ©rale", ContactTelephone = "0662234567", ContactEmail = "amina@riadpalais.ma", CapitalSocial = 8000000, DateCreation = new DateTime(2011, 6, 15), DateDebutActivite = new DateTime(2011, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CLINIQUE DENTAIRE AL AMAL", ICE = "013456789012345", IF = "13456789", RC = "RC-MEKNES-134567", NumeroCNSS = "3345678", NumeroPatente = "56789012", FormeJuridique = "SARL", SecteurActivite = "SantÃ© & MÃ©dical", VilleSiegeSocial = "MeknÃ¨s", AdresseSiegeSocial = "Av. des FAR, Hamria", TelephonePrincipal = "0535567890", EmailPrincipal = "contact@cliniquealmal.ma", ContactNom = "Dr. Mourad Sqalli", ContactFonction = "Directeur MÃ©dical", ContactTelephone = "0663345678", ContactEmail = "mourad@cliniquealmal.ma", CapitalSocial = 1500000, DateCreation = new DateTime(2017, 3, 22), DateDebutActivite = new DateTime(2017, 5, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CONSERVERIE DU NORD SARL", ICE = "014567890123456", IF = "14567890", RC = "RC-TANGER-145678", NumeroCNSS = "4456789", NumeroPatente = "67890123", FormeJuridique = "SARL", SecteurActivite = "Agroalimentaire", VilleSiegeSocial = "Tanger", AdresseSiegeSocial = "Zone Industrielle Gzenaya", TelephonePrincipal = "0539678901", EmailPrincipal = "contact@conserveriedunord.ma", ContactNom = "Abdelhak Riffi", ContactFonction = "GÃ©rant", ContactTelephone = "0664456789", ContactEmail = "abdelhak@conserveriedunord.ma", CapitalSocial = 1200000, DateCreation = new DateTime(2009, 7, 10), DateDebutActivite = new DateTime(2009, 9, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "ECOLE PRIVEE LES PALMIERS", ICE = "015678901234567", IF = "15678901", RC = "RC-CASA-156789", NumeroCNSS = "5567890", NumeroPatente = "78901234", FormeJuridique = "SARL", SecteurActivite = "Enseignement & Formation", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Hay Hassani, Ain Chock", TelephonePrincipal = "0522789012", EmailPrincipal = "direction@lespalmiers.ma", ContactNom = "Khadija Ouazzani", ContactFonction = "Directrice PÃ©dagogique", ContactTelephone = "0665567890", ContactEmail = "khadija@lespalmiers.ma", CapitalSocial = 2500000, DateCreation = new DateTime(2007, 8, 28), DateDebutActivite = new DateTime(2007, 9, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CABINET D'AVOCATS BENNANI & ASSOCIES", ICE = "016789012345678", IF = "16789012", RC = "RC-RABAT-167890", NumeroCNSS = "6678901", NumeroPatente = "89012345", FormeJuridique = "SNC", SecteurActivite = "Services Juridiques", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "5, Rue Abou Inane, Agdal", TelephonePrincipal = "0537890123", EmailPrincipal = "contact@bennanilaw.ma", ContactNom = "MaÃ®tre Yassine Bennani", ContactFonction = "Avocat AssociÃ©", ContactTelephone = "0666678901", ContactEmail = "yassine@bennanilaw.ma", CapitalSocial = 200000, DateCreation = new DateTime(2013, 10, 5), DateDebutActivite = new DateTime(2013, 11, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "BRASSERIE ARTISANALE DU RIF", ICE = "017890123456789", IF = "17890123", RC = "RC-CHEFCHAOUEN-178901", NumeroCNSS = "7789012", NumeroPatente = "90123456", FormeJuridique = "SARL", SecteurActivite = "Restauration & Boissons", VilleSiegeSocial = "Chefchaouen", AdresseSiegeSocial = "Route de FÃ¨s, Km 3", TelephonePrincipal = "0539901234", EmailPrincipal = "contact@brasserierif.ma", ContactNom = "Mehdi Lahrichi", ContactFonction = "Fondateur", ContactTelephone = "0667789012", ContactEmail = "mehdi@brasserierif.ma", CapitalSocial = 150000, DateCreation = new DateTime(2022, 1, 18), DateDebutActivite = new DateTime(2022, 3, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
                 new Client { CabinetId = demoCabinet.Id, RaisonSociale = "TRANSPORT FRIGORIFIQUE SOUSS", ICE = "018901234567890", IF = "18901234", RC = "RC-AGADIR-189012", NumeroCNSS = "8890123", NumeroPatente = "01234568", FormeJuridique = "SARL", SecteurActivite = "Transport & Logistique", VilleSiegeSocial = "Agadir", AdresseSiegeSocial = "Route de Marrakech, Km 5", TelephonePrincipal = "0528012345", EmailPrincipal = "contact@tfsouss.ma", ContactNom = "Brahim Ait Baha", ContactFonction = "Directeur d'Exploitation", ContactTelephone = "0668890123", ContactEmail = "brahim@tfsouss.ma", CapitalSocial = 3500000, DateCreation = new DateTime(2006, 5, 12), DateDebutActivite = new DateTime(2006, 7, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SOCIETE DE GARDIENNAGE ATLAS SECURITY", ICE = "019012345678901", IF = "19012345", RC = "RC-CASA-190123", NumeroCNSS = "9901234", NumeroPatente = "12345679", FormeJuridique = "SA", SecteurActivite = "Sécurité & Gardiennage", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Sidi Maarouf, Nearshore Park", TelephonePrincipal = "0522123456", EmailPrincipal = "contact@atlassecurity.ma", ContactNom = "Colonel Driss Lahlou", ContactFonction = "Directeur Général", ContactTelephone = "0669901234", ContactEmail = "driss@atlassecurity.ma", CapitalSocial = 7000000, DateCreation = new DateTime(2004, 2, 28), DateDebutActivite = new DateTime(2004, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MENUISERIE BOIS & ALU SARL", ICE = "020123456789012", IF = "20123456", RC = "RC-KENITRA-201234", NumeroCNSS = "0012345", NumeroPatente = "23456790", FormeJuridique = "SARL", SecteurActivite = "Menuiserie & Agencement", VilleSiegeSocial = "Kénitra", AdresseSiegeSocial = "Zone Industrielle, Route de Mehdya", TelephonePrincipal = "0537234567", EmailPrincipal = "contact@menuiserieboisalu.ma", ContactNom = "Mustapha El Ghazi", ContactFonction = "Gérant", ContactTelephone = "0660012345", ContactEmail = "mustapha@menuiserieboisalu.ma", CapitalSocial = 250000, DateCreation = new DateTime(2019, 11, 7), DateDebutActivite = new DateTime(2020, 1, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CENTRE D'APPELS CONNECT PLUS", ICE = "021234567890123", IF = "21234567", RC = "RC-CASA-212345", NumeroCNSS = "1012345", NumeroPatente = "34567891", FormeJuridique = "SA", SecteurActivite = "Centres d'Appels & BPO", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "CasaNearshore, Shore 1", TelephonePrincipal = "0522345679", EmailPrincipal = "contact@connectplus.ma", ContactNom = "Zineb Mernissi", ContactFonction = "Directrice Opérationnelle", ContactTelephone = "0661012345", ContactEmail = "zineb@connectplus.ma", CapitalSocial = 4000000, DateCreation = new DateTime(2016, 4, 30), DateDebutActivite = new DateTime(2016, 6, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "COOPERATIVE AGRICOLE SOUSS MASSA", ICE = "022345678901234", IF = "22345678", RC = "RC-TAROUDANT-223456", NumeroCNSS = "2012345", NumeroPatente = "45678902", FormeJuridique = "Coopérative", SecteurActivite = "Agriculture & Export", VilleSiegeSocial = "Taroudant", AdresseSiegeSocial = "Route Nationale N10, Km 8", TelephonePrincipal = "0528345678", EmailPrincipal = "contact@coopsoussmassa.ma", ContactNom = "Mohamed Outaleb", ContactFonction = "Président", ContactTelephone = "0662012345", ContactEmail = "mohamed@coopsoussmassa.ma", CapitalSocial = 900000, DateCreation = new DateTime(2002, 3, 15), DateDebutActivite = new DateTime(2002, 4, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 6, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SOCIETE DE GARDIENNAGE ATLAS SECURITY", ICE = "019012345678901", IF = "19012345", RC = "RC-CASA-190123", NumeroCNSS = "9901234", NumeroPatente = "12345679", FormeJuridique = "SA", SecteurActivite = "SÃ©curitÃ© & Gardiennage", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Sidi Maarouf, Nearshore Park", TelephonePrincipal = "0522123456", EmailPrincipal = "contact@atlassecurity.ma", ContactNom = "Colonel Driss Lahlou", ContactFonction = "Directeur GÃ©nÃ©ral", ContactTelephone = "0669901234", ContactEmail = "driss@atlassecurity.ma", CapitalSocial = 7000000, DateCreation = new DateTime(2004, 2, 28), DateDebutActivite = new DateTime(2004, 4, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "MENUISERIE BOIS & ALU SARL", ICE = "020123456789012", IF = "20123456", RC = "RC-KENITRA-201234", NumeroCNSS = "0012345", NumeroPatente = "23456790", FormeJuridique = "SARL", SecteurActivite = "Menuiserie & Agencement", VilleSiegeSocial = "KÃ©nitra", AdresseSiegeSocial = "Zone Industrielle, Route de Mehdya", TelephonePrincipal = "0537234567", EmailPrincipal = "contact@menuiserieboisalu.ma", ContactNom = "Mustapha El Ghazi", ContactFonction = "GÃ©rant", ContactTelephone = "0660012345", ContactEmail = "mustapha@menuiserieboisalu.ma", CapitalSocial = 250000, DateCreation = new DateTime(2019, 11, 7), DateDebutActivite = new DateTime(2020, 1, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "CENTRE D'APPELS CONNECT PLUS", ICE = "021234567890123", IF = "21234567", RC = "RC-CASA-212345", NumeroCNSS = "1012345", NumeroPatente = "34567891", FormeJuridique = "SA", SecteurActivite = "Centres d'Appels & BPO", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "CasaNearshore, Shore 1", TelephonePrincipal = "0522345679", EmailPrincipal = "contact@connectplus.ma", ContactNom = "Zineb Mernissi", ContactFonction = "Directrice OpÃ©rationnelle", ContactTelephone = "0661012345", ContactEmail = "zineb@connectplus.ma", CapitalSocial = 4000000, DateCreation = new DateTime(2016, 4, 30), DateDebutActivite = new DateTime(2016, 6, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "COOPERATIVE AGRICOLE SOUSS MASSA", ICE = "022345678901234", IF = "22345678", RC = "RC-TAROUDANT-223456", NumeroCNSS = "2012345", NumeroPatente = "45678902", FormeJuridique = "CoopÃ©rative", SecteurActivite = "Agriculture & Export", VilleSiegeSocial = "Taroudant", AdresseSiegeSocial = "Route Nationale N10, Km 8", TelephonePrincipal = "0528345678", EmailPrincipal = "contact@coopsoussmassa.ma", ContactNom = "Mohamed Outaleb", ContactFonction = "PrÃ©sident", ContactTelephone = "0662012345", ContactEmail = "mohamed@coopsoussmassa.ma", CapitalSocial = 900000, DateCreation = new DateTime(2002, 3, 15), DateDebutActivite = new DateTime(2002, 4, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 6, Statut = "Active", ManagerPrincipalId = gerantId },
                 new Client { CabinetId = demoCabinet.Id, RaisonSociale = "STARTUP FINTECH CASAPAY", ICE = "023456789012345", IF = "23456789", RC = "RC-CASA-235678", NumeroCNSS = "3012345", NumeroPatente = "56789013", FormeJuridique = "SAS", SecteurActivite = "Fintech & Paiement Digital", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Technopark, Route de Nouaceur", TelephonePrincipal = "0522456790", EmailPrincipal = "info@casapay.ma", ContactNom = "Othmane Skalli", ContactFonction = "CEO & Co-fondateur", ContactTelephone = "0663012345", ContactEmail = "othmane@casapay.ma", CapitalSocial = 1000000, DateCreation = new DateTime(2023, 9, 1), DateDebutActivite = new DateTime(2023, 10, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Active", ManagerPrincipalId = gerantId },
-                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SOCIETE DORMANTE EXEMPLE", ICE = "024567890123456", IF = "24567890", RC = "RC-CASA-245678", NumeroCNSS = "4012345", NumeroPatente = "67890124", FormeJuridique = "SARL", SecteurActivite = "Commerce Général", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Bd d'Anfa", TelephonePrincipal = "0522567890", EmailPrincipal = "contact@dormante.ma", ContactNom = "Adil Hajji", ContactFonction = "Gérant", ContactTelephone = "0664012345", ContactEmail = "adil@dormante.ma", CapitalSocial = 100000, DateCreation = new DateTime(2015, 6, 20), DateDebutActivite = new DateTime(2015, 7, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Dormante", ManagerPrincipalId = gerantId },
+                new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SOCIETE DORMANTE EXEMPLE", ICE = "024567890123456", IF = "24567890", RC = "RC-CASA-245678", NumeroCNSS = "4012345", NumeroPatente = "67890124", FormeJuridique = "SARL", SecteurActivite = "Commerce GÃ©nÃ©ral", VilleSiegeSocial = "Casablanca", AdresseSiegeSocial = "Bd d'Anfa", TelephonePrincipal = "0522567890", EmailPrincipal = "contact@dormante.ma", ContactNom = "Adil Hajji", ContactFonction = "GÃ©rant", ContactTelephone = "0664012345", ContactEmail = "adil@dormante.ma", CapitalSocial = 100000, DateCreation = new DateTime(2015, 6, 20), DateDebutActivite = new DateTime(2015, 7, 1), TypeTVA = "Trimestrielle", MoisClotureExercice = 12, Statut = "Dormante", ManagerPrincipalId = gerantId },
                 new Client { CabinetId = demoCabinet.Id, RaisonSociale = "SOCIETE DISSOUTE OMEGA", ICE = "025678901234567", IF = "25678901", RC = "RC-RABAT-256789", NumeroCNSS = "5012345", NumeroPatente = "78901235", FormeJuridique = "SA", SecteurActivite = "Import-Export", VilleSiegeSocial = "Rabat", AdresseSiegeSocial = "Av. Hassan II", TelephonePrincipal = "0537678901", EmailPrincipal = "contact@omega.ma", ContactNom = "Hamid Chaouki", ContactFonction = "Ex-PDG", ContactTelephone = "0665012345", ContactEmail = "hamid@omega.ma", CapitalSocial = 500000, DateCreation = new DateTime(2010, 4, 1), DateDebutActivite = new DateTime(2010, 5, 1), TypeTVA = "Mensuelle", MoisClotureExercice = 12, Statut = "Dissoute", ManagerPrincipalId = gerantId },
             };
 
@@ -609,8 +940,8 @@ using (var scope = app.Services.CreateScope())
                     CabinetId = demoCabinet.Id,
                     Reference = $"DEV-{year}-{idx:D4}",
                     ClientId = cl.Id,
-                    Objet = $"Prestation de services comptables et fiscaux — {cl.RaisonSociale}",
-                    Description = $"Mission d'accompagnement comptable, fiscal et social pour l'exercice {year}. Inclut la tenue de comptabilité, les déclarations TVA, IS/IR, et CNSS.",
+                    Objet = $"Prestation de services comptables et fiscaux â€” {cl.RaisonSociale}",
+                    Description = $"Mission d'accompagnement comptable, fiscal et social pour l'exercice {year}. Inclut la tenue de comptabilitÃ©, les dÃ©clarations TVA, IS/IR, et CNSS.",
                     Devise = "MAD",
                     DateEmission = new DateTime(year, 1, 15 + i).ToUniversalTime(),
                     DateValidite = new DateTime(year, 3, 15 + i).ToUniversalTime(),
@@ -619,11 +950,11 @@ using (var scope = app.Services.CreateScope())
                     MontantTVA = (5000 + i * 2500) * 0.20m,
                     MontantTTC = (5000 + i * 2500) * 1.20m,
                     MontantRemise = 0,
-                    ConditionsParticulieres = "Paiement à 30 jours fin de mois. TVA 20%.",
+                    ConditionsParticulieres = "Paiement Ã  30 jours fin de mois. TVA 20%.",
                     NotesPourClient = "Merci pour votre confiance.",
                     Version = 1,
                     CommercialId = gerantId,
-                    Notes = $"Devis de démonstration #{idx}",
+                    Notes = $"Devis de dÃ©monstration #{idx}",
                 };
                 if (statut == RefCodes.StatutDevis.Approuve) { devis.DateApprobation = devis.DateEmission.AddDays(10); devis.ValidateurId = gerantId; }
                 devisList.Add(devis);
@@ -632,15 +963,15 @@ using (var scope = app.Services.CreateScope())
             db.Set<Devis>().AddRange(devisList);
             await db.SaveChangesAsync();
 
-            // ── Add lines to each Devis ──
+            // â”€â”€ Add lines to each Devis â”€â”€
             foreach (var devis in devisList)
             {
                 var lignes = new List<LigneDocumentCommercial>
                 {
-                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 1, TypeLigne = "Forfait", TypeService = "Comptabilite", Description = "Tenue de comptabilité mensuelle", Quantite = 12, Unite = "Mois", PrixUnitaireHT = devis.MontantHT * 0.4m / 12, TauxTVA = 20, MontantHT = devis.MontantHT * 0.4m, MontantTVA = devis.MontantHT * 0.4m * 0.20m, MontantTTC = devis.MontantHT * 0.4m * 1.20m },
-                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 2, TypeLigne = "Forfait", TypeService = "TVA", Description = "Déclarations TVA mensuelles", Quantite = 12, Unite = "Mois", PrixUnitaireHT = devis.MontantHT * 0.25m / 12, TauxTVA = 20, MontantHT = devis.MontantHT * 0.25m, MontantTVA = devis.MontantHT * 0.25m * 0.20m, MontantTTC = devis.MontantHT * 0.25m * 1.20m },
-                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 3, TypeLigne = "Forfait", TypeService = "IS", Description = "Déclaration IS annuelle", Quantite = 1, Unite = "Forfait", PrixUnitaireHT = devis.MontantHT * 0.20m, TauxTVA = 20, MontantHT = devis.MontantHT * 0.20m, MontantTVA = devis.MontantHT * 0.20m * 0.20m, MontantTTC = devis.MontantHT * 0.20m * 1.20m },
-                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 4, TypeLigne = "Forfait", TypeService = "CNSS", Description = "Déclarations CNSS trimestrielles", Quantite = 4, Unite = "Trimestre", PrixUnitaireHT = devis.MontantHT * 0.15m / 4, TauxTVA = 20, MontantHT = devis.MontantHT * 0.15m, MontantTVA = devis.MontantHT * 0.15m * 0.20m, MontantTTC = devis.MontantHT * 0.15m * 1.20m },
+                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 1, TypeLigne = "Forfait", TypeService = "Comptabilite", Description = "Tenue de comptabilitÃ© mensuelle", Quantite = 12, Unite = "Mois", PrixUnitaireHT = devis.MontantHT * 0.4m / 12, TauxTVA = 20, MontantHT = devis.MontantHT * 0.4m, MontantTVA = devis.MontantHT * 0.4m * 0.20m, MontantTTC = devis.MontantHT * 0.4m * 1.20m },
+                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 2, TypeLigne = "Forfait", TypeService = "TVA", Description = "DÃ©clarations TVA mensuelles", Quantite = 12, Unite = "Mois", PrixUnitaireHT = devis.MontantHT * 0.25m / 12, TauxTVA = 20, MontantHT = devis.MontantHT * 0.25m, MontantTVA = devis.MontantHT * 0.25m * 0.20m, MontantTTC = devis.MontantHT * 0.25m * 1.20m },
+                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 3, TypeLigne = "Forfait", TypeService = "IS", Description = "DÃ©claration IS annuelle", Quantite = 1, Unite = "Forfait", PrixUnitaireHT = devis.MontantHT * 0.20m, TauxTVA = 20, MontantHT = devis.MontantHT * 0.20m, MontantTVA = devis.MontantHT * 0.20m * 0.20m, MontantTTC = devis.MontantHT * 0.20m * 1.20m },
+                    new LigneDocumentCommercial { CabinetId = demoCabinet.Id, DevisId = devis.Id, Ordre = 4, TypeLigne = "Forfait", TypeService = "CNSS", Description = "DÃ©clarations CNSS trimestrielles", Quantite = 4, Unite = "Trimestre", PrixUnitaireHT = devis.MontantHT * 0.15m / 4, TauxTVA = 20, MontantHT = devis.MontantHT * 0.15m, MontantTVA = devis.MontantHT * 0.15m * 0.20m, MontantTTC = devis.MontantHT * 0.15m * 1.20m },
                 };
                 db.Set<LigneDocumentCommercial>().AddRange(lignes);
             }
@@ -649,9 +980,8 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    // ===== Auto-seed role permissions (always runs — idempotent) =====
+    // ===== Auto-seed role permissions (always runs — idempotent replace for matrix roles) =====
     {
-        // First, ensure all ClaimDefinitions permissions exist in the DB (lowercase domain.action format)
         foreach (var claim in ClaimDefinitions.All.Distinct())
         {
             if (!await db.Permissions.AnyAsync(p => p.Name == claim))
@@ -672,97 +1002,74 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[Startup] ClaimDefinitions permissions sync complete.");
 
         var allPermissions = await db.Permissions.ToListAsync();
+        var permByName = allPermissions
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         Console.WriteLine($"[Startup] Found {allPermissions.Count} permissions in DB.");
 
-        // SuperAdmin & Manager get ALL permissions
-        foreach (var roleName in new[] { "SuperAdmin", "Manager" })
+        async Task SyncRoleClaimsAsync(string roleName, IEnumerable<string> claimNames, bool replace = false)
         {
             var role = await roleManager.FindByNameAsync(roleName);
-            if (role == null) continue;
+            if (role == null) return;
 
-            var existingPermIds = await db.RolePermissions
-                .Where(rp => rp.RoleId == role.Id)
-                .Select(rp => rp.PermissionId)
-                .ToListAsync();
+            var desiredIds = claimNames
+                .Select(n => permByName.TryGetValue(n, out var p) ? p.Id : (int?)null)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToHashSet();
 
-            var missing = allPermissions.Where(p => !existingPermIds.Contains(p.Id)).ToList();
-            if (missing.Any())
+            var existing = await db.RolePermissions.Where(rp => rp.RoleId == role.Id).ToListAsync();
+            var existingIds = existing.Select(rp => rp.PermissionId).ToHashSet();
+
+            // replace=true resets to matrix (system roles baseline).
+            // replace=false is additive so UI-granted extra claims survive restarts.
+            var toRemove = replace
+                ? existing.Where(rp => !desiredIds.Contains(rp.PermissionId)).ToList()
+                : new List<RolePermission>();
+            if (toRemove.Count > 0)
+                db.RolePermissions.RemoveRange(toRemove);
+
+            var toAdd = desiredIds.Where(id => !existingIds.Contains(id)).ToList();
+            foreach (var permId in toAdd)
+                db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permId });
+
+            if (toRemove.Count > 0 || toAdd.Count > 0)
             {
-                foreach (var perm in missing)
-                    db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = perm.Id });
                 await db.SaveChangesAsync();
-                Console.WriteLine($"[Startup] Assigned {missing.Count} permissions to {roleName} role.");
+                Console.WriteLine($"[Startup] Synced {roleName}: +{toAdd.Count} -{toRemove.Count} (matrix {desiredIds.Count}, replace={replace}).");
             }
         }
 
-        // Assistant gets View/List/Detail + limited Create/Edit permissions
-        var assistantRole = await roleManager.FindByNameAsync("Assistant");
-        if (assistantRole != null)
-        {
-            var assistantActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "View", "List", "Detail",
-                "Create", "Edit",
-                "Upload", "Download", "Share",
-                "Assign",
-                "Advance", "Validate",
-                "Export"
-            };
-            // Exclude system/admin/delete/configure permissions for Assistant
-            var excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "System.Admin", "System.UserManage", "System.ConfigurationEdit",
-                "system.admin", "user.manage",
-                "cabinet.role.manage"
-            };
+        // SuperAdmin always exact full set
+        await SyncRoleClaimsAsync("SuperAdmin", ClaimDefinitions.All, replace: true);
 
-            var assistantPerms = allPermissions
-                .Where(p => !excludePatterns.Contains(p.Name)
-                            && (assistantActions.Contains(p.Action ?? "")
-                                || p.Name.EndsWith(".view", StringComparison.OrdinalIgnoreCase)
-                                || p.Name.EndsWith(".list", StringComparison.OrdinalIgnoreCase)
-                                || p.Name.EndsWith(".detail", StringComparison.OrdinalIgnoreCase)
-                                || p.Name.EndsWith(".create", StringComparison.OrdinalIgnoreCase)
-                                || p.Name.EndsWith(".edit", StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-
-            var existingAssistantPermIds = await db.RolePermissions
-                .Where(rp => rp.RoleId == assistantRole.Id)
-                .Select(rp => rp.PermissionId)
-                .ToListAsync();
-
-            var missingAssistant = assistantPerms.Where(p => !existingAssistantPermIds.Contains(p.Id)).ToList();
-            if (missingAssistant.Any())
-            {
-                foreach (var perm in missingAssistant)
-                    db.RolePermissions.Add(new RolePermission { RoleId = assistantRole.Id, PermissionId = perm.Id });
-                await db.SaveChangesAsync();
-                Console.WriteLine($"[Startup] Assigned {missingAssistant.Count} permissions to Assistant role.");
-            }
-        }
+        // Cabinet roles: ensure matrix baseline exists; keep any extra claims granted in UI
+        foreach (var kv in CabinetRolePermissionMatrix.ByRole)
+            await SyncRoleClaimsAsync(kv.Key, kv.Value, replace: false);
     }
 
-    // ===== Auto-seed default workflow templates for every cabinet =====
+    // ===== Auto-seed / refresh default workflow templates for every cabinet =====
     try
     {
         var workflowService = scope.ServiceProvider.GetRequiredService<IWorkflowService>();
         var allCabinets = await db.Cabinets.Where(c => !c.IsDeleted && c.IsActive).ToListAsync();
         foreach (var cab in allCabinets)
         {
-            // Check if any workflow templates already exist for this cabinet
+            var cabAdmin = await db.Users.FirstOrDefaultAsync(u => u.CabinetId == cab.Id && u.IsActive);
+            if (cabAdmin == null) continue;
+
             var hasTemplates = await db.WorkflowTemplates.AnyAsync(t => t.CabinetId == cab.Id && !t.IsDeleted);
             if (!hasTemplates)
             {
-                // Get the SuperAdmin user for this cabinet (creator of templates)
-                var cabAdmin = await db.Users.FirstOrDefaultAsync(u => u.CabinetId == cab.Id && u.IsActive);
-                if (cabAdmin != null)
-                {
-                    // Seed all 8 default templates (TVA, IS, IR, CNSS, Paie, Juridique, Comptabilité, IR Salaires)
-                    await workflowService.SeedAllDefaultTemplatesAsync(cab.Id, cabAdmin.Id);
-                    // Also seed the generic "Workflow Standard — 9 Étapes" template
-                    await workflowService.CreateDefaultTemplateAsync(cab.Id, cabAdmin.Id);
-                }
+                await workflowService.SeedAllDefaultTemplatesAsync(cab.Id, cabAdmin.Id);
+                await workflowService.CreateDefaultTemplateAsync(cab.Id, cabAdmin.Id);
+                Console.WriteLine($"[Startup] Seeded default workflow templates for cabinet {cab.Id} ({cab.Name}).");
             }
+
+            // Refresh TVA default to end-to-end sequence (does not break in-flight WFs)
+            var refresh = await workflowService.RefreshTvaDefaultTemplateAsync(cab.Id, cabAdmin.Id);
+            Console.WriteLine($"[Startup] TVA template refresh cabinet {cab.Id}: {refresh.Message}");
         }
     }
     catch (Exception ex)
@@ -770,43 +1077,126 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine($"[Startup] Workflow template seeding skipped or failed: {ex.Message}");
     }
 
-    // ===== Seed cabinet employees with different profiles =====
+    // ===== Seed / upsert cabinet employees with specialized roles =====
     try
     {
-        var empUserManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
-        var cabinetEmployees = new[]
+        var empUserManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var demoCabinet = await db.Cabinets.FirstOrDefaultAsync(c => c.Email == "demo@cabinet-demo.ma")
+            ?? await db.Cabinets.OrderBy(c => c.Id).FirstOrDefaultAsync();
+        if (demoCabinet == null)
         {
-            new { Email = "comptable1@cabinet-demo.ma", First = "Fatima", Last = "Bennis", Role = "Assistant", Phone = "+212 661 112233", Poste = "Comptable Senior" },
-            new { Email = "comptable2@cabinet-demo.ma", First = "Youssef", Last = "Tazi", Role = "Assistant", Phone = "+212 662 223344", Poste = "Comptable Junior" },
-            new { Email = "manager1@cabinet-demo.ma",   First = "Karim",   Last = "Idrissi", Role = "Manager",  Phone = "+212 663 334455", Poste = "Chef Comptable" },
-            new { Email = "fiscal@cabinet-demo.ma",     First = "Amina",   Last = "Chraibi", Role = "Assistant", Phone = "+212 664 445566", Poste = "Responsable Fiscal" },
-            new { Email = "social@cabinet-demo.ma",     First = "Hassan",  Last = "Alaoui",  Role = "Assistant", Phone = "+212 665 556677", Poste = "Gestionnaire Social" },
-            new { Email = "juridique@cabinet-demo.ma",  First = "Nadia",   Last = "Fassi",   Role = "Manager",  Phone = "+212 666 667788", Poste = "Responsable Juridique" },
-            new { Email = "stagiaire@cabinet-demo.ma",  First = "Omar",    Last = "Berrada", Role = "Assistant", Phone = "+212 667 778899", Poste = "Stagiaire Comptable" },
-        };
-        foreach (var emp in cabinetEmployees)
+            Console.WriteLine("[Seed] No cabinet found — skip employee seed.");
+        }
+        else
         {
-            var existing = await empUserManager.FindByEmailAsync(emp.Email);
-            if (existing == null)
+            var cabinetEmployees = new[]
             {
-                var user = new ApplicationUser
+                new { Email = "manager1@cabinet-demo.ma", First = "Karim", Last = "Idrissi", Role = "Manager", Phone = "+212 663 334455", Poste = "Chef Comptable", Departement = "Direction" },
+                new { Email = "comptable1@cabinet-demo.ma", First = "Fatima", Last = "Bennis", Role = "Comptable", Phone = "+212 661 112233", Poste = "Comptable Senior", Departement = "Comptabilité" },
+                new { Email = "fiscal@cabinet-demo.ma", First = "Amina", Last = "Chraibi", Role = "Fiscaliste", Phone = "+212 664 445566", Poste = "Responsable Fiscal", Departement = "Fiscalité" },
+                new { Email = "social@cabinet-demo.ma", First = "Hassan", Last = "Alaoui", Role = "Socialiste", Phone = "+212 665 556677", Poste = "Gestionnaire Social", Departement = "Social & Paie" },
+                new { Email = "juridique@cabinet-demo.ma", First = "Nadia", Last = "Fassi", Role = "Juriste", Phone = "+212 666 667788", Poste = "Responsable Juridique", Departement = "Juridique" },
+                new { Email = "commercial1@cabinet-demo.ma", First = "Samir", Last = "Benali", Role = "Commercial", Phone = "+212 668 889900", Poste = "Chargé Commercial", Departement = "Commercial" },
+                new { Email = "assistant1@cabinet-demo.ma", First = "Omar", Last = "Berrada", Role = "Assistant", Phone = "+212 667 778899", Poste = "Assistant", Departement = "Support" },
+            };
+
+            const string demoPassword = "Demo@2026!";
+
+            // Align gérant poste
+            var gerant = await empUserManager.FindByEmailAsync("gerant@cabinet-demo.ma");
+            if (gerant != null)
+            {
+                gerant.Poste = "Gérant";
+                gerant.Departement = "Direction";
+                gerant.CabinetId ??= demoCabinet.Id;
+                await empUserManager.UpdateAsync(gerant);
+            }
+
+            foreach (var emp in cabinetEmployees)
+            {
+                var user = await empUserManager.FindByEmailAsync(emp.Email);
+                if (user == null)
                 {
-                    UserName = emp.Email,
-                    Email = emp.Email,
-                    FirstName = emp.First,
-                    LastName = emp.Last,
-                    CabinetId = 1,
-                    IsActive = true,
-                    PhoneNumber = emp.Phone,
-                    EmailConfirmed = true,
-                    CreatedAt = DateTime.UtcNow,
-                    PreferredLanguage = "fr-FR"
-                };
-                var createResult = await empUserManager.CreateAsync(user, "Employee@2026!");
-                if (createResult.Succeeded)
-                {
+                    user = new ApplicationUser
+                    {
+                        UserName = emp.Email,
+                        Email = emp.Email,
+                        FirstName = emp.First,
+                        LastName = emp.Last,
+                        CabinetId = demoCabinet.Id,
+                        IsActive = true,
+                        PhoneNumber = emp.Phone,
+                        EmailConfirmed = true,
+                        CreatedAt = DateTime.UtcNow,
+                        PreferredLanguage = "fr-FR",
+                        Poste = emp.Poste,
+                        Departement = emp.Departement
+                    };
+                    var createResult = await empUserManager.CreateAsync(user, demoPassword);
+                    if (!createResult.Succeeded)
+                    {
+                        Console.WriteLine($"[Seed] Failed {emp.Email}: {string.Join("; ", createResult.Errors.Select(e => e.Description))}");
+                        continue;
+                    }
                     await empUserManager.AddToRoleAsync(user, emp.Role);
                     Console.WriteLine($"[Seed] Created employee: {emp.Email} ({emp.Role})");
+                }
+                else
+                {
+                    user.FirstName = emp.First;
+                    user.LastName = emp.Last;
+                    user.PhoneNumber = emp.Phone;
+                    user.Poste = emp.Poste;
+                    user.Departement = emp.Departement;
+                    user.CabinetId ??= demoCabinet.Id;
+                    user.IsActive = true;
+                    await empUserManager.UpdateAsync(user);
+
+                    var currentRoles = await empUserManager.GetRolesAsync(user);
+                    if (!currentRoles.Contains(emp.Role))
+                    {
+                        if (currentRoles.Count > 0)
+                            await empUserManager.RemoveFromRolesAsync(user, currentRoles);
+                        await empUserManager.AddToRoleAsync(user, emp.Role);
+                    }
+
+                    // Ensure demo password for known profiles (dev only)
+                    var token = await empUserManager.GeneratePasswordResetTokenAsync(user);
+                    await empUserManager.ResetPasswordAsync(user, token, demoPassword);
+                    Console.WriteLine($"[Seed] Upserted employee: {emp.Email} ({emp.Role})");
+                }
+
+                // Demo profiles: always materialize exclusive Permission claims from current role matrix
+                // so Edit-Employee unchecks are the live source of truth, and seed stays coherent.
+                var existingPermClaims = (await empUserManager.GetClaimsAsync(user))
+                    .Where(c => c.Type == "Permission").ToList();
+                if (existingPermClaims.Count > 0)
+                    await empUserManager.RemoveClaimsAsync(user, existingPermClaims);
+
+                IEnumerable<string> matrixClaims = Array.Empty<string>();
+                if (CabinetRolePermissionMatrix.ByRole.TryGetValue(emp.Role, out var matrix))
+                    matrixClaims = matrix;
+                foreach (var p in matrixClaims.Distinct(StringComparer.OrdinalIgnoreCase))
+                    await empUserManager.AddClaimAsync(user, new System.Security.Claims.Claim("Permission", p.ToLowerInvariant()));
+                Console.WriteLine($"[Seed] Synced {matrixClaims.Distinct(StringComparer.OrdinalIgnoreCase).Count()} permission claims for {emp.Email}");
+            }
+
+            // Soft-disable legacy seed accounts that are no longer in the matrix profiles
+            foreach (var legacyEmail in new[] { "comptable2@cabinet-demo.ma", "stagiaire@cabinet-demo.ma" })
+            {
+                var legacy = await empUserManager.FindByEmailAsync(legacyEmail);
+                if (legacy == null) continue;
+                // Keep active but map to Assistant if still used
+                var roles = await empUserManager.GetRolesAsync(legacy);
+                if (!roles.Contains("Assistant") && !roles.Contains("Comptable"))
+                {
+                    if (roles.Count > 0)
+                        await empUserManager.RemoveFromRolesAsync(legacy, roles);
+                    await empUserManager.AddToRoleAsync(legacy, "Assistant");
+                    legacy.Poste ??= "Assistant";
+                    legacy.Departement ??= "Support";
+                    await empUserManager.UpdateAsync(legacy);
+                    Console.WriteLine($"[Seed] Mapped legacy {legacyEmail} → Assistant");
                 }
             }
         }
@@ -823,6 +1213,11 @@ using (var scope = app.Services.CreateScope())
             "workflow-sync-scheduled-jobs",
             svc => svc.SyncScheduledJobsAsync(),
             Cron.Hourly);
+
+        RecurringJob.AddOrUpdate<IWorkflowSchedulerService>(
+            "workflow-process-due-relances",
+            svc => svc.ProcessDueRelancesAsync(),
+            "*/15 * * * *"); // every 15 minutes
 
         Console.WriteLine("[Startup] Hangfire workflow scheduler synced successfully.");
     }
