@@ -286,7 +286,14 @@ public static class RefCodes
         public const string IS = "IS";
         public const string IR = "IR";
         public const string CNSS = "CNSS";
-        public const string IR_Salaires = "IR_SALAIRES";
+        public const string IR_Salaires = "IR_SAL";
+        public const string Acomptes = "ACOMPTES";
+        public const string RegIs = "REG_IS";
+        public const string CM = "CM";
+        public const string DRF = "DRF";
+        public const string RasFonc = "RAS_FONC";
+        public const string RasDiv = "RAS_DIV";
+        public const string DTS = "DTS";
     }
 
     // ════════════════════════════════════════════════════════════
@@ -306,6 +313,15 @@ public static class RefCodes
         public const string EtatsFiscaux = "ETATSFISCAUX";
         public const string AuditComptable = "AUDITCOMPTABLE";
         public const string ConseilFiscal = "CONSEILFISCAL";
+        public const string Acomptes = "ACOMPTES";
+        public const string RegIs = "REG_IS";
+        public const string CM = "CM";
+        public const string DRF = "DRF";
+        public const string IrSal = "IR_SAL";
+        public const string RasFonc = "RAS_FONC";
+        public const string RasDiv = "RAS_DIV";
+        public const string DTS = "DTS";
+        public const string LiasseFiscale = "LIASSEFISCALE";
     }
 
     // ════════════════════════════════════════════════════════════

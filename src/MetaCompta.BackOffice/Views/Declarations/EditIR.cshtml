@@ -13,7 +13,7 @@
     <div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
-                <li class="breadcrumb-item"><a href="/Declarations?type=IR">IR</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("IR", "Declarations")">IR</a></li>
                 @if (declaration != null)
                 {
                     <li class="breadcrumb-item"><a href="/Declarations/Details/@declaration.Id">Détails</a></li>

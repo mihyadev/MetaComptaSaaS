@@ -588,4 +588,80 @@ body.gw-mode .sidebar-toggle-btn { display: none !important; }
 }
 .ex-meta-row span i { color: var(--monday-blue); margin-right: 0.25rem; }
 
+/* CNSS employee roster — compact, scroll-managed */
+.cnss-emp-scroll {
+  max-height: min(52vh, 480px);
+  overflow: auto;
+  border: 1px solid var(--monday-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.cnss-emp-table {
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.cnss-emp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  box-shadow: inset 0 -1px 0 #e5e7eb;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  padding: 0.45rem 0.55rem;
+}
+.cnss-emp-table tbody td {
+  padding: 0.4rem 0.55rem;
+  vertical-align: middle;
+  border-color: #f1f5f9;
+}
+.cnss-emp-table .cnss-emp-name {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cnss-emp-table .cnss-emp-meta {
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cnss-emp-table .cnss-emp-dates {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.cnss-emp-table .cnss-emp-salary,
+.cnss-emp-table .cnss-emp-jours {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cnss-emp-table .badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.25em 0.45em;
+}
+.cnss-emp-table col.cnss-col-mov { width: 4.5rem; }
+.cnss-emp-table col.cnss-col-emp { width: auto; }
+.cnss-emp-table col.cnss-col-dates { width: 6.5rem; }
+.cnss-emp-table col.cnss-col-jours { width: 3.25rem; }
+.cnss-emp-table col.cnss-col-salary { width: 6.25rem; }
+.cnss-emp-table col.cnss-col-actions { width: 2.75rem; }
+@media (max-width: 768px) {
+  .cnss-emp-scroll { max-height: 60vh; }
+  .cnss-emp-table col.cnss-col-dates { width: 5.5rem; }
+  .cnss-emp-table col.cnss-col-salary { width: 5.5rem; }
+}
+
 

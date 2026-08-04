@@ -1,10 +1,17 @@
 @using MetaCompta.Application.DTOs
+@using MetaCompta.Domain.Common
 @model List<ClientWorkflowConfigDto>
 @{
-    ViewData["Title"] = "Configuration Workflow Client";
+    ViewData["Title"] = "Affectation Workflow Client";
     var client = ViewBag.Client as ClientDto;
     var clientId = (int)ViewBag.ClientId;
     var templates = ViewBag.Templates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+    var catalogTypes = DeclarationServiceCatalog.All
+        .Select(e => e.DeclarationType)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(t => t)
+        .ToList();
+    var activeTemplates = templates.Where(t => t.IsActive).OrderBy(t => t.DeclarationType).ThenBy(t => t.Name).ToList();
 }
 
 <style>
@@ -16,29 +23,29 @@
     .cc-check { font-size: 1.1rem; }
 </style>
 
-<!-- HEADER -->
 <div class="cc-header mb-4">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-3" style="position:relative; z-index:2;">
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-2" style="font-size:0.8rem;">
                     <li class="breadcrumb-item"><a href="@Url.Action("Index")" style="color:rgba(255,255,255,0.7);">Workflow</a></li>
-                    <li class="breadcrumb-item text-white">Config client</li>
+                    <li class="breadcrumb-item text-white">Affectation</li>
                 </ol>
             </nav>
-            <h4 class="fw-bold mb-1"><i class="bi bi-gear-fill me-2"></i>Configuration Workflow</h4>
-            <p class="mb-0" style="font-size:0.85rem; opacity:0.85;">@(client?.RaisonSociale ?? $"Client #{clientId}")</p>
+            <h4 class="fw-bold mb-1"><i class="bi bi-person-gear me-2"></i>Affectation des templates</h4>
+            <p class="mb-0" style="font-size:0.85rem; opacity:0.85;">
+                Associer un modèle de workflow déjà construit à @(client?.RaisonSociale ?? $"Client #{clientId}")
+            </p>
         </div>
         <a asp-action="Index" class="btn btn-outline-light" style="border-radius:10px; font-weight:600; font-size:0.83rem;"><i class="bi bi-arrow-left me-1"></i> Retour</a>
     </div>
 </div>
 
-<!-- EXISTING CONFIGS -->
 @if (Model.Any())
 {
     <div class="cc-glass mb-4 overflow-hidden">
         <div class="p-3 border-bottom" style="background:#f8fafc;">
-            <div class="cc-section-title mb-0"><i class="bi bi-list-check text-primary"></i> Configurations existantes</div>
+            <div class="cc-section-title mb-0"><i class="bi bi-list-check text-primary"></i> Affectations existantes</div>
         </div>
         <div class="table-responsive">
             <table class="table cc-table mb-0">
@@ -48,8 +55,9 @@
                 <tbody>
                     @foreach (var cfg in Model)
                     {
+                        var typeLabel = DeclarationServiceCatalog.Get(cfg.DeclarationType)?.DisplayName ?? cfg.DeclarationType;
                         <tr>
-                            <td><span class="badge bg-primary bg-opacity-10 text-primary" style="border-radius:8px; font-size:0.72rem;">@cfg.DeclarationType</span></td>
+                            <td><span class="badge bg-primary bg-opacity-10 text-primary" style="border-radius:8px; font-size:0.72rem;">@typeLabel</span></td>
                             <td class="fw-semibold">@(cfg.WorkflowTemplateName ?? "Auto")</td>
                             <td class="cc-check">@(cfg.ClientValidationEnabled ? "✅" : "❌")</td>
                             <td class="cc-check">@(cfg.DocumentRequestEnabled ? "✅" : "❌")</td>
@@ -63,33 +71,40 @@
         </div>
     </div>
 }
+else
+{
+    <div class="alert alert-light border mb-4">
+        <i class="bi bi-info-circle me-1"></i>Aucune affectation pour ce client. Choisissez un type de déclaration et un modèle ci-dessous.
+    </div>
+}
 
-<!-- ADD / UPDATE -->
 @if (ViewBag.CanWorkflowConfigure as bool? ?? false)
 {
 <div class="cc-glass p-4">
-    <div class="cc-section-title"><i class="bi bi-plus-circle text-primary"></i> Ajouter / Modifier une configuration</div>
+    <div class="cc-section-title"><i class="bi bi-plus-circle text-primary"></i> Affecter / modifier un template</div>
+    <p class="text-body-secondary small mb-3">Les modèles listés viennent du Builder. Sélectionnez le type catalogue puis le template à appliquer à ce dossier.</p>
     <form asp-action="SaveClientConfig" method="post">
         @Html.AntiForgeryToken()
         <input type="hidden" name="ClientId" value="@clientId" />
         <div class="row g-3">
             <div class="col-md-4">
                 <label class="cc-form-label">Type de déclaration</label>
-                <select name="DeclarationType" class="form-select cc-form-select">
+                <select name="DeclarationType" id="ccDeclarationType" class="form-select cc-form-select">
                     <option value="All">Tous types</option>
-                    @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" })
+                    @foreach (var t in catalogTypes)
                     {
-                        <option value="@t">@t</option>
+                        var label = DeclarationServiceCatalog.Get(t)?.DisplayName ?? t;
+                        <option value="@t">@label (@t)</option>
                     }
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="cc-form-label">Modèle de workflow</label>
-                <select name="WorkflowTemplateId" class="form-select cc-form-select">
-                    <option value="">&#8212; Résolution auto &#8212;</option>
-                    @foreach (var t in templates.Where(t => t.IsActive))
+                <select name="WorkflowTemplateId" id="ccWorkflowTemplateId" class="form-select cc-form-select">
+                    <option value="" data-type="">— Résolution auto —</option>
+                    @foreach (var t in activeTemplates)
                     {
-                        <option value="@t.Id">@t.Name</option>
+                        <option value="@t.Id" data-type="@(t.DeclarationType ?? "")">@t.Name (@(t.DeclarationType ?? "?"))</option>
                     }
                 </select>
             </div>
@@ -118,8 +133,37 @@
         </div>
         <hr class="my-3" />
         <div class="d-flex justify-content-end">
-            <button type="submit" class="btn" style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border:none;"><i class="bi bi-check-circle-fill me-2"></i>Sauvegarder</button>
+            <button type="submit" class="btn" style="border-radius:10px; padding:0.5rem 1.5rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border:none;"><i class="bi bi-check-circle-fill me-2"></i>Enregistrer l'affectation</button>
         </div>
     </form>
 </div>
+
+<script>
+(function () {
+    var typeSel = document.getElementById('ccDeclarationType');
+    var tplSel = document.getElementById('ccWorkflowTemplateId');
+    if (!typeSel || !tplSel) return;
+    var allOptions = Array.prototype.map.call(tplSel.options, function (o) {
+        return { value: o.value, text: o.text, type: (o.getAttribute('data-type') || '').toUpperCase() };
+    });
+    function filterTemplates() {
+        var want = (typeSel.value || '').toUpperCase();
+        var keep = tplSel.value;
+        tplSel.innerHTML = '';
+        allOptions.forEach(function (opt) {
+            if (!opt.value || want === 'ALL' || !opt.type || opt.type === want) {
+                var o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.text;
+                o.setAttribute('data-type', opt.type);
+                tplSel.appendChild(o);
+            }
+        });
+        if (Array.prototype.some.call(tplSel.options, function (o) { return o.value === keep; })) {
+            tplSel.value = keep;
+        }
+    }
+    typeSel.addEventListener('change', filterTemplates);
+})();
+</script>
 }

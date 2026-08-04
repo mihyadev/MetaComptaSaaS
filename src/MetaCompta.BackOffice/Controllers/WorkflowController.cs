@@ -110,7 +110,22 @@ public class WorkflowController : BaseController
                     AutoNotify = s.AutoNotify,
                     ValidationRulesJson = s.ValidationRulesJson,
                     DeclarationStatusOnComplete = s.DeclarationStatusOnComplete,
-                    DeclarationStatusOnEntry = s.DeclarationStatusOnEntry
+                    DeclarationStatusOnEntry = s.DeclarationStatusOnEntry,
+                    ActionOnEntry = s.ActionOnEntry,
+                    ActionOnComplete = s.ActionOnComplete,
+                    ActionConfigJson = s.ActionConfigJson,
+                    CronExpression = s.CronExpression,
+                    CronDescription = s.CronDescription,
+                    IsScheduled = s.IsScheduled,
+                    MaxRetries = s.MaxRetries,
+                    RetryIntervalHours = s.RetryIntervalHours,
+                    OnMaxRetriesAction = s.OnMaxRetriesAction,
+                    RoutingMode = s.RoutingMode,
+                    RoutingConditionsJson = s.RoutingConditionsJson,
+                    GotoStepOrder = s.GotoStepOrder,
+                    TriggerSource = s.TriggerSource,
+                    UseServiceContratAffectation = s.UseServiceContratAffectation,
+                    ServiceContratTypeCode = s.ServiceContratTypeCode
                 }).ToList() ?? new()
             };
             return View(dto);
@@ -383,11 +398,15 @@ public class WorkflowController : BaseController
         if (result?.Success == true)
         {
             TempData["Success"] = result.Message ?? "Workflow démarré avec succès.";
+            if (dto.ClientId > 0)
+                return RedirectToAction("Details", "Clients", new { id = dto.ClientId, tab = "workflow" });
             return RedirectToAction("InstanceDetails", new { id = result.Data?.Id });
         }
         TempData["Error"] = result?.Message ?? "Erreur lors du démarrage.";
         if (result?.Errors?.Count > 0)
             TempData["ErrorDetails"] = string.Join("|||", result.Errors);
+        if (dto.ClientId > 0)
+            return RedirectToAction("Details", "Clients", new { id = dto.ClientId, tab = "workflow" });
         return RedirectToAction("Instances");
     }
 
@@ -465,15 +484,10 @@ public class WorkflowController : BaseController
     // ═══════════════════════════════════════════════════════════
 
     [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
-    public async Task<IActionResult> ClientConfig(int clientId)
+    public IActionResult ClientConfig(int clientId)
     {
-        var configs = await _workflow.GetClientConfigsAsync(clientId);
-        var client = await _clients.GetByIdAsync(clientId);
-        var templates = await _workflow.GetTemplatesAsync(page: 1);
-        ViewBag.Client = client;
-        ViewBag.ClientId = clientId;
-        ViewBag.Templates = templates?.Items ?? new List<WorkflowTemplateDto>();
-        return View(configs);
+        // Affectation lives on Clients/Details Workflow tab
+        return RedirectToAction("Details", "Clients", new { id = clientId, tab = "workflow" });
     }
 
     [HttpPost]
@@ -483,7 +497,7 @@ public class WorkflowController : BaseController
     {
         var result = await _workflow.SaveClientConfigAsync(dto);
         SetApiResult(result, "Configuration sauvegardée.", "Erreur lors de la sauvegarde de la configuration.");
-        return RedirectToAction("ClientConfig", new { clientId = dto.ClientId });
+        return RedirectToAction("Details", "Clients", new { id = dto.ClientId, tab = "workflow" });
     }
 
     // ── Helpers ──────────────────────────────────────────────

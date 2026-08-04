@@ -63,6 +63,14 @@ public interface IDeclarationFacade
     Task<DeclarationDto?> GetByIdAsync(int id);
     // Generic create
     Task<ApiResponse<DeclarationDto>?> CreateAsync(CreateDeclarationDto dto);
+    Task<ApiResponse<DeclarationDto>?> SaveShellAsync(int declarationId, decimal? montantDu, decimal? montantCredit, string? notes);
+    Task<ApiResponse<DeclarationDto>?> SuggestAcompteAsync(int declarationId);
+    Task<ApiResponse<DeclarationDto>?> SuggestRegIsAsync(int declarationId);
+    Task<(byte[]? Bytes, string? Error)> ExportCnssDnsCsvAsync(int declarationId);
+    Task<CnssEmployeeRosterDto?> GetCnssEmployeesAsync(int declarationId);
+    Task<ApiResponse<CnssEmployeeRosterDto>?> AddCnssEmployeeAsync(int declarationId, CnssEmployeeAddDto dto);
+    Task<ApiResponse<CnssEmployeeRosterDto>?> UpdateCnssEmployeeAsync(int declarationId, int employeeId, CnssEmployeeAddDto dto);
+    Task<ApiResponse<CnssEmployeeImportResultDto>?> ImportCnssEmployeesAsync(int declarationId, List<CnssEmployeeImportRowDto> rows);
     Task<ApiResponse<bool>?> DeleteAsync(int id);
     // TVA
     Task<ApiResponse<DeclarationDto>?> CreateTVAAsync(int clientId);
@@ -304,6 +312,8 @@ public interface IWorkflowFacade
     // Client Config
     Task<List<ClientWorkflowConfigDto>> GetClientConfigsAsync(int clientId);
     Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto);
+    Task<ApiResponse<WorkflowTemplateDto>?> EnsureClientTemplateAsync(EnsureClientWorkflowDto dto);
+    Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientWorkflowCustomizationAsync(ClientWorkflowCustomizeDto dto);
 
     // Dashboard & History
     Task<WorkflowDashboardDto?> GetDashboardAsync();

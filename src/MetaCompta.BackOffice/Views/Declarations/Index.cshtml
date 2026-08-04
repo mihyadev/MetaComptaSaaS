@@ -1,4 +1,5 @@
 @using MetaCompta.Application.DTOs
+@using MetaCompta.Domain.Common
 @model PagedResult<DeclarationDto>
 @{
     ViewData["Title"] = "Déclarations Fiscales & Sociales";
@@ -8,59 +9,34 @@
     var canCreate = ViewBag.CanCreateDeclaration as bool? ?? false;
     var canEdit = ViewBag.CanEditDeclaration as bool? ?? false;
     var reasonLabel = ViewBag.ContractAccessReasonLabel as string ?? "Mode consultation uniquement.";
-    var currentType = ViewBag.Type?.ToString();  // "TVA", "IS", "IR", "CNSS" or null (Historique)
+    string? currentType = ViewBag.Type as string;
 
-    // Fail-closed: empty ActiveServices does NOT unlock all types
-    // Map declaration types ↔ contract service codes ∩ role claims
     var activeServicesJson = Context.Session.GetString("ActiveServices") ?? "[]";
     var activeServices = System.Text.Json.JsonSerializer.Deserialize<List<string>>(activeServicesJson) ?? new List<string>();
-    bool HasCode(string code) => activeServices.Contains(code, StringComparer.OrdinalIgnoreCase);
     bool HasClaimDomain(string domain) => PermissionHelper.HasAnyDomain(Context.Session, domain);
-    bool HasService(string declarationType) => declarationType?.ToUpperInvariant() switch
+    bool HasService(string declarationType)
     {
-        "TVA" => HasClaimDomain("tva") && HasCode("TVA"),
-        "IS" => HasClaimDomain("is") && (HasCode("IS") || HasCode("ACOMPTES") || HasCode("REG_IS") || HasCode("DRF") || HasCode("CM")),
-        "IR" => HasClaimDomain("ir") && (HasCode("IR") || HasCode("IR_SAL") || HasCode("RAS_FONC") || HasCode("RAS_DIV")),
-        "CNSS" => HasClaimDomain("cnss") && HasCode("CNSS"),
-        _ => false
-    };
+        var entry = DeclarationServiceCatalog.Get(declarationType);
+        if (entry == null) return false;
+        return HasClaimDomain(entry.ClaimDomain) && DeclarationServiceCatalog.HasContractService(declarationType, activeServices);
+    }
 
-    // Section-specific metadata
-    var sectionTitles = new Dictionary<string, string>
-    {
-        ["TVA"]  = "Déclarations TVA",
-        ["IS"]   = "Déclarations IS — Impôt sur les Sociétés",
-        ["IR"]   = "Déclarations IR — Impôt sur le Revenu",
-        ["CNSS"] = "Déclarations CNSS — DMS"
-    };
-    var sectionSubtitles = new Dictionary<string, string>
-    {
-        ["TVA"]  = "Taxe sur la Valeur Ajoutée — déclarations mensuelles / trimestrielles",
-        ["IS"]   = "Impôt sur les Sociétés — déclarations annuelles et acomptes",
-        ["IR"]   = "Impôt sur le Revenu — déclarations annuelles",
-        ["CNSS"] = "Caisse Nationale de Sécurité Sociale — bordereaux mensuels"
-    };
-    var sectionIcons = new Dictionary<string, string>
-    {
-        ["TVA"]  = "bi-receipt text-success",
-        ["IS"]   = "bi-bank text-primary",
-        ["IR"]   = "bi-person-lines-fill text-info",
-        ["CNSS"] = "bi-shield-check text-warning"
-    };
-    var sectionBtnColors = new Dictionary<string, string>
-    {
-        ["TVA"]  = "btn-success",
-        ["IS"]   = "btn-primary",
-        ["IR"]   = "btn-info",
-        ["CNSS"] = "btn-warning"
-    };
+    var catalogForMenu = DeclarationServiceCatalog.ForMenu(activeServices)
+        .Where(e => HasClaimDomain(e.ClaimDomain))
+        .ToList();
 
+    var sectionTitles = DeclarationServiceCatalog.All.ToDictionary(e => e.DeclarationType, e => e.DisplayName, StringComparer.OrdinalIgnoreCase);
     var pageTitle = currentType != null && sectionTitles.ContainsKey(currentType) ? sectionTitles[currentType] : "Déclarations Fiscales & Sociales";
-    var pageSubtitle = currentType != null && sectionSubtitles.ContainsKey(currentType) ? sectionSubtitles[currentType] : "Suivi de toutes les déclarations : TVA, IS, IR, CNSS";
-    var pageIcon = currentType != null && sectionIcons.ContainsKey(currentType) ? sectionIcons[currentType] : "bi-file-earmark-text text-primary";
-    var btnColor = currentType != null && sectionBtnColors.ContainsKey(currentType) ? sectionBtnColors[currentType] : "btn-primary";
-    var needsAnnee = currentType == "IS" || currentType == "IR";
+    var pageSubtitle = currentType != null
+        ? (DeclarationServiceCatalog.Get(currentType)?.Frequency ?? "") + " — même cycle contrat / workflow / tâches que la TVA"
+        : "Suivi de toutes les déclarations du catalogue cabinet";
+    var pageIcon = "bi-file-earmark-text text-primary";
+    var btnColor = "btn-primary";
+    var needsAnnee = DeclarationServiceCatalog.Get(currentType)?.NeedsAnneeFiscale == true;
     var hasServiceForType = currentType == null || HasService(currentType);
+    var listAction = DeclarationServiceCatalog.GetListAction(currentType);
+    var createAction = DeclarationServiceCatalog.GetCreateAction(currentType);
+    string? statutFilter = ViewBag.Statut as string;
 }
 
 <!-- Page Header -->
@@ -85,9 +61,8 @@
                 else
                 {
                     @* TVA / CNSS => direct form submit, no modal needed *@
-                    <form method="post" asp-action="Create" class="d-inline">
+                    <form method="post" asp-action="@createAction" class="d-inline">
                         @Html.AntiForgeryToken()
-                        <input type="hidden" name="type" value="@currentType" />
                         <button type="submit" class="btn @btnColor rounded-pill px-4 shadow-sm">
                             <i class="bi bi-plus-circle me-2"></i> Nouvelle Déclaration @currentType
                         </button>
@@ -96,39 +71,25 @@
             }
             else
             {
-                @* -- HISTORIQUE (all types): Show individual buttons for each active service -- *@
+                @* -- HISTORIQUE: one create button per catalogue service on the contract -- *@
                 <div class="d-flex gap-2 flex-wrap">
-                    @if (HasService("TVA"))
+                    @foreach (var e in catalogForMenu)
                     {
-                        <form method="post" asp-action="Create" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="type" value="TVA" />
-                            <button type="submit" class="btn btn-success rounded-pill px-3 shadow-sm">
-                                <i class="bi bi-plus-circle me-1"></i> TVA
+                        if (e.NeedsAnneeFiscale)
+                        {
+                            <button class="btn btn-outline-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createDeclarationModal" onclick="setDeclarationType('@e.DeclarationType')">
+                                <i class="bi bi-plus-circle me-1"></i> @e.DeclarationType
                             </button>
-                        </form>
-                    }
-                    @if (HasService("IS"))
-                    {
-                        <button class="btn btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createDeclarationModal" onclick="setDeclarationType('IS')">
-                            <i class="bi bi-plus-circle me-1"></i> IS
-                        </button>
-                    }
-                    @if (HasService("IR"))
-                    {
-                        <button class="btn btn-info rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createDeclarationModal" onclick="setDeclarationType('IR')">
-                            <i class="bi bi-plus-circle me-1"></i> IR
-                        </button>
-                    }
-                    @if (HasService("CNSS"))
-                    {
-                        <form method="post" asp-action="Create" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="type" value="CNSS" />
-                            <button type="submit" class="btn btn-warning rounded-pill px-3 shadow-sm">
-                                <i class="bi bi-plus-circle me-1"></i> CNSS
-                            </button>
-                        </form>
+                        }
+                        else
+                        {
+                            <form method="post" asp-action="@e.CreateAction" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-primary rounded-pill px-3 shadow-sm">
+                                    <i class="bi bi-plus-circle me-1"></i> @e.DeclarationType
+                                </button>
+                            </form>
+                        }
                     }
                 </div>
             }
@@ -255,30 +216,17 @@ else if (!canCreate)
 <!-- Filters -->
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-3">
-        <form method="get" class="row g-2 align-items-end">
-            @if (currentType != null)
+        <form method="get" asp-action="@listAction" class="row g-2 align-items-end">
+            @if (currentType == null)
             {
-                @* Section-specific view -- type is fixed by sidebar, pass it as hidden *@
-                <input type="hidden" name="type" value="@currentType" />
-            }
-            else
-            {
-                @* Historique / All -- show the Type dropdown *@
+                @* Historique — type dropdown; Index redirects typed selections to list actions *@
                 <div class="col-md-3">
                     <label class="form-label small text-muted mb-1">Type</label>
                     <select name="type" class="form-select">
                         <option value="">Tous les types</option>
-                        @foreach (var t in refTypes)
+                        @foreach (var e in DeclarationServiceCatalog.All)
                         {
-                            var sel = ViewBag.Type?.ToString() == t.Code ? "selected" : "";
-                            <option value="@t.Code" @sel>@t.Label</option>
-                        }
-                        @if (!refTypes.Any())
-                        {
-                            <option value="TVA">TVA</option>
-                            <option value="IS">IS</option>
-                            <option value="IR">IR</option>
-                            <option value="CNSS">CNSS</option>
+                            <option value="@e.DeclarationType">@e.DisplayName</option>
                         }
                     </select>
                 </div>
@@ -298,7 +246,7 @@ else if (!canCreate)
                 <button type="submit" class="btn btn-primary w-100 rounded-3"><i class="bi bi-funnel me-1"></i> Filtrer</button>
             </div>
             <div class="col-md-2">
-                <a href="@Url.Action("Index", new { type = currentType })" class="btn btn-outline-secondary w-100 rounded-3"><i class="bi bi-arrow-clockwise me-1"></i> Réinitialiser</a>
+                <a href="@Url.Action(listAction)" class="btn btn-outline-secondary w-100 rounded-3"><i class="bi bi-arrow-clockwise me-1"></i> Réinitialiser</a>
             </div>
         </form>
     </div>
@@ -398,21 +346,8 @@ else if (!canCreate)
                                             || dec.Statut == RefCodes.StatutDeclaration.CalculTVA || dec.Statut == RefCodes.StatutDeclaration.ACorriger
                                             || dec.Statut == RefCodes.StatutDeclaration.EnAttenteCorrection))
                                         {
-                                            @switch (dec.Type)
-                                            {
-                                                case "TVA":
-                                                    <a asp-action="EditTVA" asp-route-id="@dec.Id" class="btn btn-outline-warning" title="Modifier TVA"><i class="bi bi-pencil"></i></a>
-                                                    break;
-                                                case "IS":
-                                                    <a asp-action="EditIS" asp-route-id="@dec.Id" class="btn btn-outline-warning" title="Modifier IS"><i class="bi bi-pencil"></i></a>
-                                                    break;
-                                                case "IR":
-                                                    <a asp-action="EditIR" asp-route-id="@dec.Id" class="btn btn-outline-warning" title="Modifier IR"><i class="bi bi-pencil"></i></a>
-                                                    break;
-                                                case "CNSS":
-                                                    <a asp-action="EditCNSS" asp-route-id="@dec.Id" class="btn btn-outline-warning" title="Modifier CNSS"><i class="bi bi-pencil"></i></a>
-                                                    break;
-                                            }
+                                            var editAct = DeclarationServiceCatalog.GetEditAction(dec.Type);
+                                            <a asp-action="@editAct" asp-route-id="@dec.Id" class="btn btn-outline-warning" title="Modifier"><i class="bi bi-pencil"></i></a>
                                         }
                                     </div>
                                 </td>
@@ -429,9 +364,8 @@ else if (!canCreate)
                                 {
                                     @if (currentType != null && !needsAnnee)
                                     {
-                                        <form method="post" asp-action="Create" class="d-inline">
+                                        <form method="post" asp-action="@createAction" class="d-inline">
                                             @Html.AntiForgeryToken()
-                                            <input type="hidden" name="type" value="@currentType" />
                                             <button type="submit" class="btn btn-sm @btnColor rounded-pill mt-1">
                                                 <i class="bi bi-plus-circle me-1"></i> Créer une déclaration @currentType
                                             </button>
@@ -475,18 +409,18 @@ else if (!canCreate)
     <nav class="mt-4 d-flex justify-content-center">
         <ul class="pagination">
             <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
-                <a class="page-link" href="@Url.Action("Index", new { page = Model.Page - 1, type = ViewBag.Type, statut = ViewBag.Statut })">
+                <a class="page-link" href="@Url.Action(listAction, new { page = Model.Page - 1, statut = statutFilter })">
                     <i class="bi bi-chevron-left"></i>
                 </a>
             </li>
             @for (int i = 1; i <= Model.TotalPages; i++)
             {
                 <li class="page-item @(i == Model.Page ? "active" : "")">
-                    <a class="page-link" href="@Url.Action("Index", new { page = i, type = ViewBag.Type, statut = ViewBag.Statut })">@i</a>
+                    <a class="page-link" href="@Url.Action(listAction, new { page = i, statut = statutFilter })">@i</a>
                 </li>
             }
             <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
-                <a class="page-link" href="@Url.Action("Index", new { page = Model.Page + 1, type = ViewBag.Type, statut = ViewBag.Statut })">
+                <a class="page-link" href="@Url.Action(listAction, new { page = Model.Page + 1, statut = statutFilter })">
                     <i class="bi bi-chevron-right"></i>
                 </a>
             </li>
@@ -494,24 +428,27 @@ else if (!canCreate)
     </nav>
 }
 
-<!-- Create Declaration Modal (IS/IR only -- needs année fiscale) -->
+<!-- Create Declaration Modal (types needing année fiscale) -->
 <div class="modal fade" id="createDeclarationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-bold" id="createModalTitle">
-                    <i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Déclaration @(currentType ?? "IS/IR")
+                    <i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Déclaration @(currentType ?? "")
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="post" asp-action="Create">
+            <form method="post" asp-action="@(currentType != null ? createAction : "Create")" id="createDeclForm">
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="type" id="createDeclType" value="@(currentType ?? "IS")" />
+                @if (currentType == null)
+                {
+                    <input type="hidden" name="type" id="createDeclType" value="IS" />
+                }
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-medium">Année Fiscale <span class="text-danger">*</span></label>
                         <input type="number" name="anneeFiscale" id="anneeFiscaleInput" class="form-control" value="@DateTime.Now.Year" min="2020" max="2030" required />
-                        <small class="text-muted">Année d'exercice pour la déclaration IS/IR.</small>
+                        <small class="text-muted">Année d'exercice pour la déclaration.</small>
                     </div>
                     <div class="alert alert-info rounded-3 mb-0" style="font-size:0.85rem;">
                         <i class="bi bi-info-circle me-1"></i>
@@ -531,11 +468,21 @@ else if (!canCreate)
 
 @section Scripts {
 <script>
-    // Only used from Historique (all types) view for IS/IR buttons
+    var createActionByType = {
+@foreach (var e in DeclarationServiceCatalog.All)
+{
+        @:        '@e.DeclarationType': '@e.CreateAction',
+}
+    };
     function setDeclarationType(type) {
-        document.getElementById('createDeclType').value = type;
-        var titles = { 'IS': 'Nouvelle Déclaration IS', 'IR': 'Nouvelle Déclaration IR' };
-        document.getElementById('createModalTitle').innerHTML = '<i class="bi bi-plus-circle text-primary me-2"></i>' + (titles[type] || 'Nouvelle Déclaration');
+        var typeInput = document.getElementById('createDeclType');
+        if (typeInput) typeInput.value = type;
+        var form = document.getElementById('createDeclForm');
+        if (form && createActionByType[type]) {
+            form.setAttribute('action', '@Url.Content("~/Declarations/")' + createActionByType[type]);
+        }
+        var entryTitle = type;
+        document.getElementById('createModalTitle').innerHTML = '<i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Déclaration ' + entryTitle;
     }
 </script>
 }

@@ -1,16 +1,175 @@
 @model MetaCompta.Application.DTOs.WorkflowInstanceDto
 @{
-    ViewData["Title"] = "Details du workflow";
+    ViewData["Title"] = "Détails du workflow";
     var history = ViewBag.History as List<MetaCompta.Application.DTOs.WorkflowHistoryDto> ?? new();
-    var statusClass = Model.Status switch
+    var statusTone = Model.Status switch
     {
-        "Active" => "primary",
-        "Completed" => "success",
-        "Paused" => "warning",
-        "Cancelled" => "secondary",
-        _ => "dark"
+        "Active" => ("#dbeafe", "#0073ea", "En cours"),
+        "Completed" => ("#d1fae5", "#00c875", "Terminé"),
+        "Paused" => ("#fef3c7", "#fdab3d", "En pause"),
+        "Cancelled" => ("#f1f5f9", "#676879", "Annulé"),
+        _ => ("#f1f5f9", "#323338", Model.Status)
     };
+    var progressColor = Model.Status switch
+    {
+        "Completed" => "var(--monday-green)",
+        "Paused" => "var(--monday-orange)",
+        "Cancelled" => "var(--monday-muted)",
+        _ => "var(--monday-blue)"
+    };
+    var orderedSteps = Model.StepInstances?.OrderBy(s => s.StepOrder).ToList()
+        ?? new List<MetaCompta.Application.DTOs.WorkflowStepInstanceDto>();
 }
+
+<style>
+    .inst-progress-card {
+        background: var(--monday-surface);
+        border: 1px solid var(--monday-border);
+        border-radius: 16px;
+        box-shadow: var(--monday-shadow);
+        overflow: hidden;
+    }
+    .inst-progress-card .inst-top {
+        padding: 1.25rem 1.4rem 1rem;
+        border-bottom: 1px solid var(--monday-border);
+        background: linear-gradient(180deg, color-mix(in srgb, var(--monday-blue) 4%, #fff) 0%, var(--monday-surface) 100%);
+    }
+    .inst-progress-card .inst-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--monday-muted);
+        margin-bottom: 0.25rem;
+        display: block;
+    }
+    .inst-progress-card .inst-value {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--monday-text);
+    }
+    .inst-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.28rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border: 1px solid transparent;
+    }
+    .inst-progress-body { padding: 1.15rem 1.4rem 1.35rem; }
+    .inst-progress-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 1rem;
+        margin-bottom: 0.65rem;
+        flex-wrap: wrap;
+    }
+    .inst-progress-pct {
+        font-size: 1.75rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        color: var(--monday-text);
+    }
+    .inst-progress-pct span {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--monday-muted);
+        margin-left: 0.15rem;
+    }
+    .inst-progress-track {
+        height: 10px;
+        border-radius: 999px;
+        background: var(--monday-bg);
+        border: 1px solid var(--monday-border);
+        overflow: hidden;
+    }
+    .inst-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width .6s ease;
+        background: linear-gradient(90deg, color-mix(in srgb, var(--monday-blue) 75%, #fff), var(--monday-blue));
+    }
+    .inst-progress-fill.is-done {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--monday-green) 70%, #fff), var(--monday-green));
+    }
+    .inst-progress-fill.is-paused {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--monday-orange) 70%, #fff), var(--monday-orange));
+    }
+    .inst-progress-fill.is-cancelled {
+        background: var(--monday-muted);
+    }
+    .inst-step-rail {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        margin-top: 1.1rem;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+    }
+    .inst-step-rail-item {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+    }
+    .inst-step-rail-item:last-child { flex: 0 0 auto; }
+    .inst-step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.72rem;
+        font-weight: 800;
+        flex-shrink: 0;
+        border: 1.5px solid var(--monday-border);
+        background: var(--monday-surface);
+        color: var(--monday-muted);
+        position: relative;
+        z-index: 1;
+    }
+    .inst-step-dot.done {
+        background: color-mix(in srgb, var(--monday-green) 14%, #fff);
+        border-color: color-mix(in srgb, var(--monday-green) 45%, var(--monday-border));
+        color: var(--monday-green);
+    }
+    .inst-step-dot.current {
+        background: color-mix(in srgb, var(--monday-blue) 14%, #fff);
+        border-color: var(--monday-blue);
+        color: var(--monday-blue);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--monday-blue) 18%, transparent);
+    }
+    .inst-step-dot.failed {
+        background: color-mix(in srgb, var(--monday-red) 12%, #fff);
+        border-color: color-mix(in srgb, var(--monday-red) 45%, var(--monday-border));
+        color: var(--monday-red);
+    }
+    .inst-step-connector {
+        height: 2px;
+        flex: 1;
+        min-width: 12px;
+        background: var(--monday-border);
+        margin: 0 4px;
+    }
+    .inst-step-connector.done { background: var(--monday-green); }
+    .inst-step-caption {
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: var(--monday-muted);
+        margin-top: 0.35rem;
+        max-width: 72px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+    }
+    .inst-step-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+</style>
 
 <div class="page-header">
     <div>
@@ -19,23 +178,23 @@
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
                 <li class="breadcrumb-item"><a href="@Url.Action("Instances", "Workflow")">Instances</a></li>
-                <li class="breadcrumb-item active">Details</li>
+                <li class="breadcrumb-item active">Détails</li>
             </ol>
         </nav>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         @if (Model.Status == "Active" && (ViewBag.CanWorkflowCancel as bool? ?? false))
         {
             <form method="post" action="@Url.Action("PauseWorkflow", "Workflow")" class="d-inline">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="instanceId" value="@Model.Id" />
-                <button type="submit" class="btn btn-warning"><i class="bi bi-pause-circle me-1"></i>Pause</button>
+                <button type="submit" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pause-circle me-1"></i>Pause</button>
             </form>
             <form method="post" action="@Url.Action("CancelWorkflow", "Workflow")" class="d-inline">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="instanceId" value="@Model.Id" />
                 <input type="hidden" name="reason" value="Annulation manuelle" />
-                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Annuler</button>
+                <button type="submit" class="btn btn-outline-danger rounded-pill px-3"><i class="bi bi-x-circle me-1"></i>Annuler</button>
             </form>
         }
         @if (Model.Status == "Paused" && (ViewBag.CanWorkflowAdvance as bool? ?? false))
@@ -43,63 +202,153 @@
             <form method="post" action="@Url.Action("ResumeWorkflow", "Workflow")" class="d-inline">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="instanceId" value="@Model.Id" />
-                <button type="submit" class="btn btn-success"><i class="bi bi-play-circle me-1"></i>Reprendre</button>
+                <button type="submit" class="btn btn-success rounded-pill px-3"><i class="bi bi-play-circle me-1"></i>Reprendre</button>
             </form>
         }
-        <a href="@Url.Action("Instances", "Workflow")" class="btn btn-outline-secondary">
+        <a href="@Url.Action("Instances", "Workflow")" class="btn btn-outline-secondary rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i>Retour
         </a>
     </div>
 </div>
 
-<!-- Header Card -->
-<div class="mc-card mb-4">
-    <div class="card-body">
+<!-- Progression d'avancement — Monday CRM -->
+<div class="inst-progress-card mb-4">
+    <div class="inst-top">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+            <div>
+                <div class="inst-label">Avancement du workflow</div>
+                <div class="fw-bold" style="font-size:1.05rem; color:var(--monday-text);">
+                    @(Model.WorkflowTemplateName ?? $"Workflow #{Model.Id}")
+                </div>
+            </div>
+            <span class="inst-status-pill" style="background:@statusTone.Item1; color:@statusTone.Item2; border-color:@statusTone.Item2;">
+                <i class="bi bi-circle-fill" style="font-size:0.45rem;"></i>@statusTone.Item3
+            </span>
+        </div>
         <div class="row g-3">
-            <div class="col-md-3">
-                <label class="text-muted small d-block">Client</label>
-                <span class="fw-medium fs-5">@Model.ClientName</span>
+            <div class="col-6 col-md-3">
+                <span class="inst-label">Client</span>
+                <div class="inst-value">@(Model.ClientName ?? "—")</div>
             </div>
-            <div class="col-md-2">
-                <label class="text-muted small d-block">Type</label>
-                <span class="badge bg-info bg-opacity-10 text-info fs-6">@Model.DeclarationType</span>
+            <div class="col-6 col-md-2">
+                <span class="inst-label">Type</span>
+                <div class="inst-value">
+                    <span class="badge rounded-pill" style="background:color-mix(in srgb, var(--monday-blue) 12%, #fff); color:var(--monday-blue); border:1px solid var(--monday-border);">
+                        @(Model.DeclarationType ?? "—")
+                    </span>
+                </div>
             </div>
-            <div class="col-md-2">
-                <label class="text-muted small d-block">Periode</label>
-                <span>@Model.DeclarationPeriode</span>
+            <div class="col-6 col-md-2">
+                <span class="inst-label">Période</span>
+                <div class="inst-value">@(string.IsNullOrWhiteSpace(Model.DeclarationPeriode) ? "—" : Model.DeclarationPeriode)</div>
             </div>
-            <div class="col-md-2">
-                <label class="text-muted small d-block">Demarre le</label>
-                <span>@Model.StartedAt.ToString("dd/MM/yyyy")</span>
+            <div class="col-6 col-md-2">
+                <span class="inst-label">Démarré le</span>
+                <div class="inst-value">@Model.StartedAt.ToString("dd/MM/yyyy")</div>
             </div>
-            <div class="col-md-3">
-                <label class="text-muted small d-block">Statut</label>
-                <span class="badge bg-@statusClass fs-6">@Model.Status</span>
-                <span class="ms-2 text-muted">@Model.ProgressPercent% termine</span>
+            <div class="col-6 col-md-3">
+                <span class="inst-label">Étape courante</span>
+                <div class="inst-value">@(Model.CurrentStepName ?? "—")</div>
             </div>
         </div>
-        <!-- Progress bar -->
-        <div class="mt-3">
-            <div class="progress" style="height: 12px;">
-                <div class="progress-bar bg-@statusClass progress-bar-striped @(Model.Status == "Active" ? "progress-bar-animated" : "")" style="width: @Model.ProgressPercent%"></div>
+    </div>
+
+    <div class="inst-progress-body">
+        <div class="inst-progress-meta">
+            <div>
+                <div class="inst-progress-pct" style="color:@progressColor;">
+                    @Model.ProgressPercent.ToString("0")<span>%</span>
+                </div>
+                <div style="font-size:0.78rem; font-weight:600; color:var(--monday-muted); margin-top:0.2rem;">
+                    Progression d'avancement
+                </div>
             </div>
-            <small class="text-muted">@Model.CompletedSteps / @Model.TotalSteps etapes completees</small>
+            <div class="text-end">
+                <div style="font-size:0.92rem; font-weight:800; color:var(--monday-text);">
+                    @Model.CompletedSteps <span style="color:var(--monday-muted); font-weight:600;">/ @Model.TotalSteps</span>
+                </div>
+                <div style="font-size:0.72rem; font-weight:600; color:var(--monday-muted); text-transform:uppercase; letter-spacing:0.04em;">
+                    étapes complétées
+                </div>
+            </div>
         </div>
+
+        @{
+            var fillClass = Model.Status switch
+            {
+                "Completed" => "is-done",
+                "Paused" => "is-paused",
+                "Cancelled" => "is-cancelled",
+                _ => ""
+            };
+        }
+        <div class="inst-progress-track" role="progressbar" aria-valuenow="@Model.ProgressPercent" aria-valuemin="0" aria-valuemax="100">
+            <div class="inst-progress-fill @fillClass" style="width: @(Model.ProgressPercent.ToString(System.Globalization.CultureInfo.InvariantCulture))%;"></div>
+        </div>
+
+        @if (orderedSteps.Any())
+        {
+            <div class="inst-step-rail" aria-label="Parcours des étapes">
+                @for (var i = 0; i < orderedSteps.Count; i++)
+                {
+                    var step = orderedSteps[i];
+                    var isDone = string.Equals(step.Status, "Completed", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(step.Status, "Skipped", StringComparison.OrdinalIgnoreCase);
+                    var isCurrent = string.Equals(step.Status, "InProgress", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(step.Status, "WaitingForClient", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(step.Status, "WaitingForValidation", StringComparison.OrdinalIgnoreCase);
+                    var isFailed = string.Equals(step.Status, "Failed", StringComparison.OrdinalIgnoreCase)
+                                   || string.Equals(step.Status, "Blocked", StringComparison.OrdinalIgnoreCase);
+                    var dotClass = isFailed ? "failed" : isDone ? "done" : isCurrent ? "current" : "";
+                    var icon = isFailed ? "bi-x-lg" : isDone ? "bi-check-lg" : isCurrent ? "bi-play-fill" : null;
+
+                    <div class="inst-step-rail-item">
+                        <div class="inst-step-wrap" title="@step.StepName — @step.Status">
+                            <div class="inst-step-dot @dotClass">
+                                @if (icon != null)
+                                {
+                                    <i class="bi @icon"></i>
+                                }
+                                else
+                                {
+                                    @(i + 1)
+                                }
+                            </div>
+                            <div class="inst-step-caption">@(step.StepName ?? $"Étape {i + 1}")</div>
+                        </div>
+                        @if (i < orderedSteps.Count - 1)
+                        {
+                            <div class="inst-step-connector @(isDone ? "done" : "")"></div>
+                        }
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
 
 <!-- Step Timeline -->
 <div class="mc-card mb-4">
-    <div class="card-header"><i class="bi bi-signpost-2 me-2"></i>Etapes du workflow</div>
+    <div class="card-header"><i class="bi bi-signpost-2 me-2"></i>Étapes du workflow</div>
     <div class="card-body p-4">
-        @if (Model.StepInstances != null && Model.StepInstances.Any())
+        @if (orderedSteps.Any())
         {
             <div class="position-relative">
-                <!-- Timeline line -->
-                <div style="position: absolute; left: 24px; top: 0; bottom: 0; width: 3px; background: linear-gradient(to bottom, #0d6efd, #e9ecef);"></div>
+                <div style="position: absolute; left: 24px; top: 0; bottom: 0; width: 3px; background: linear-gradient(to bottom, var(--monday-blue), var(--monday-border)); border-radius: 2px;"></div>
 
-                @foreach (var step in Model.StepInstances.OrderBy(s => s.StepOrder))
+                @foreach (var step in orderedSteps)
                 {
+                    var stepBg = step.Status switch
+                    {
+                        "Completed" => "var(--monday-green)",
+                        "InProgress" => "var(--monday-blue)",
+                        "Failed" => "var(--monday-red)",
+                        "Skipped" => "var(--monday-muted)",
+                        "Blocked" => "var(--monday-text)",
+                        "WaitingForClient" => "var(--monday-orange)",
+                        "WaitingForValidation" => "var(--monday-purple)",
+                        _ => "var(--monday-border)"
+                    };
                     var stepStatusClass = step.Status switch
                     {
                         "Completed" => "success",
@@ -125,28 +374,26 @@
                     var isCurrent = step.Status == "InProgress" || step.Status == "WaitingForClient" || step.Status == "WaitingForValidation";
 
                     <div class="d-flex mb-4 position-relative @(isCurrent ? "fw-medium" : "")">
-                        <!-- Icon -->
-                        <div class="rounded-circle bg-white d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; z-index: 1; border: 3px solid var(--bs-@stepStatusClass); flex-shrink: 0;">
-                            <i class="bi @stepIcon text-@stepStatusClass fs-5"></i>
+                        <div class="rounded-circle bg-white d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; z-index: 1; border: 3px solid @stepBg; flex-shrink: 0; box-shadow: var(--monday-shadow);">
+                            <i class="bi @stepIcon fs-5" style="color:@stepBg;"></i>
                         </div>
-                        <!-- Content -->
                         <div class="ms-3 flex-grow-1">
-                            <div class="mc-card @(isCurrent ? "border-" + stepStatusClass : "") mb-0">
+                            <div class="mc-card @(isCurrent ? "border-primary" : "") mb-0" style="@(isCurrent ? "border-color: var(--monday-blue) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--monday-blue) 12%, transparent);" : "")">
                                 <div class="card-body p-3">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
-                                            <span class="badge bg-@stepStatusClass bg-opacity-10 text-@stepStatusClass me-2">Etape @step.StepOrder</span>
+                                            <span class="badge bg-@stepStatusClass bg-opacity-10 text-@stepStatusClass me-2 rounded-pill">Étape @step.StepOrder</span>
                                             <strong>@step.StepName</strong>
                                             @if (step.IsClientStep)
                                             {
-                                                <span class="badge bg-warning text-dark ms-1"><i class="bi bi-person me-1"></i>Client</span>
+                                                <span class="badge rounded-pill ms-1" style="background:color-mix(in srgb, var(--monday-orange) 16%, #fff); color:var(--monday-orange); border:1px solid var(--monday-border);"><i class="bi bi-person me-1"></i>Client</span>
                                             }
                                         </div>
-                                        <span class="badge bg-@stepStatusClass">@step.Status</span>
+                                        <span class="badge bg-@stepStatusClass rounded-pill">@step.Status</span>
                                     </div>
                                     <div class="row mt-2 small text-muted">
                                         <div class="col-md-3">
-                                            <i class="bi bi-person me-1"></i>@(step.AssignedToUserName ?? "Non assigne")
+                                            <i class="bi bi-person me-1"></i>@(step.AssignedToUserName ?? "Non assigné")
                                         </div>
                                         <div class="col-md-3">
                                             <i class="bi bi-calendar3 me-1"></i>
@@ -162,13 +409,13 @@
                                             {
                                                 <i class="bi bi-alarm me-1"></i>
                                                 <span class="@(step.IsOverdue ? "text-danger fw-bold" : "")">
-                                                    Echeance: @step.DueDate.Value.ToString("dd/MM")
+                                                    Échéance: @step.DueDate.Value.ToString("dd/MM")
                                                     @if (step.IsOverdue) { <i class="bi bi-exclamation-triangle-fill"></i> }
                                                 </span>
                                             }
                                         </div>
                                         <div class="col-md-3">
-                                            <span class="badge bg-light text-dark border">@step.StepType</span>
+                                            <span class="badge rounded-pill" style="background:var(--monday-bg); color:var(--monday-text); border:1px solid var(--monday-border);">@step.StepType</span>
                                         </div>
                                     </div>
                                     @if (isCurrent && Model.Status == "Active")
@@ -180,14 +427,14 @@
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="instanceId" value="@Model.Id" />
                                                     <input type="hidden" name="stepInstanceId" value="@step.Id" />
-                                                    <button type="submit" class="btn btn-sm btn-success me-1">
+                                                    <button type="submit" class="btn btn-sm btn-success rounded-pill me-1">
                                                         <i class="bi bi-check-circle me-1"></i>Valider et avancer
                                                     </button>
                                                 </form>
                                             }
                                             @if ((ViewBag.CanWorkflowReassign as bool? ?? false) || (ViewBag.CanTaskAssign as bool? ?? false))
                                             {
-                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reassignModal-@step.Id">
+                                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#reassignModal-@step.Id">
                                                     <i class="bi bi-person-gear me-1"></i>Réassigner
                                                 </button>
                                             }
@@ -196,7 +443,6 @@
                                         @if ((ViewBag.CanWorkflowReassign as bool? ?? false) || (ViewBag.CanTaskAssign as bool? ?? false))
                                         {
                                             var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new List<CabinetEmployeeDto>();
-                                            <!-- Reassign Modal -->
                                             <div class="modal fade" id="reassignModal-@step.Id" tabindex="-1">
                                                 <div class="modal-dialog">
                                                     <div class="modal-content">
@@ -232,8 +478,8 @@
                                                                 </div>
                                                             </div>
                                                             <div class="modal-footer">
-                                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                                                                <button type="submit" class="btn btn-primary">Réassigner</button>
+                                                                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                                                                <button type="submit" class="btn btn-primary rounded-pill">Réassigner</button>
                                                             </div>
                                                         </form>
                                                     </div>
@@ -260,7 +506,7 @@
         {
             <div class="text-center text-muted py-4">
                 <i class="bi bi-signpost-2 fs-1 d-block mb-2"></i>
-                Aucune etape dans ce workflow.
+                Aucune étape dans ce workflow.
             </div>
         }
     </div>

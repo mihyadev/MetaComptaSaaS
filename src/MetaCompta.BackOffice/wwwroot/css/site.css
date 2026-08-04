@@ -459,3 +459,145 @@ body.gw-mode .sidebar-toggle-btn { display: none !important; }
   font-family: inherit !important;
 }
 
+/* CNSS employee roster — compact, scroll-managed */
+.cnss-emp-scroll {
+  max-height: min(52vh, 480px);
+  overflow: auto;
+  border: 1px solid var(--monday-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.cnss-emp-table {
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.cnss-emp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  box-shadow: inset 0 -1px 0 #e5e7eb;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  padding: 0.45rem 0.55rem;
+}
+.cnss-emp-table tbody td {
+  padding: 0.4rem 0.55rem;
+  vertical-align: middle;
+  border-color: #f1f5f9;
+}
+.cnss-emp-table .cnss-emp-name {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cnss-emp-table .cnss-emp-meta {
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cnss-emp-table .cnss-emp-dates {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.cnss-emp-table .cnss-emp-salary,
+.cnss-emp-table .cnss-emp-jours {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cnss-emp-table .badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.25em 0.45em;
+}
+.cnss-emp-table col.cnss-col-mov { width: 4.5rem; }
+.cnss-emp-table col.cnss-col-emp { width: auto; }
+.cnss-emp-table col.cnss-col-dates { width: 6.5rem; }
+.cnss-emp-table col.cnss-col-jours { width: 3.25rem; }
+.cnss-emp-table col.cnss-col-salary { width: 6.25rem; }
+.cnss-emp-table col.cnss-col-actions { width: 2.75rem; }
+@media (max-width: 768px) {
+  .cnss-emp-scroll { max-height: 60vh; }
+  .cnss-emp-table col.cnss-col-dates { width: 5.5rem; }
+  .cnss-emp-table col.cnss-col-salary { width: 5.5rem; }
+}
+
+/* —— Workflow dashboard (monday board) —— */
+.wf-board-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--monday-border);
+  border-radius: 0.75rem;
+  background: var(--monday-surface);
+  color: var(--monday-text);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.82rem;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+  min-height: 52px;
+}
+.wf-board-tile:hover {
+  border-color: var(--monday-blue);
+  box-shadow: var(--monday-shadow);
+  color: var(--monday-text);
+  transform: translateY(-1px);
+}
+.wf-board-tile-icon {
+  width: 34px; height: 34px; border-radius: 0.55rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; flex-shrink: 0;
+}
+.wf-board-tile-label { white-space: nowrap; }
+
+.wf-step-icon {
+  width: 36px; height: 36px; border-radius: 0.55rem;
+  background: rgba(0,115,234,0.08); color: var(--monday-blue);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wf-step-row { border-radius: 0.55rem !important; }
+.wf-step-row:hover { background: var(--monday-bg) !important; }
+.wf-step-list .list-group-item { background: transparent; }
+
+.wf-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #e8eaf0;
+  overflow: hidden;
+}
+.wf-progress .progress-bar {
+  border-radius: 999px;
+}
+
+.wf-chip-blue { background: rgba(0,115,234,0.12) !important; color: var(--monday-blue) !important; }
+.wf-chip-green { background: rgba(0,200,117,0.14) !important; color: #00a35d !important; }
+.wf-chip-orange { background: rgba(253,171,61,0.18) !important; color: #c47d14 !important; }
+.wf-chip-red { background: rgba(226,68,92,0.12) !important; color: var(--monday-red) !important; }
+.wf-chip-muted { background: #eef0f6 !important; color: var(--monday-muted) !important; }
+
+.wf-empty-icon {
+  width: 56px; height: 56px; margin: 0 auto;
+  border-radius: 1rem;
+  background: rgba(0,200,117,0.12); color: var(--monday-green);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+}
+
+.stat-card a, a .stat-card { color: inherit; }
+a .stat-card:hover { box-shadow: var(--monday-shadow-lg); }
+

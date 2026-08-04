@@ -51,9 +51,23 @@ public class DeclarationsController : BaseController
         _messages = messages;
     }
 
-    // ── INDEX (all types) ───────────────────────────────────────
+    // ── INDEX (historique = all types) ──────────────────────────
     [RequirePermission(ClaimDefinitions.DeclarationView)]
     public async Task<IActionResult> Index(string? type = null, string? statut = null, int page = 1)
+    {
+        // Legacy bookmarks: /Declarations?type=ACOMPTES → /Declarations/Acomptes
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var normalized = DeclarationServiceCatalog.NormalizeType(type);
+            var listAction = DeclarationServiceCatalog.GetListAction(normalized);
+            if (!string.Equals(listAction, "Index", StringComparison.OrdinalIgnoreCase))
+                return RedirectToAction(listAction, new { statut, page });
+        }
+
+        return await IndexTyped(null, statut, page);
+    }
+
+    private async Task<IActionResult> IndexTyped(string? type, string? statut, int page)
     {
         var clientId = SelectedClientId;
         var result = await _declarations.GetAllAsync(clientId, type, statut, page);
@@ -61,9 +75,48 @@ public class DeclarationsController : BaseController
         ViewBag.Type = type;
         ViewBag.Statut = statut;
         PopulateContractAccessViewBag();
-
-        return View(result);
+        return View("Index", result);
     }
+
+    // ── Typed list actions (MVC: /Declarations/Acomptes instead of ?type=) ──
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> TVA(string? statut = null, int page = 1) => IndexTyped("TVA", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> IS(string? statut = null, int page = 1) => IndexTyped("IS", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> Acomptes(string? statut = null, int page = 1) => IndexTyped("ACOMPTES", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> RegIs(string? statut = null, int page = 1) => IndexTyped("REG_IS", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> CM(string? statut = null, int page = 1) => IndexTyped("CM", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> DRF(string? statut = null, int page = 1) => IndexTyped("DRF", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> IR(string? statut = null, int page = 1) => IndexTyped("IR", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> IrSalaires(string? statut = null, int page = 1) => IndexTyped("IR_SAL", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> RasFoncier(string? statut = null, int page = 1) => IndexTyped("RAS_FONC", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> RasDividendes(string? statut = null, int page = 1) => IndexTyped("RAS_DIV", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> CNSS(string? statut = null, int page = 1) => IndexTyped("CNSS", statut, page);
+
+    [RequirePermission(ClaimDefinitions.DeclarationView)]
+    public Task<IActionResult> Dts(string? statut = null, int page = 1) => IndexTyped("DTS", statut, page);
+
+    private IActionResult RedirectToList(string? declarationType, string? statut = null, int page = 1)
+        => RedirectToAction(DeclarationServiceCatalog.GetListAction(declarationType), new { statut, page });
 
     // ── DETAILS ─────────────────────────────────────────────────
     [RequirePermission(ClaimDefinitions.DeclarationView)]
@@ -89,6 +142,7 @@ public class DeclarationsController : BaseController
                 break;
             case "CNSS":
                 ViewBag.CNSSData = await _declarations.GetCNSSDataAsync(id);
+                ViewBag.CnssRoster = await _declarations.GetCnssEmployeesAsync(id);
                 break;
         }
 
@@ -207,7 +261,7 @@ public class DeclarationsController : BaseController
         return RedirectToAction("Details", new { id = declarationId });
     }
 
-    // ── CREATE (generic via modal) ──────────────────────────────
+    // ── CREATE (generic via modal / catalogue) ───────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.DeclarationCreate)]
@@ -215,58 +269,104 @@ public class DeclarationsController : BaseController
     {
         var clientId = SelectedClientId ?? 0;
         if (clientId == 0) { TempData["Error"] = "Aucun client sélectionné."; return RedirectToAction("Index"); }
-        if (!RequiresManageAccess()) return RedirectToAction("Index", new { type });
-        if (!RequiresPermission(PermissionHelper.Declaration.Create)) return RedirectToAction("Index", new { type });
+        if (!RequiresManageAccess()) return RedirectToList(type);
+        if (!RequiresPermission(PermissionHelper.Declaration.Create)) return RedirectToList(type);
 
-        ApiResponse<DeclarationDto>? result = null;
-
-        switch (type.ToUpper())
+        var normalized = DeclarationServiceCatalog.NormalizeType(type);
+        if (!DeclarationServiceCatalog.IsSupported(normalized))
         {
-            case "TVA":
-                result = await _declarations.CreateTVAAsync(clientId);
-                break;
-            case "IS":
-                result = await _declarations.CreateISAsync(clientId, anneeFiscale ?? DateTime.Now.Year);
-                break;
-            case "IR":
-                result = await _declarations.CreateIRAsync(clientId, anneeFiscale ?? DateTime.Now.Year);
-                break;
-            case "CNSS":
-                result = await _declarations.CreateCNSSAsync(clientId);
-                break;
-            default:
-                TempData["Error"] = $"Type de déclaration '{type}' non supporté.";
-                return RedirectToAction("Index", new { type });
+            TempData["Error"] = $"Type de déclaration '{type}' non supporté.";
+            return RedirectToList(type);
         }
+
+        var activeServicesJson = HttpContext.Session.GetString("ActiveServices") ?? "[]";
+        var activeServices = System.Text.Json.JsonSerializer.Deserialize<List<string>>(activeServicesJson) ?? new List<string>();
+        if (!DeclarationServiceCatalog.HasContractService(normalized, activeServices))
+        {
+            TempData["Error"] = $"Le service {normalized} n'est pas activé sur le contrat de ce client.";
+            return RedirectToList(normalized);
+        }
+
+        var result = await _declarations.CreateAsync(new CreateDeclarationDto
+        {
+            ClientId = clientId,
+            Type = normalized,
+            AnneeFiscale = anneeFiscale
+        });
 
         if (result?.Success == true && result.Data != null)
         {
-            TempData["Success"] = result.Message ?? $"Déclaration {type} créée avec succès.";
-            // Redirect to the appropriate edit page
-            return type.ToUpper() switch
-            {
-                "TVA" => RedirectToAction("EditTVA", new { id = result.Data.Id }),
-                "IS" => RedirectToAction("EditIS", new { id = result.Data.Id }),
-                "IR" => RedirectToAction("EditIR", new { id = result.Data.Id }),
-                "CNSS" => RedirectToAction("EditCNSS", new { id = result.Data.Id }),
-                _ => RedirectToAction("Details", new { id = result.Data.Id })
-            };
+            TempData["Success"] = result.Message ?? $"Déclaration {normalized} créée avec succès.";
+            var editAction = DeclarationServiceCatalog.GetEditAction(normalized);
+            return RedirectToAction(editAction, new { id = result.Data.Id });
         }
 
         TempData["Error"] = result?.Message ?? "Erreur lors de la création.";
         if (result?.Errors?.Count > 0)
             TempData["ErrorDetails"] = string.Join("|||", result.Errors);
-        return RedirectToAction("Index", new { type });
+        return RedirectToList(normalized);
     }
 
-    // ── LEGACY TVA CREATE (backward compat) ─────────────────────
+    // ── Typed create actions ─────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.DeclarationCreate)]
-    public async Task<IActionResult> CreateTVA()
-    {
-        return await Create("TVA", null);
-    }
+    public Task<IActionResult> CreateTVA() => Create("TVA", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateIS(int? anneeFiscale = null) => Create("IS", anneeFiscale);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateIR(int? anneeFiscale = null) => Create("IR", anneeFiscale);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateCNSS() => Create("CNSS", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateAcomptes() => Create("ACOMPTES", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateRegIs(int? anneeFiscale = null) => Create("REG_IS", anneeFiscale);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateCM(int? anneeFiscale = null) => Create("CM", anneeFiscale);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateDRF(int? anneeFiscale = null) => Create("DRF", anneeFiscale);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateIrSalaires() => Create("IR_SAL", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateRasFoncier() => Create("RAS_FONC", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateRasDividendes() => Create("RAS_DIV", null);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationCreate)]
+    public Task<IActionResult> CreateDts(int? anneeFiscale = null) => Create("DTS", anneeFiscale);
 
     // ── DELETE ───────────────────────────────────────────────────
     [HttpPost]
@@ -458,6 +558,7 @@ public class DeclarationsController : BaseController
         ViewBag.Declaration = declaration;
         await LoadWorkflowActionBarAsync(declaration);
         var cnssData = await _declarations.GetCNSSDataAsync(id);
+        ViewBag.CnssRoster = await _declarations.GetCnssEmployeesAsync(id);
         return View(cnssData ?? new DeclarationCNSSDto { DeclarationId = id });
     }
 
@@ -483,6 +584,93 @@ public class DeclarationsController : BaseController
         return View(dto);
     }
 
+    // ═══════════════════════════════════════════════════════════
+    //  GENERIC SHELL EDIT (ACOMPTES, REG_IS, IR_SAL, DRF, …)
+    // ═══════════════════════════════════════════════════════════
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> EditGeneric(int id)
+    {
+        var declaration = await _declarations.GetByIdAsync(id);
+        if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
+        if (!EditableStatuts.Contains(declaration.Statut ?? ""))
+        {
+            TempData["Error"] = "Modification impossible : statut verrouillé.";
+            return RedirectToAction("Details", new { id });
+        }
+        ViewBag.Type = declaration.Type;
+        PopulateContractAccessViewBag();
+        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
+        {
+            TempData["Error"] = ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible.";
+            return RedirectToAction("Details", new { id });
+        }
+        ViewBag.Declaration = declaration;
+        await LoadWorkflowActionBarAsync(declaration);
+        ViewBag.CatalogEntry = DeclarationServiceCatalog.Get(declaration.Type);
+        return View(declaration);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> EditGeneric(int id, decimal? montantDu, decimal? montantCredit, string? notes)
+    {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
+        var declCheck = await _declarations.GetByIdAsync(id);
+        if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
+        {
+            TempData["Error"] = "Modification interdite dans ce statut.";
+            return RedirectToAction("Details", new { id });
+        }
+        var result = await _declarations.SaveShellAsync(id, montantDu, montantCredit, notes);
+        if (result?.Success == true)
+        {
+            TempData["Success"] = "Déclaration enregistrée.";
+            return RedirectToAction("EditGeneric", new { id });
+        }
+        SetApiError(result, "Erreur lors de la sauvegarde.");
+        return RedirectToAction("EditGeneric", new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> SuggestAcompte(int id)
+    {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        var result = await _declarations.SuggestAcompteAsync(id);
+        if (result?.Success == true) TempData["Success"] = result.Message;
+        else TempData["Error"] = result?.Message ?? "Suggestion acompte impossible.";
+        return RedirectToAction("EditGeneric", new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> SuggestRegIs(int id)
+    {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        var result = await _declarations.SuggestRegIsAsync(id);
+        if (result?.Success == true) TempData["Success"] = result.Message;
+        else TempData["Error"] = result?.Message ?? "Suggestion régularisation impossible.";
+        return RedirectToAction("EditGeneric", new { id });
+    }
+
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationView)]
+    public async Task<IActionResult> ExportCnssDns(int id)
+    {
+        var (bytes, error) = await _declarations.ExportCnssDnsCsvAsync(id);
+        if (bytes == null)
+        {
+            TempData["Error"] = error ?? "Export DNS impossible.";
+            return RedirectToAction("EditCNSS", new { id });
+        }
+        return File(bytes, "text/csv", $"DNS_CNSS_{id}_{DateTime.Now:yyyyMMdd}.csv");
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
@@ -499,6 +687,113 @@ public class DeclarationsController : BaseController
             TempData["Error"] = "Erreur lors du calcul CNSS.";
         }
         return RedirectToAction("EditCNSS", new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> AddCnssEmployee(int id, CnssEmployeeAddDto dto)
+    {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        ApiResponse<CnssEmployeeRosterDto>? result;
+        if (dto.EmployeeId.HasValue && dto.EmployeeId.Value > 0)
+            result = await _declarations.UpdateCnssEmployeeAsync(id, dto.EmployeeId.Value, dto);
+        else
+            result = await _declarations.AddCnssEmployeeAsync(id, dto);
+
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Salarié du client enregistré.";
+        else
+            TempData["Error"] = result?.Message ?? "Impossible d'enregistrer le salarié.";
+        return RedirectToAction("EditCNSS", new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
+    public async Task<IActionResult> ImportCnssEmployees(int id, IFormFile? fichierCSV)
+    {
+        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
+        if (fichierCSV == null || fichierCSV.Length == 0)
+        {
+            TempData["Error"] = "Fichier CSV requis.";
+            return RedirectToAction("EditCNSS", new { id });
+        }
+
+        var rows = new List<CnssEmployeeImportRowDto>();
+        using (var reader = new StreamReader(fichierCSV.OpenReadStream()))
+        {
+            string? line;
+            var first = true;
+            var lineNo = 0;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                lineNo++;
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (first && line.Contains("CIN", StringComparison.OrdinalIgnoreCase))
+                {
+                    first = false;
+                    continue;
+                }
+                first = false;
+                var parts = line.Split(';');
+                if (parts.Length < 5)
+                {
+                    TempData["Error"] = $"Ligne {lineNo}: format invalide (attendu Matricule;CIN;CNSS;Nom;Prenom;...).";
+                    return RedirectToAction("EditCNSS", new { id });
+                }
+
+                DateTime? ParseDate(string? s)
+                {
+                    if (string.IsNullOrWhiteSpace(s)) return null;
+                    if (DateTime.TryParse(s.Trim(), System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out var d)) return d;
+                    if (DateTime.TryParse(s.Trim(), out d)) return d;
+                    return null;
+                }
+
+                int? jours = null;
+                if (parts.Length > 8 && int.TryParse(parts[8].Trim(), out var j)) jours = j;
+                decimal? salaire = null;
+                if (parts.Length > 9 && decimal.TryParse(parts[9].Trim(), System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var sal)) salaire = sal;
+
+                rows.Add(new CnssEmployeeImportRowDto
+                {
+                    Matricule = parts[0].Trim(),
+                    CIN = parts[1].Trim(),
+                    CNSS = parts[2].Trim(),
+                    Nom = parts[3].Trim(),
+                    Prenom = parts[4].Trim(),
+                    DateEmbauche = parts.Length > 5 ? ParseDate(parts[5]) : null,
+                    DateSortie = parts.Length > 6 ? ParseDate(parts[6]) : null,
+                    MotifSortie = parts.Length > 7 ? parts[7].Trim() : null,
+                    JoursTravailles = jours,
+                    SalaireBrut = salaire,
+                    Sexe = parts.Length > 10 ? parts[10].Trim() : null
+                });
+            }
+        }
+
+        var result = await _declarations.ImportCnssEmployeesAsync(id, rows);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Import terminé.";
+        else
+            TempData["Error"] = result?.Message ?? "Import échoué.";
+        if (result?.Data?.Errors?.Count > 0)
+            TempData["Warning"] = string.Join(" | ", result.Data.Errors.Take(5));
+        return RedirectToAction("EditCNSS", new { id });
+    }
+
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationView, ClaimDefinitions.DeclarationEdit)]
+    public IActionResult CnssEmployeesTemplate(int id)
+    {
+        var csv = "Matricule;CIN;CNSS;Nom;Prenom;DateEmbauche;DateSortie;MotifSortie;JoursTravailles;SalaireBrut;Sexe\r\n"
+                + "E001;BE123456;1234567890;Alaoui;Karim;2026-01-05;;;26;8500;M\r\n"
+                + "E002;BE654321;0987654321;Benali;Sara;2025-03-01;2026-01-20;Démission;15;7200;F\r\n";
+        var bytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray();
+        return File(bytes, "text/csv", $"CNSS_Employees_Template_{id}.csv");
     }
 
     // ── STATUS ──────────────────────────────────────────────────

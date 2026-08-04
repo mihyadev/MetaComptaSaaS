@@ -6,6 +6,26 @@
     var isData = ViewBag.ISData as DeclarationISDto;
     var irData = ViewBag.IRData as DeclarationIRDto;
     var cnssData = ViewBag.CNSSData as DeclarationCNSSDto;
+    var cnssRoster = ViewBag.CnssRoster as CnssEmployeeRosterDto;
+    if (cnssRoster == null && !string.IsNullOrWhiteSpace(cnssData?.DetailEmployesJson))
+    {
+        try
+        {
+            var lines = System.Text.Json.JsonSerializer.Deserialize<List<CnssEmployeeLineDto>>(cnssData.DetailEmployesJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            cnssRoster = new CnssEmployeeRosterDto
+            {
+                DeclarationId = Model.Id,
+                ClientId = Model.ClientId,
+                ClientName = Model.ClientName,
+                PresentCount = lines.Count,
+                EntrantCount = lines.Count(l => l.IsEntrant),
+                SortantCount = lines.Count(l => l.IsSortant),
+                Employees = lines
+            };
+        }
+        catch { /* ignore bad json */ }
+    }
     var wfInstance = ViewBag.WorkflowInstance as WorkflowInstanceDto;
     var wfCurrentStep = ViewBag.WorkflowCurrentStep as WorkflowStepInstanceDto;
     var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
@@ -18,14 +38,14 @@
     <div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
-                <li class="breadcrumb-item"><a href="/Declarations?type=@Model.Type">@Model.Type</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action(DeclarationServiceCatalog.GetListAction(Model.Type), "Declarations")">@(DeclarationServiceCatalog.Get(Model.Type)?.DisplayName ?? Model.Type)</a></li>
                 <li class="breadcrumb-item active">@Model.Type - @Model.Periode</li>
             </ol>
         </nav>
         <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text text-primary me-2"></i>@Model.Type - @Model.Periode</h4>
     </div>
     <div class="btn-group">
-        <a asp-action="Index" asp-route-type="@Model.Type" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+        <a href="@Url.Action(DeclarationServiceCatalog.GetListAction(Model.Type), "Declarations")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
     </div>
 </div>
 
@@ -234,20 +254,168 @@
     </div>
 }
 
-@if (cnssData != null)
+@if (cnssData != null || cnssRoster != null || string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
 {
     <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-header bg-transparent border-0 px-4 pt-3">
-            <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Données CNSS</h6>
+        <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Données CNSS — @Model.Periode</h6>
+                <small class="text-muted">Cotisations et état du personnel client pour cette déclaration</small>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="btn btn-sm btn-warning rounded-pill px-3">
+                    <i class="bi bi-pencil me-1"></i>Saisie / Calcul
+                </a>
+                <a asp-action="ExportCnssDns" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                    <i class="bi bi-download me-1"></i>Export DNS
+                </a>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-2"><label class="form-label text-muted small">Employés</label><div class="fw-bold">@cnssData.NombreEmployes</div></div>
-                <div class="col-md-2"><label class="form-label text-muted small">Salaires Bruts</label><div class="fw-semibold">@cnssData.TotalSalairesBruts.ToString("N2")</div></div>
-                <div class="col-md-2"><label class="form-label text-muted small">Cot. Salariale</label><div>@cnssData.TotalCotisationSalariale.ToString("N2")</div></div>
-                <div class="col-md-2"><label class="form-label text-muted small">Cot. Patronale</label><div>@cnssData.TotalCotisationPatronale.ToString("N2")</div></div>
-                <div class="col-md-2"><label class="form-label text-muted small">AMO Total</label><div>@((cnssData.TotalAMOSalariale + cnssData.TotalAMOPatronale).ToString("N2"))</div></div>
-                <div class="col-md-2"><label class="form-label text-muted small">Total</label><div class="fw-bold text-danger fs-5">@cnssData.MontantTotal.ToString("N2") MAD</div></div>
+        <div class="card-body px-4 pb-4">
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <span class="badge rounded-pill text-bg-primary px-3 py-2">Présents : @(cnssRoster?.PresentCount ?? cnssData?.NombreEmployes ?? 0)</span>
+                <span class="badge rounded-pill text-bg-success px-3 py-2">Entrants : @(cnssRoster?.EntrantCount ?? 0)</span>
+                <span class="badge rounded-pill text-bg-danger px-3 py-2">Sortants : @(cnssRoster?.SortantCount ?? 0)</span>
+                @if (cnssData != null)
+                {
+                    <span class="badge rounded-pill text-bg-dark px-3 py-2">Total : @cnssData.MontantTotal.ToString("N2") MAD</span>
+                }
+            </div>
+
+            @if (cnssData != null)
+            {
+                <div class="row g-2 mb-4">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">Employés</div>
+                            <div class="fw-bold fs-5">@cnssData.NombreEmployes</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">Salaires bruts</div>
+                            <div class="fw-bold">@cnssData.TotalSalairesBruts.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">Cot. salariale</div>
+                            <div class="fw-bold">@cnssData.TotalCotisationSalariale.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">Cot. patronale</div>
+                            <div class="fw-bold">@cnssData.TotalCotisationPatronale.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">AMO (sal. + pat.)</div>
+                            <div class="fw-bold">@((cnssData.TotalAMOSalariale + cnssData.TotalAMOPatronale).ToString("N2"))</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="rounded-3 border p-3 h-100">
+                            <div class="text-muted small text-uppercase">Formation pro.</div>
+                            <div class="fw-bold">@cnssData.TotalFormationProfessionnelle.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="rounded-3 border border-warning-subtle bg-warning-subtle p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="text-muted small text-uppercase">Montant total CNSS</div>
+                                <div class="fw-bold text-danger fs-4 mb-0">@cnssData.MontantTotal.ToString("N2") MAD</div>
+                            </div>
+                            <div class="small text-muted">
+                                AMO salariale @cnssData.TotalAMOSalariale.ToString("N2") · AMO patronale @cnssData.TotalAMOPatronale.ToString("N2")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-light border mb-4 mb-md-4">
+                    Aucun calcul CNSS enregistré. Lancez la saisie / calcul pour générer les cotisations.
+                </div>
+            }
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-success me-2"></i>État du personnel</h6>
+                <span class="text-muted small">@(cnssRoster?.Employees?.Count ?? 0) ligne(s)</span>
+            </div>
+            <div class="cnss-emp-scroll">
+                <table class="table table-hover cnss-emp-table">
+                    <colgroup>
+                        <col class="cnss-col-mov" />
+                        <col class="cnss-col-emp" />
+                        <col class="cnss-col-dates" />
+                        <col class="cnss-col-jours" />
+                        <col class="cnss-col-salary" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Mvt</th>
+                            <th>Salarié</th>
+                            <th>Dates</th>
+                            <th class="text-center">Jours</th>
+                            <th class="text-end">Salaire</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (cnssRoster?.Employees == null || cnssRoster.Employees.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                Aucun salarié pour cette période.
+                                <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="d-block mt-2">Ajouter / importer le personnel</a>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var e in cnssRoster.Employees)
+                        {
+                            var badge = e.IsEntrant && e.IsSortant ? "text-bg-warning"
+                                : e.IsEntrant ? "text-bg-success"
+                                : e.IsSortant ? "text-bg-danger"
+                                : "text-bg-primary";
+                            var mvtShort = e.IsEntrant && e.IsSortant ? "E+S"
+                                : e.IsEntrant ? "E"
+                                : e.IsSortant ? "S"
+                                : "P";
+                            <tr title="@e.Movement — @e.Prenom @e.Nom">
+                                <td><span class="badge @badge" title="@e.Movement">@mvtShort</span></td>
+                                <td>
+                                    <div class="cnss-emp-name">@e.Prenom @e.Nom</div>
+                                    <div class="cnss-emp-meta">
+                                        @(string.IsNullOrWhiteSpace(e.MatriculeEmployeur) ? "—" : e.MatriculeEmployeur)
+                                        · @e.CIN
+                                        · @(string.IsNullOrWhiteSpace(e.NumeroCNSS) ? "—" : e.NumeroCNSS)
+                                    </div>
+                                </td>
+                                <td class="cnss-emp-dates">
+                                    <div>@e.DateEmbauche.ToString("dd/MM/yy")</div>
+                                    <div class="text-muted">
+                                        @(e.DateSortie.HasValue ? e.DateSortie.Value.ToString("dd/MM/yy") : "—")
+                                        @if (!string.IsNullOrEmpty(e.MotifSortie))
+                                        {
+                                            <span title="@e.MotifSortie">· @e.MotifSortie</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-center cnss-emp-jours">@e.JoursTravailles</td>
+                                <td class="text-end cnss-emp-salary fw-semibold">@e.SalaireBrut.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <div class="small text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                P = Présent · E = Entrant · S = Sortant · E+S = les deux sur la période.
             </div>
         </div>
     </div>
@@ -727,21 +895,9 @@ else if (!hasActiveWorkflow)
                 || Model.Statut == RefCodes.StatutDeclaration.EnAttenteCorrection
                 || Model.Statut == RefCodes.StatutDeclaration.ACorriger))
             {
-                @switch (Model.Type)
-                {
-                    case "TVA":
-                        <a asp-action="EditTVA" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Saisie / Calcul TVA</a>
-                        break;
-                    case "IS":
-                        <a asp-action="EditIS" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier IS</a>
-                        break;
-                    case "IR":
-                        <a asp-action="EditIR" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier IR</a>
-                        break;
-                    case "CNSS":
-                        <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>Modifier CNSS</a>
-                        break;
-                }
+                var editAct = DeclarationServiceCatalog.GetEditAction(Model.Type);
+                var editLabel = Model.Type == "TVA" ? "Saisie / Calcul TVA" : $"Modifier {Model.Type}";
+                <a asp-action="@editAct" asp-route-id="@Model.Id" class="btn btn-warning rounded-pill px-3"><i class="bi bi-pencil me-1"></i>@editLabel</a>
             }
             @if (canEditDecl && (Model.Statut == RefCodes.StatutDeclaration.Brouillon || Model.Statut == RefCodes.StatutDeclaration.ACompleter || Model.Statut == RefCodes.StatutDeclaration.EnPreparation))
             {

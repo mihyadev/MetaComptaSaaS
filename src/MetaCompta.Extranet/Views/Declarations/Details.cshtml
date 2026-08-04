@@ -15,10 +15,31 @@
     var isData = ViewBag.ISData as DeclarationISDto;
     var irData = ViewBag.IRData as DeclarationIRDto;
     var cnssData = ViewBag.CNSSData as DeclarationCNSSDto;
+    var cnssRoster = ViewBag.CnssRoster as CnssEmployeeRosterDto;
+    // Fallback: parse snapshot JSON if live roster endpoint empty but calculate was saved
+    if (cnssRoster == null && !string.IsNullOrWhiteSpace(cnssData?.DetailEmployesJson))
+    {
+        try
+        {
+            var lines = System.Text.Json.JsonSerializer.Deserialize<List<CnssEmployeeLineDto>>(cnssData.DetailEmployesJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            cnssRoster = new CnssEmployeeRosterDto
+            {
+                DeclarationId = Model.Id,
+                ClientId = Model.ClientId,
+                ClientName = Model.ClientName,
+                PresentCount = lines.Count,
+                EntrantCount = lines.Count(l => l.IsEntrant),
+                SortantCount = lines.Count(l => l.IsSortant),
+                Employees = lines
+            };
+        }
+        catch { /* ignore bad json */ }
+    }
 
     var typeIcon = Model.Type switch {
         "TVA" => "bi-percent", "IS" => "bi-bank", "IR" => "bi-person-badge",
-        "CNSS" => "bi-shield-check", "AMO" => "bi-heart-pulse", _ => "bi-file-earmark-text"
+        "CNSS" => "bi-shield-check", "AMO" => "bi-heart-pulse", "DTS" => "bi-file-earmark-person", _ => "bi-file-earmark-text"
     };
     var statutColor = Model.Statut switch {
         "Soumise" or "Validee" or "Payee" => "success",
@@ -214,6 +235,136 @@ else if (isDone)
     </div>
 }
 
+@* ── CNSS personnel detail (client employees) ── *@
+@if (string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase) || string.Equals(Model.Type, "AMO", StringComparison.OrdinalIgnoreCase))
+{
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-0 pt-3 px-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                <div>
+                    <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-success me-2"></i>État du personnel — @Model.Periode</h6>
+                    <small class="text-muted">Salariés de votre entreprise déclarés à la CNSS pour cette période</small>
+                </div>
+                @if (cnssData != null)
+                {
+                    <div class="text-end small">
+                        <div class="fw-semibold">@cnssData.NombreEmployes salarié(s)</div>
+                        <div class="text-muted">Total cotisations : <strong class="text-primary">@cnssData.MontantTotal.ToString("N2") MAD</strong></div>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-2 flex-wrap mt-3">
+                <span class="badge rounded-pill text-bg-primary px-3 py-2">Présents : @(cnssRoster?.PresentCount ?? cnssData?.NombreEmployes ?? 0)</span>
+                <span class="badge rounded-pill text-bg-success px-3 py-2">Entrants : @(cnssRoster?.EntrantCount ?? 0)</span>
+                <span class="badge rounded-pill text-bg-danger px-3 py-2">Sortants : @(cnssRoster?.SortantCount ?? 0)</span>
+            </div>
+        </div>
+        <div class="card-body px-4 pb-4 pt-2">
+            @if (cnssData != null)
+            {
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="rounded-3 border p-2 h-100">
+                            <div class="text-muted small text-uppercase">Salaires bruts</div>
+                            <div class="fw-bold">@cnssData.TotalSalairesBruts.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="rounded-3 border p-2 h-100">
+                            <div class="text-muted small text-uppercase">Cot. salariales</div>
+                            <div class="fw-bold">@cnssData.TotalCotisationSalariale.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="rounded-3 border p-2 h-100">
+                            <div class="text-muted small text-uppercase">Cot. patronales</div>
+                            <div class="fw-bold">@cnssData.TotalCotisationPatronale.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="rounded-3 border p-2 h-100">
+                            <div class="text-muted small text-uppercase">AMO + FP</div>
+                            <div class="fw-bold">@((cnssData.TotalAMOSalariale + cnssData.TotalAMOPatronale + cnssData.TotalFormationProfessionnelle).ToString("N2"))</div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="cnss-emp-scroll">
+                <table class="table table-hover cnss-emp-table">
+                    <colgroup>
+                        <col class="cnss-col-mov" />
+                        <col class="cnss-col-emp" />
+                        <col class="cnss-col-dates" />
+                        <col class="cnss-col-jours" />
+                        <col class="cnss-col-salary" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Mvt</th>
+                            <th>Salarié</th>
+                            <th>Dates</th>
+                            <th class="text-center">Jours</th>
+                            <th class="text-end">Salaire</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (cnssRoster?.Employees == null || cnssRoster.Employees.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                Aucun détail salarié disponible pour le moment. Votre cabinet complète l’état du personnel lors de la saisie CNSS.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var e in cnssRoster.Employees)
+                        {
+                            var badge = e.IsEntrant && e.IsSortant ? "text-bg-warning"
+                                : e.IsEntrant ? "text-bg-success"
+                                : e.IsSortant ? "text-bg-danger"
+                                : "text-bg-primary";
+                            var mvtShort = e.IsEntrant && e.IsSortant ? "E+S"
+                                : e.IsEntrant ? "E"
+                                : e.IsSortant ? "S"
+                                : "P";
+                            <tr title="@e.Movement — @e.Prenom @e.Nom">
+                                <td><span class="badge @badge" title="@e.Movement">@mvtShort</span></td>
+                                <td>
+                                    <div class="cnss-emp-name">@e.Prenom @e.Nom</div>
+                                    <div class="cnss-emp-meta">
+                                        @(string.IsNullOrWhiteSpace(e.MatriculeEmployeur) ? "—" : e.MatriculeEmployeur)
+                                        · @e.CIN
+                                        · @(string.IsNullOrWhiteSpace(e.NumeroCNSS) ? "—" : e.NumeroCNSS)
+                                    </div>
+                                </td>
+                                <td class="cnss-emp-dates">
+                                    <div>@e.DateEmbauche.ToString("dd/MM/yy")</div>
+                                    <div class="text-muted">
+                                        @(e.DateSortie.HasValue ? e.DateSortie.Value.ToString("dd/MM/yy") : "—")
+                                        @if (!string.IsNullOrEmpty(e.MotifSortie))
+                                        {
+                                            <span title="@e.MotifSortie">· @e.MotifSortie</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-center cnss-emp-jours">@e.JoursTravailles</td>
+                                <td class="text-end cnss-emp-salary fw-semibold">@e.SalaireBrut.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <div class="small text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                P = Présent · E = Entrant · S = Sortant · E+S = les deux sur la période.
+            </div>
+        </div>
+    </div>
+}
+
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
         <div class="card shadow-sm h-100">
@@ -373,7 +524,8 @@ else if (isDone)
                     }
                     @if (cnssData != null)
                     {
-                        <div class="small"><strong>CNSS:</strong> Employés @cnssData.NombreEmployes · Total à payer @cnssData.MontantTotal.ToString("N2") MAD</div>
+                        <div class="small"><strong>CNSS:</strong> Employés @cnssData.NombreEmployes · Bruts @cnssData.TotalSalairesBruts.ToString("N2") · Total à payer @cnssData.MontantTotal.ToString("N2") MAD</div>
+                        <div class="small text-muted">Voir le détail du personnel dans le tableau « État du personnel » ci-dessus.</div>
                     }
                 </div>
             </div>

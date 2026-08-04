@@ -1,263 +1,381 @@
 @using MetaCompta.Application.DTOs
 @model WorkflowDashboardDto
 @{
-    ViewData["Title"] = "Workflow Engine";
+    ViewData["Title"] = "Workflow";
+    var canConfigure = ViewBag.CanWorkflowConfigure as bool? ?? false;
+    var canCreate = ViewBag.CanWorkflowCreate as bool? ?? false;
 }
 
-<style>
-    .wf-dash-header { background: var(--monday-blue); border-radius: 18px; color: #fff; padding: 2rem 2.25rem; }
-    .wf-stat-card { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; overflow: hidden; transition: transform .2s; }
-    .wf-stat-card:hover { transform: translateY(-2px); box-shadow: var(--monday-shadow-lg); }
-    .wf-stat-card .stat-bar { height: 4px; }
-    .wf-stat-card .stat-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
-    .wf-stat-val { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
-    .wf-stat-lbl { font-size: 0.75rem; font-weight: 600; color: var(--monday-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .wf-glass { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; box-shadow: var(--monday-shadow); }
-    .wf-glass-title { font-size: 0.88rem; font-weight: 700; color: var(--monday-text); display: flex; align-items: center; gap: 0.5rem; }
-    .wf-mini-badge { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.12rem 0.5rem; border-radius: 20px; font-size: 0.68rem; font-weight: 600; }
-    .wf-recent-row { display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0; border-bottom: 1px solid var(--monday-border); gap: 0.5rem; }
-    .wf-recent-row:last-child { border-bottom: none; }
-    .wf-recent-row:hover { background: var(--monday-bg); border-radius: 8px; padding-left: 0.4rem; padding-right: 0.4rem; }
-    .wf-progress-thin { height: 6px; border-radius: 3px; background: var(--monday-border); overflow: hidden; }
-    .wf-progress-thin .fill { height: 100%; border-radius: 3px; transition: width 1.2s ease; }
-    .wf-dist-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; }
-    .wf-dist-bar-bg { flex: 1; height: 8px; border-radius: 4px; background: var(--monday-bg); overflow: hidden; }
-    .wf-dist-bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
-    .wf-quick-link { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 1rem; border-radius: 14px; border: 1px solid var(--monday-border); background: var(--monday-surface); transition: all .2s; text-decoration: none; color: var(--monday-muted); min-width: 100px; }
-    .wf-quick-link:hover { transform: translateY(-2px); box-shadow: var(--monday-shadow); color: var(--monday-text); }
-    .wf-quick-link .ql-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
-    .wf-quick-link .ql-label { font-size: 0.72rem; font-weight: 700; text-align: center; }
-</style>
-
-<!-- ═══════════ HEADER ═══════════ -->
-<div class="wf-dash-header mb-4">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3" style="position:relative; z-index:2;">
-        <div>
-            <h4 class="fw-bold mb-1"><i class="bi bi-diagram-3-fill me-2"></i>Workflow Engine</h4>
-            <p class="mb-0" style="font-size:0.88rem; opacity:0.8;">Tableau de bord des processus métier — Suivi en temps réel</p>
-        </div>
-        <div class="d-flex gap-2">
-            @if (ViewBag.CanWorkflowConfigure as bool? ?? false)
-            {
-                <a asp-action="Builder" class="btn btn-warning" style="border-radius:10px; font-weight:700; font-size:0.83rem;"><i class="bi bi-tools me-1"></i> Builder</a>
-            }
-            @if (ViewBag.CanWorkflowCreate as bool? ?? false)
-            {
-                <a asp-action="StartWorkflow" class="btn btn-light" style="border-radius:10px; font-weight:700; font-size:0.83rem;"><i class="bi bi-play-circle-fill me-1"></i> Démarrer</a>
-            }
-            <a asp-action="MyTasks" class="btn btn-outline-light" style="border-radius:10px; font-weight:600; font-size:0.83rem;"><i class="bi bi-person-check me-1"></i> Mes tâches</a>
-        </div>
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-diagram-3 text-primary me-2"></i>Workflow</h4>
+        <p class="text-muted mb-0">Pilotage des processus métier — suivi en temps réel</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        @if (canConfigure)
+        {
+            <a asp-action="Builder" class="btn btn-outline-warning rounded-pill px-3">
+                <i class="bi bi-tools me-1"></i>Builder
+            </a>
+        }
+        @if (canCreate)
+        {
+            <a asp-action="StartWorkflow" class="btn btn-primary rounded-pill px-3">
+                <i class="bi bi-play-circle me-1"></i>Démarrer
+            </a>
+        }
+        <a asp-action="MyTasks" class="btn btn-outline-primary rounded-pill px-3">
+            <i class="bi bi-person-check me-1"></i>Mes tâches
+        </a>
     </div>
 </div>
 
-<!-- ═══════════ STAT CARDS ═══════════ -->
+<!-- KPI strip -->
 <div class="row g-3 mb-4">
-    @{
-        var stats = new[] {
-            ("Actifs", Model.ActiveWorkflows, "#2563eb", "linear-gradient(90deg,#2563eb,#3b82f6)", "bi-lightning-charge-fill", "#dbeafe"),
-            ("Terminés", Model.CompletedThisMonth, "#059669", "linear-gradient(90deg,#059669,#10b981)", "bi-check-circle-fill", "#d1fae5"),
-            ("Attente client", Model.WaitingForClient, "#f59e0b", "linear-gradient(90deg,#f59e0b,#fbbf24)", "bi-hourglass-split", "#fef3c7"),
-            ("En retard", Model.OverdueSteps, "#dc2626", "linear-gradient(90deg,#dc2626,#ef4444)", "bi-exclamation-triangle-fill", "#fee2e2"),
-            ("Mes actions", Model.PendingMyAction, "#7c3aed", "linear-gradient(90deg,#7c3aed,#a78bfa)", "bi-person-fill-gear", "#ede9fe")
-        };
-    }
-    @foreach (var (label, value, color, grad, icon, bg) in stats)
-    {
-        <div class="col-6 col-lg">
-            <div class="wf-stat-card h-100">
-                <div class="stat-bar" style="background:@grad;"></div>
-                <div class="p-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="stat-icon" style="background:@bg; color:@color;"><i class="bi @icon"></i></div>
-                        @if (label == "En retard" && value > 0) { <span class="wf-mini-badge" style="background:#fee2e2; color:#dc2626; animation:pulse 2s infinite;">⚠</span> }
+    <div class="col-6 col-xl">
+        <a asp-action="Instances" asp-route-status="Active" class="text-decoration-none">
+            <div class="stat-card h-100" style="border-left:4px solid var(--monday-blue);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Actifs</div>
+                        <div class="stat-value">@Model.ActiveWorkflows</div>
                     </div>
-                    <div class="wf-stat-val" style="color:@color;">@value</div>
-                    <div class="wf-stat-lbl mt-1">@label</div>
+                    <div class="stat-icon" style="background:rgba(0,115,234,0.1);color:var(--monday-blue);">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl">
+        <a asp-action="Instances" asp-route-status="Completed" class="text-decoration-none">
+            <div class="stat-card h-100" style="border-left:4px solid var(--monday-green);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Terminés (mois)</div>
+                        <div class="stat-value">@Model.CompletedThisMonth</div>
+                    </div>
+                    <div class="stat-icon" style="background:rgba(0,200,117,0.12);color:var(--monday-green);">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="stat-card h-100" style="border-left:4px solid var(--monday-orange);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">Attente client</div>
+                    <div class="stat-value">@Model.WaitingForClient</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(253,171,61,0.15);color:var(--monday-orange);">
+                    <i class="bi bi-hourglass-split"></i>
                 </div>
             </div>
         </div>
-    }
+    </div>
+    <div class="col-6 col-xl">
+        <div class="stat-card h-100" style="border-left:4px solid var(--monday-red);">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="stat-label">En retard</div>
+                    <div class="stat-value @(Model.OverdueSteps > 0 ? "text-danger" : "")">@Model.OverdueSteps</div>
+                </div>
+                <div class="stat-icon" style="background:rgba(226,68,92,0.12);color:var(--monday-red);">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <a asp-action="MyTasks" class="text-decoration-none">
+            <div class="stat-card h-100" style="border-left:4px solid var(--monday-purple);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="stat-label">Mes actions</div>
+                        <div class="stat-value">@Model.PendingMyAction</div>
+                    </div>
+                    <div class="stat-icon" style="background:rgba(97,97,255,0.12);color:var(--monday-purple);">
+                        <i class="bi bi-person-fill-gear"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
-<!-- ═══════════ QUICK LINKS ═══════════ -->
-<div class="d-flex gap-3 flex-wrap mb-4">
-    @if (ViewBag.CanWorkflowConfigure as bool? ?? false)
-    {
-        <a asp-action="Builder" class="wf-quick-link" style="border-color:#f59e0b; background:rgba(254,243,199,0.5);">
-            <div class="ql-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff;"><i class="bi bi-tools"></i></div>
-            <div class="ql-label" style="color:#92400e;">Builder <span style="font-size:0.55rem; background:#f59e0b; color:#fff; padding:0.05rem 0.35rem; border-radius:8px; vertical-align:middle;">NEW</span></div>
-        </a>
-    }
-    <a asp-action="Templates" class="wf-quick-link">
-        <div class="ql-icon" style="background:#dbeafe; color:#2563eb;"><i class="bi bi-file-earmark-ruled"></i></div>
-        <div class="ql-label">Modèles</div>
-    </a>
-    <a asp-action="Instances" class="wf-quick-link">
-        <div class="ql-icon" style="background:#d1fae5; color:#059669;"><i class="bi bi-collection-fill"></i></div>
-        <div class="ql-label">Instances</div>
-    </a>
-    <a asp-action="MyTasks" class="wf-quick-link">
-        <div class="ql-icon" style="background:#ede9fe; color:#7c3aed;"><i class="bi bi-person-check-fill"></i></div>
-        <div class="ql-label">Mes tâches</div>
-    </a>
-    @if (ViewBag.CanWorkflowCreate as bool? ?? false)
-    {
-        <a asp-action="StartWorkflow" class="wf-quick-link">
-            <div class="ql-icon" style="background:#fef3c7; color:#d97706;"><i class="bi bi-play-circle-fill"></i></div>
-            <div class="ql-label">Démarrer</div>
-        </a>
-    }
-    <a asp-action="ClientConfig" class="wf-quick-link">
-        <div class="ql-icon" style="background:#fce7f3; color:#be185d;"><i class="bi bi-gear-wide-connected"></i></div>
-        <div class="ql-label">Config client</div>
-    </a>
+<!-- Quick actions (monday board tiles) -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-3">
+        <div class="d-flex flex-wrap gap-2 align-items-stretch">
+            @if (canConfigure)
+            {
+                <a asp-action="Builder" class="wf-board-tile">
+                    <span class="wf-board-tile-icon" style="background:rgba(253,171,61,0.15);color:var(--monday-orange);"><i class="bi bi-tools"></i></span>
+                    <span class="wf-board-tile-label">Builder</span>
+                </a>
+            }
+            <a asp-action="Templates" class="wf-board-tile">
+                <span class="wf-board-tile-icon" style="background:rgba(0,115,234,0.1);color:var(--monday-blue);"><i class="bi bi-file-earmark-ruled"></i></span>
+                <span class="wf-board-tile-label">Modèles</span>
+            </a>
+            <a asp-action="Instances" class="wf-board-tile">
+                <span class="wf-board-tile-icon" style="background:rgba(0,200,117,0.12);color:var(--monday-green);"><i class="bi bi-collection-fill"></i></span>
+                <span class="wf-board-tile-label">Instances</span>
+            </a>
+            <a asp-action="MyTasks" class="wf-board-tile">
+                <span class="wf-board-tile-icon" style="background:rgba(97,97,255,0.12);color:var(--monday-purple);"><i class="bi bi-person-check-fill"></i></span>
+                <span class="wf-board-tile-label">Mes tâches</span>
+            </a>
+            @if (canCreate)
+            {
+                <a asp-action="StartWorkflow" class="wf-board-tile">
+                    <span class="wf-board-tile-icon" style="background:rgba(253,171,61,0.15);color:var(--monday-orange);"><i class="bi bi-play-circle-fill"></i></span>
+                    <span class="wf-board-tile-label">Démarrer</span>
+                </a>
+            }
+            <a asp-action="ClientConfig" class="wf-board-tile">
+                <span class="wf-board-tile-icon" style="background:rgba(255,21,138,0.1);color:var(--monday-pink);"><i class="bi bi-gear-wide-connected"></i></span>
+                <span class="wf-board-tile-label">Config client</span>
+            </a>
+        </div>
+    </div>
 </div>
 
-<div class="row g-4">
-    <!-- ═══════════ MY PENDING STEPS ═══════════ -->
+<div class="row g-3 mb-4">
+    <!-- Pending steps -->
     <div class="col-lg-7">
-        <div class="wf-glass p-4 h-100">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div class="wf-glass-title"><i class="bi bi-list-check text-primary"></i> Mes étapes en attente</div>
-                <a asp-action="MyTasks" class="wf-mini-badge" style="background:#dbeafe; color:#2563eb; text-decoration:none;">Voir tout <i class="bi bi-arrow-right"></i></a>
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0"><i class="bi bi-list-check text-primary me-2"></i>Mes étapes en attente</h6>
+                <a asp-action="MyTasks" class="btn btn-sm btn-outline-primary rounded-pill px-3">Voir tout</a>
             </div>
-
-            @if (Model.MyPendingSteps?.Any() == true)
-            {
-                @foreach (var step in Model.MyPendingSteps.Take(8))
+            <div class="card-body pt-2">
+                @if (Model.MyPendingSteps?.Any() == true)
                 {
-                    var sc = step.Status switch { "InProgress"=>"#2563eb", "Pending"=>"#f59e0b", "Blocked"=>"#dc2626", "WaitingForClient"=>"#d97706", _=>"#94a3b8" };
-                    var si = step.StepType switch { "Initialisation"=>"bi-rocket-takeoff-fill", "DemandePieces"=>"bi-envelope-paper-fill", "Collecte"=>"bi-cloud-arrow-up-fill", "Saisie"=>"bi-keyboard-fill", "Controle"=>"bi-search", "ValidationInterne"=>"bi-shield-check", "ValidationClient"=>"bi-person-check", "DepotSoumission"=>"bi-send-fill", "ClotureArchivage"=>"bi-archive-fill", _=>"bi-circle-fill" };
-                    <div class="wf-recent-row">
-                        <div class="d-flex align-items-center gap-2 flex-grow-1 min-width-0">
-                            <div style="width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:@(sc)15; color:@sc; font-size:0.8rem; flex-shrink:0;">
-                                <i class="bi @si"></i>
-                            </div>
-                            <div style="min-width:0;">
-                                <div class="fw-bold text-truncate" style="font-size:0.82rem; color:#1e293b;">@step.StepName</div>
-                                <div style="font-size:0.7rem; color:#94a3b8;">WF #@step.WorkflowInstanceId · @step.StepType</div>
-                            </div>
-                        </div>
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                            @if (step.IsOverdue) { <span class="wf-mini-badge" style="background:#fee2e2; color:#dc2626;"><i class="bi bi-exclamation-triangle-fill"></i> Retard</span> }
-                            else { <span class="wf-mini-badge" style="background:@(sc)15; color:@sc;">@step.Status</span> }
-                            <a asp-action="InstanceDetails" asp-route-id="@step.WorkflowInstanceId" class="btn btn-sm" style="border-radius:6px; padding:0.15rem 0.4rem; font-size:0.72rem; background:#f1f5f9; color:#475569;"><i class="bi bi-arrow-right"></i></a>
-                        </div>
+                    <div class="list-group list-group-flush wf-step-list">
+                        @foreach (var step in Model.MyPendingSteps.Take(8))
+                        {
+                            var statusClass = step.Status switch
+                            {
+                                "InProgress" => "wf-chip-blue",
+                                "Pending" => "wf-chip-orange",
+                                "Blocked" => "wf-chip-red",
+                                "WaitingForClient" => "wf-chip-orange",
+                                _ => "wf-chip-muted"
+                            };
+                            var statusLabel = step.Status switch
+                            {
+                                "InProgress" => "En cours",
+                                "Pending" => "En attente",
+                                "Blocked" => "Bloqué",
+                                "WaitingForClient" => "Client",
+                                _ => step.Status
+                            };
+                            var icon = step.StepType switch
+                            {
+                                "Initialisation" => "bi-rocket-takeoff",
+                                "DemandePieces" => "bi-envelope-paper",
+                                "Collecte" => "bi-cloud-arrow-up",
+                                "Saisie" => "bi-keyboard",
+                                "Controle" => "bi-search",
+                                "ValidationInterne" => "bi-shield-check",
+                                "ValidationClient" => "bi-person-check",
+                                "DepotSoumission" => "bi-send",
+                                "ClotureArchivage" => "bi-archive",
+                                _ => "bi-circle"
+                            };
+                            <a asp-action="InstanceDetails" asp-route-id="@step.WorkflowInstanceId"
+                               class="list-group-item list-group-item-action border-0 px-0 py-2 wf-step-row">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="wf-step-icon"><i class="bi @icon"></i></div>
+                                    <div class="flex-grow-1 min-w-0">
+                                        <div class="fw-semibold text-truncate">@step.StepName</div>
+                                        <div class="small text-muted text-truncate">WF #@step.WorkflowInstanceId · @step.StepType</div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        @if (step.IsOverdue)
+                                        {
+                                            <span class="badge rounded-pill wf-chip-red">Retard</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge rounded-pill @statusClass">@statusLabel</span>
+                                        }
+                                        <i class="bi bi-chevron-right text-muted"></i>
+                                    </div>
+                                </div>
+                            </a>
+                        }
                     </div>
                 }
-            }
-            else
-            {
-                <div class="text-center py-4">
-                    <i class="bi bi-check-circle-fill d-block mb-2" style="font-size:2.5rem; color:#10b981;"></i>
-                    <div class="fw-bold" style="color:#1e293b; font-size:0.88rem;">Tout est à jour !</div>
-                    <div style="font-size:0.78rem; color:#94a3b8;">Aucune étape en attente de votre action.</div>
-                </div>
-            }
+                else
+                {
+                    <div class="text-center py-5">
+                        <div class="wf-empty-icon mb-2"><i class="bi bi-check-circle-fill"></i></div>
+                        <div class="fw-semibold">Tout est à jour</div>
+                        <div class="small text-muted">Aucune étape en attente de votre action.</div>
+                    </div>
+                }
+            </div>
         </div>
     </div>
 
-    <!-- ═══════════ STATUS DISTRIBUTION ═══════════ -->
+    <!-- Status distribution -->
     <div class="col-lg-5">
-        <div class="wf-glass p-4 h-100">
-            <div class="wf-glass-title mb-3"><i class="bi bi-pie-chart-fill text-primary"></i> Distribution des statuts</div>
-
-            @if (Model.StatusDistribution?.Any() == true)
-            {
-                var total = (double)Model.StatusDistribution.Values.Sum();
-                var distColors = new Dictionary<string, string>
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-transparent border-0 px-4 pt-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-pie-chart text-primary me-2"></i>Distribution des statuts</h6>
+            </div>
+            <div class="card-body pt-2">
+                @if (Model.StatusDistribution?.Any() == true)
                 {
-                    ["Active"] = "#2563eb", ["Completed"] = "#059669", ["Paused"] = "#d97706",
-                    ["Cancelled"] = "#dc2626", ["Error"] = "#ef4444"
-                };
+                    var total = (double)Model.StatusDistribution.Values.Sum();
+                    var distMeta = new Dictionary<string, (string Label, string Color)>
+                    {
+                        ["Active"] = ("Actifs", "var(--monday-blue)"),
+                        ["Completed"] = ("Terminés", "var(--monday-green)"),
+                        ["Paused"] = ("En pause", "var(--monday-orange)"),
+                        ["Cancelled"] = ("Annulés", "var(--monday-red)"),
+                        ["Error"] = ("Erreur", "var(--monday-red)")
+                    };
 
-                @foreach (var kv in Model.StatusDistribution.OrderByDescending(x => x.Value))
+                    foreach (var kv in Model.StatusDistribution.OrderByDescending(x => x.Value))
+                    {
+                        var pct = total > 0 ? kv.Value / total * 100 : 0;
+                        var meta = distMeta.ContainsKey(kv.Key) ? distMeta[kv.Key] : (kv.Key, "var(--monday-muted)");
+                        <div class="wf-dist-row mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div>
+                                    <span class="fw-semibold">@meta.Item1</span>
+                                    <span class="small text-muted ms-1">@kv.Value</span>
+                                </div>
+                                <span class="fw-bold small" style="color:@meta.Item2;">@pct.ToString("0.#")%</span>
+                            </div>
+                            <div class="progress wf-progress" role="progressbar" aria-valuenow="@pct.ToString("0")" aria-valuemin="0" aria-valuemax="100">
+                                <div class="progress-bar" style="width:@pct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; background:@meta.Item2;"></div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
                 {
-                    var pct = total > 0 ? (kv.Value / total * 100).ToString("F1") : "0";
-                    var dc = distColors.ContainsKey(kv.Key) ? distColors[kv.Key] : "#94a3b8";
-                    var dl = kv.Key switch { "Active"=>"Actifs", "Completed"=>"Terminés", "Paused"=>"En pause", "Cancelled"=>"Annulés", "Error"=>"Erreur", _=>kv.Key };
-                    <div class="wf-dist-row">
-                        <div style="min-width:90px;">
-                            <div class="fw-bold" style="font-size:0.8rem; color:#1e293b;">@dl</div>
-                            <div style="font-size:0.68rem; color:#94a3b8;">@kv.Value workflows</div>
-                        </div>
-                        <div class="wf-dist-bar-bg">
-                            <div class="wf-dist-bar-fill" style="width:@(pct)%; background:@dc;"></div>
-                        </div>
-                        <div class="fw-bold" style="font-size:0.8rem; color:@dc; min-width:40px; text-align:right;">@(pct)%</div>
+                    <div class="text-center py-4 text-muted small">
+                        <i class="bi bi-bar-chart d-block mb-2 fs-3 opacity-50"></i>
+                        Aucune donnée disponible
                     </div>
                 }
-            }
-            else
-            {
-                <div class="text-center py-3" style="color:#94a3b8; font-size:0.82rem;"><i class="bi bi-bar-chart d-block mb-2" style="font-size:2rem;"></i>Aucune donnée disponible</div>
-            }
 
-            <!-- Step Type Distribution -->
-            @if (Model.StepTypeDistribution?.Any() == true)
-            {
-                <hr class="my-3" style="border-color:#f1f5f9;" />
-                <div class="wf-glass-title mb-2"><i class="bi bi-bar-chart-steps text-primary"></i> Types d'étapes actives</div>
-                <div class="d-flex flex-wrap gap-2">
-                    @foreach (var kv in Model.StepTypeDistribution.OrderByDescending(x => x.Value))
-                    {
-                        var stepColor = kv.Key switch { "Initialisation"=>"#475569", "DemandePieces"=>"#2563eb", "Collecte"=>"#d97706", "Saisie"=>"#0284c7", "Controle"=>"#7c3aed", "ValidationInterne"=>"#059669", "ValidationClient"=>"#d97706", "DepotSoumission"=>"#dc2626", "ClotureArchivage"=>"#475569", _=>"#94a3b8" };
-                        <span class="wf-mini-badge" style="background:@(stepColor)12; color:@stepColor; border:1px solid @(stepColor)25;">@kv.Key <strong>@kv.Value</strong></span>
-                    }
-                </div>
-            }
+                @if (Model.StepTypeDistribution?.Any() == true)
+                {
+                    <hr class="my-3" />
+                    <div class="fw-semibold small mb-2 text-muted text-uppercase" style="letter-spacing:.04em;">Types d'étapes actives</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        @foreach (var kv in Model.StepTypeDistribution.OrderByDescending(x => x.Value))
+                        {
+                            <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold">
+                                @kv.Key <span class="ms-1 opacity-75">@kv.Value</span>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
         </div>
     </div>
 </div>
 
-<!-- ═══════════ RECENT WORKFLOWS ═══════════ -->
-@if (Model.RecentWorkflows?.Any() == true)
-{
-    <div class="wf-glass p-4 mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="wf-glass-title"><i class="bi bi-clock-history text-primary"></i> Workflows récents</div>
-            <a asp-action="Instances" class="wf-mini-badge" style="background:#dbeafe; color:#2563eb; text-decoration:none;">Tous <i class="bi bi-arrow-right"></i></a>
-        </div>
-
-        <div class="table-responsive">
-            <table class="table mb-0" style="font-size:0.82rem;">
-                <thead>
-                    <tr style="border-bottom:2px solid #e2e8f0;">
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">ID</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">Client</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">Type</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">Étape</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">Progression</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;">Statut</th>
-                        <th style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; font-weight:700; padding:0.5rem;"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var wf in Model.RecentWorkflows.Take(10))
-                    {
-                        var sc = wf.Status switch { "Active"=>"#2563eb", "Completed"=>"#059669", "Paused"=>"#d97706", "Cancelled"=>"#dc2626", _=>"#94a3b8" };
-                        var si = wf.Status switch { "Active"=>"bi-lightning-charge-fill", "Completed"=>"bi-check-circle-fill", "Paused"=>"bi-pause-circle-fill", "Cancelled"=>"bi-x-circle-fill", _=>"bi-circle" };
-                        <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td class="fw-bold" style="padding:0.6rem 0.5rem;">#@wf.Id</td>
-                            <td style="padding:0.6rem 0.5rem;">@(wf.ClientName ?? "—")</td>
-                            <td style="padding:0.6rem 0.5rem;"><span class="wf-mini-badge" style="background:rgba(37,99,235,0.08); color:#2563eb;">@wf.DeclarationType</span></td>
-                            <td style="padding:0.6rem 0.5rem;">
-                                <div class="fw-bold" style="font-size:0.78rem;">@wf.CurrentStepName</div>
-                            </td>
-                            <td style="padding:0.6rem 0.5rem; min-width:100px;">
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="wf-progress-thin flex-grow-1"><div class="fill" style="width:@wf.ProgressPercent%; background:@sc;"></div></div>
-                                    <span style="font-size:0.7rem; font-weight:700; color:@sc;">@wf.ProgressPercent%</span>
-                                </div>
-                            </td>
-                            <td style="padding:0.6rem 0.5rem;"><span class="wf-mini-badge" style="background:@(sc)15; color:@sc;"><i class="bi @si"></i> @wf.Status</span></td>
-                            <td style="padding:0.6rem 0.5rem;">
-                                <a asp-action="InstanceDetails" asp-route-id="@wf.Id" class="btn btn-sm" style="border-radius:6px; padding:0.12rem 0.4rem; font-size:0.72rem; background:#f1f5f9; color:#475569;"><i class="bi bi-eye"></i></a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+<!-- Recent workflows board table -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-primary me-2"></i>Workflows récents</h6>
+        <a asp-action="Instances" class="btn btn-sm btn-outline-primary rounded-pill px-3">Toutes les instances</a>
     </div>
-}
+    <div class="card-body p-0">
+        @if (Model.RecentWorkflows?.Any() == true)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 mc-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Client</th>
+                            <th>Type</th>
+                            <th>Étape en cours</th>
+                            <th style="min-width:140px;">Progression</th>
+                            <th>Statut</th>
+                            <th class="pe-4 text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var wf in Model.RecentWorkflows.Take(10))
+                        {
+                            var statusChip = wf.Status switch
+                            {
+                                "Active" => "wf-chip-blue",
+                                "Completed" => "wf-chip-green",
+                                "Paused" => "wf-chip-orange",
+                                "Cancelled" => "wf-chip-red",
+                                _ => "wf-chip-muted"
+                            };
+                            var statusLabel = wf.Status switch
+                            {
+                                "Active" => "Actif",
+                                "Completed" => "Terminé",
+                                "Paused" => "En pause",
+                                "Cancelled" => "Annulé",
+                                _ => wf.Status
+                            };
+                            var barColor = wf.Status switch
+                            {
+                                "Active" => "var(--monday-blue)",
+                                "Completed" => "var(--monday-green)",
+                                "Paused" => "var(--monday-orange)",
+                                "Cancelled" => "var(--monday-red)",
+                                _ => "var(--monday-muted)"
+                            };
+                            <tr>
+                                <td class="ps-4 fw-bold">#@wf.Id</td>
+                                <td class="fw-semibold">@(wf.ClientName ?? "—")</td>
+                                <td><span class="badge rounded-pill bg-primary-subtle text-primary">@wf.DeclarationType</span></td>
+                                <td>
+                                    <div class="fw-semibold small">@(wf.CurrentStepName ?? "—")</div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress wf-progress flex-grow-1">
+                                            <div class="progress-bar" style="width:@wf.ProgressPercent%; background:@barColor;"></div>
+                                        </div>
+                                        <span class="small fw-bold text-muted" style="min-width:2.5rem;">@wf.ProgressPercent%</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge rounded-pill @statusChip">@statusLabel</span></td>
+                                <td class="pe-4 text-end">
+                                    <a asp-action="InstanceDetails" asp-route-id="@wf.Id"
+                                       class="btn btn-sm btn-outline-secondary rounded-pill px-2" title="Détails">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
+                <div class="fw-semibold mb-1">Aucun workflow récent</div>
+                <div class="small mb-3">Démarrez un processus pour un client / une déclaration.</div>
+                @if (canCreate)
+                {
+                    <a asp-action="StartWorkflow" class="btn btn-primary rounded-pill px-4">
+                        <i class="bi bi-play-circle me-1"></i>Démarrer un workflow
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>

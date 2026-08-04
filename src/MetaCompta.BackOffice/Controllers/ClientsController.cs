@@ -11,6 +11,7 @@ public class ClientsController : BaseController
     private readonly IClientFacade _clients;
     private readonly ICommercialFacade _commercial;
     private readonly IWorkflowFacade _workflow;
+    private readonly ICabinetFacade _cabinet;
 
     private static readonly string[] ClientRefCategories = new[]
     {
@@ -22,12 +23,14 @@ public class ClientsController : BaseController
         IHttpContextAccessor contextAccessor,
         IClientFacade clients,
         ICommercialFacade commercial,
-        IWorkflowFacade workflow)
+        IWorkflowFacade workflow,
+        ICabinetFacade cabinet)
         : base(referenceData, contextAccessor)
     {
         _clients = clients;
         _commercial = commercial;
         _workflow = workflow;
+        _cabinet = cabinet;
     }
 
     [RequirePermission(ClaimDefinitions.ClientList)]
@@ -78,6 +81,18 @@ public class ClientsController : BaseController
 
                 var pendingSteps = await _workflow.GetMyPendingStepsAsync();
                 ViewBag.WorkflowPendingSteps = pendingSteps ?? new List<WorkflowStepInstanceDto>();
+
+                ViewBag.WorkflowConfigs = await _workflow.GetClientConfigsAsync(id) ?? new List<ClientWorkflowConfigDto>();
+
+                try
+                {
+                    var emps = await _cabinet.GetEmployeesAsync(page: 1, pageSize: 100);
+                    ViewBag.CabinetEmployees = emps?.Items?.Where(e => e.EstActif).ToList() ?? new List<CabinetEmployeeDto>();
+                }
+                catch
+                {
+                    ViewBag.CabinetEmployees = new List<CabinetEmployeeDto>();
+                }
             }
             catch
             {
@@ -85,6 +100,8 @@ public class ClientsController : BaseController
                 ViewBag.WorkflowTemplates = new List<WorkflowTemplateDto>();
                 ViewBag.WorkflowInstances = new List<WorkflowInstanceDto>();
                 ViewBag.WorkflowPendingSteps = new List<WorkflowStepInstanceDto>();
+                ViewBag.WorkflowConfigs = new List<ClientWorkflowConfigDto>();
+                ViewBag.CabinetEmployees = new List<CabinetEmployeeDto>();
             }
 
             await LoadReferenceDataToViewBagAsync("FORME_JURIDIQUE", "STATUT_CLIENT", "TYPE_TVA");
@@ -95,6 +112,77 @@ public class ClientsController : BaseController
             TempData["Error"] = $"Erreur lors du chargement: {ex.Message}";
             return RedirectToAction("Index");
         }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> SaveWorkflowAffectation(ClientWorkflowConfigCreateDto dto)
+    {
+        if (dto.ClientId <= 0)
+        {
+            TempData["Error"] = "Client invalide.";
+            return RedirectToAction("Index");
+        }
+
+        var result = await _workflow.SaveClientConfigAsync(dto);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Affectation enregistrée — une copie workflow a été créée pour ce client.";
+        else
+            TempData["Error"] = result?.Message ?? "Erreur lors de l'affectation du workflow.";
+
+        return RedirectToAction("Details", new { id = dto.ClientId, tab = "workflow" });
+    }
+
+    /// <summary>Clone cabinet template → client-owned copy (or return existing) for Personnaliser.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> EnsureClientWorkflow([FromBody] EnsureClientWorkflowDto dto)
+    {
+        if (dto.ClientId <= 0 || dto.SourceTemplateId <= 0)
+            return BadRequest(new { success = false, message = "Client ou modèle invalide." });
+
+        var result = await _workflow.EnsureClientTemplateAsync(dto);
+        if (result?.Success != true || result.Data == null)
+            return BadRequest(new { success = false, message = result?.Message ?? "Clone impossible." });
+
+        return Json(new { success = true, data = result.Data, message = result.Message });
+    }
+
+    /// <summary>Save Personnaliser: client config + editable steps on the client-owned copy.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> SaveClientWorkflowCustomization(ClientWorkflowCustomizeDto dto)
+    {
+        if (dto.ClientId <= 0)
+        {
+            TempData["Error"] = "Client invalide.";
+            return RedirectToAction("Index");
+        }
+
+        var result = await _workflow.SaveClientWorkflowCustomizationAsync(dto);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Personnalisation enregistrée pour ce client.";
+        else
+            TempData["Error"] = result?.Message ?? "Erreur lors de la personnalisation.";
+
+        return RedirectToAction("Details", new { id = dto.ClientId, tab = "workflow" });
+    }
+
+    /// <summary>JSON for Personnaliser panel: template + builder steps.</summary>
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.WorkflowView, ClaimDefinitions.WorkflowConfigure, ClaimDefinitions.ClientDetail)]
+    public async Task<IActionResult> WorkflowTemplateJson(int id)
+    {
+        var template = await _workflow.GetTemplateByIdAsync(id);
+        if (template == null) return NotFound(new { success = false, message = "Modèle introuvable." });
+        return Json(new
+        {
+            success = true,
+            data = template
+        });
     }
 
     [HttpGet]

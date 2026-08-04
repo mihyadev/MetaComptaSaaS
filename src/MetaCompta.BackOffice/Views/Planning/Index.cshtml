@@ -153,20 +153,9 @@
 @section Styles {
 <style>
 .pl-shell { --pl-radius: 12px; }
-.pl-hero {
-    position: relative; border-radius: 16px; padding: 1.75rem 2rem; color: #fff; overflow: hidden;
-    background: var(--monday-blue);
-    box-shadow: var(--monday-shadow-lg);
-}
-.pl-hero h1 { font-weight: 800; letter-spacing: -.02em; margin: 0; font-size: 1.85rem; }
-.pl-hero .pl-sub { opacity: .85; font-size: .95rem; margin-top: .15rem; }
-.pl-kpi {
-    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
-    border-radius: 12px; padding: .85rem 1rem; color: #fff;
-}
-.pl-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; opacity: .78; }
-.pl-kpi .val { font-size: 1.8rem; font-weight: 700; line-height: 1; }
-.pl-kpi .sub { font-size: .72rem; opacity: .7; margin-top: .15rem; }
+.pl-kpi-row .stat-pill { border-radius: 16px; padding: 1rem 1.15rem; background: var(--monday-surface); border: 1px solid var(--monday-border); transition: transform 0.15s, box-shadow 0.15s; height: 100%; }
+.pl-kpi-row .stat-pill:hover { transform: translateY(-2px); box-shadow: var(--monday-shadow); }
+.pl-kpi-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
 .pl-segmented { display: inline-flex; background: var(--monday-bg); border-radius: 12px; padding: 4px; gap: 2px; border: 1px solid var(--monday-border); }
 .pl-segmented button {
     border: 0; background: transparent; border-radius: 9px; padding: .45rem .9rem;
@@ -280,7 +269,6 @@
 .pl-toolbar .nav-grp .btn:hover { background: var(--monday-surface); color: var(--monday-blue); }
 .pl-range-lbl { font-weight: 700; color: var(--monday-text); font-size: .92rem; padding: 0 .5rem; min-width: 160px; text-align: center; }
 @@media (max-width: 768px) {
-    .pl-hero h1 { font-size: 1.4rem; }
     .pl-board[data-zoom="month"] .pl-board-grid { grid-template-columns: 140px repeat(var(--pl-cols,30), minmax(34px,1fr)); }
     .pl-range-lbl { min-width: 120px; font-size: .82rem; }
 }
@@ -289,33 +277,69 @@
 
 <div class="pl-shell">
 
-@* ───────────────────────────────────  HERO  ─────────────────────────────────── *@
-<div class="pl-hero mb-3">
-    <div class="row align-items-center g-3 position-relative">
-        <div class="col-lg-5">
-            <h1>Bonjour @userName <span style="font-weight:400;opacity:.7">·</span> <span style="font-weight:500;opacity:.85">@(isClientSpace ? $"Planning — {selectedClientName}" : "Voici votre planning")</span></h1>
-            <div class="pl-sub">@today.ToString("dddd dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))@(isClientSpace && !string.IsNullOrEmpty(selectedClientName) ? $" · Client : {selectedClientName}" : "")</div>
-            <div class="d-flex gap-2 mt-3 flex-wrap">
-                @if (ViewBag.CanTaskCreate as bool? ?? false)
+@* ───────────────────────────────────  HEADER (Monday CRM)  ─────────────────────────────────── *@
+<div class="page-header">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-calendar3 me-2" style="color:var(--monday-blue);"></i>@(isClientSpace ? "Planning client" : "Planning")</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
+                @if (isClientSpace && !string.IsNullOrEmpty(selectedClientName))
                 {
-                    <button class="btn btn-light fw-semibold" data-bs-toggle="modal" data-bs-target="#evtModal" id="btnNewEvt">
-                        <i class="bi bi-plus-lg"></i> Nouvel événement
-                    </button>
+                    <li class="breadcrumb-item active">@selectedClientName</li>
                 }
-                <a href="/Tasks/MyTasks" class="btn btn-outline-light">
-                    <i class="bi bi-list-task"></i> Mes tâches
-                </a>
-                <a href="/Tasks/Index" class="btn btn-outline-light">
-                    <i class="bi bi-people"></i> Toutes les tâches
-                </a>
+                <li class="breadcrumb-item active">@today.ToString("dddd dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</li>
+            </ol>
+        </nav>
+        <p class="text-muted mb-0 mt-1" style="font-size:0.82rem;">Bonjour @userName — vue planning de vos tâches et événements</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="@Url.Action("MyTasks", "Tasks")" class="btn btn-outline-primary btn-sm"><i class="bi bi-person-check me-1"></i>Mes tâches</a>
+        <a href="@Url.Action("Index", "Tasks")" class="btn btn-outline-secondary btn-sm"><i class="bi bi-people me-1"></i>Toutes les tâches</a>
+        @if (ViewBag.CanTaskCreate as bool? ?? false)
+        {
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#evtModal" id="btnNewEvt">
+                <i class="bi bi-plus-lg me-1"></i>Nouvel événement
+            </button>
+        }
+    </div>
+</div>
+
+@* ───────────────────────────────────  KPI  ─────────────────────────────────── *@
+<div class="row g-3 mb-4 pl-kpi-row">
+    <div class="col-6 col-md-3">
+        <div class="stat-pill d-flex align-items-center gap-3">
+            <div class="pl-kpi-icon" style="background:color-mix(in srgb, var(--monday-blue) 14%, var(--monday-surface)); color:var(--monday-blue);"><i class="bi bi-calendar-event"></i></div>
+            <div>
+                <div class="fs-4 fw-bold lh-1" style="color:var(--monday-blue);">@todayEvents.Count</div>
+                <div class="text-muted" style="font-size:0.75rem;">Aujourd'hui</div>
             </div>
         </div>
-        <div class="col-lg-7">
-            <div class="row g-2">
-                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-calendar-event"></i> Aujourd'hui</div><div class="val">@todayEvents.Count</div><div class="sub">événements</div></div></div>
-                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-check2-square"></i> Mes tâches</div><div class="val">@activeMine.Count</div><div class="sub">actives</div></div></div>
-                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-people"></i> Équipe</div><div class="val">@activeTeam.Count</div><div class="sub">en cours</div></div></div>
-                <div class="col-6 col-md-3"><div class="pl-kpi"><div class="lbl"><i class="bi bi-exclamation-triangle"></i> En retard</div><div class="val">@overdueMine.Count</div><div class="sub">à traiter</div></div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-pill d-flex align-items-center gap-3">
+            <div class="pl-kpi-icon" style="background:color-mix(in srgb, var(--monday-green) 14%, var(--monday-surface)); color:var(--monday-green);"><i class="bi bi-check2-square"></i></div>
+            <div>
+                <div class="fs-4 fw-bold lh-1" style="color:var(--monday-green);">@activeMine.Count</div>
+                <div class="text-muted" style="font-size:0.75rem;">Mes tâches</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-pill d-flex align-items-center gap-3">
+            <div class="pl-kpi-icon" style="background:color-mix(in srgb, var(--monday-purple) 14%, var(--monday-surface)); color:var(--monday-purple);"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="fs-4 fw-bold lh-1" style="color:var(--monday-purple);">@activeTeam.Count</div>
+                <div class="text-muted" style="font-size:0.75rem;">Équipe</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-pill d-flex align-items-center gap-3">
+            <div class="pl-kpi-icon" style="background:color-mix(in srgb, var(--monday-red) 14%, var(--monday-surface)); color:var(--monday-red);"><i class="bi bi-exclamation-triangle"></i></div>
+            <div>
+                <div class="fs-4 fw-bold lh-1" style="color:var(--monday-red);">@overdueMine.Count</div>
+                <div class="text-muted" style="font-size:0.75rem;">En retard</div>
             </div>
         </div>
     </div>

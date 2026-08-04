@@ -98,6 +98,7 @@ public class WorkflowService : IWorkflowService
             DeclarationType = declType,
             ClientId = dto.ClientId,
             IsDefault = dto.IsDefault,
+            IsSystem = false, // client / cabinet custom copies are never Plan Marocain system templates
             IsActive = true,
             Version = 1,
             CabinetId = cabinetId,
@@ -142,7 +143,7 @@ public class WorkflowService : IWorkflowService
                 AssignedToUserIds = userIdsCsv,
                 AssignedToRoleName = stepDto.AssignedToRoleName,
                 AssignedToDepartmentId = stepDto.AssignedToDepartmentId,
-                IsClientStep = stepDto.IsClientStep,
+                IsClientStep = stepDto.IsClientStep || assignType == AssignmentType.Client,
                 RequiredPermission = stepDto.RequiredPermission,
                 SLAHours = stepDto.SLAHours,
                 IsRequired = stepDto.IsRequired,
@@ -189,15 +190,23 @@ public class WorkflowService : IWorkflowService
         if (template == null)
             return ApiResponse<WorkflowTemplateDto>.Fail("Modèle non trouvé.");
 
-        // System templates (Plan Marocain) cannot be modified
-        if (template.IsSystem)
-            return ApiResponse<WorkflowTemplateDto>.Fail("Ce modèle système (Plan Marocain) ne peut pas être modifié.");
+        // Global Plan Marocain only — client-owned copies are always editable
+        if (template.IsSystem && !template.ClientId.HasValue)
+            return ApiResponse<WorkflowTemplateDto>.Fail("Ce modèle système (Plan Marocain) ne peut pas être modifié. Assignez-le au client pour créer une copie modifiable.");
 
-        // Check if any active instances use this template
-        var hasActiveInstances = await _db.WorkflowInstances
-            .AnyAsync(wi => wi.WorkflowTemplateId == id && wi.Status == WorkflowInstanceStatus.Active);
-        if (hasActiveInstances)
-            return ApiResponse<WorkflowTemplateDto>.Fail("Impossible de modifier un modèle avec des instances actives. Créez une nouvelle version.");
+        // Heal bad data: client copy wrongly flagged as system
+        if (template.ClientId.HasValue && template.IsSystem)
+            template.IsSystem = false;
+
+        // Client-owned copies can be customized even with running instances (in-flight keep their step instances).
+        // Cabinet-wide templates remain locked while active instances exist.
+        if (!template.ClientId.HasValue)
+        {
+            var hasActiveInstances = await _db.WorkflowInstances
+                .AnyAsync(wi => wi.WorkflowTemplateId == id && wi.Status == WorkflowInstanceStatus.Active);
+            if (hasActiveInstances)
+                return ApiResponse<WorkflowTemplateDto>.Fail("Impossible de modifier un modèle avec des instances actives. Créez une nouvelle version.");
+        }
 
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
             declType = WorkflowDeclarationType.All;
@@ -210,13 +219,27 @@ public class WorkflowService : IWorkflowService
         template.Version++;
         template.UpdatedBy = userId;
 
-        // Remove old steps (soft delete)
-        foreach (var oldStep in template.Steps.Where(s => !s.IsDeleted))
+        // Soft-delete ALL prior steps (including already-deleted with leftover StepOrder)
+        // and free unique (TemplateId, StepOrder) before inserting replacements.
+        var allSteps = await _db.WorkflowStepTemplates
+            .IgnoreQueryFilters()
+            .Where(s => s.WorkflowTemplateId == template.Id)
+            .ToListAsync();
+
+        foreach (var oldStep in allSteps)
         {
-            oldStep.IsDeleted = true;
-            oldStep.DeletedAt = DateTime.UtcNow;
-            oldStep.DeletedBy = userId;
+            if (!oldStep.IsDeleted)
+            {
+                oldStep.IsDeleted = true;
+                oldStep.DeletedAt = DateTime.UtcNow;
+                oldStep.DeletedBy = userId;
+            }
+            // Unique index historically includes soft-deleted rows — park orders as -Id
+            if (oldStep.StepOrder >= 0)
+                oldStep.StepOrder = -Math.Abs(oldStep.Id);
         }
+
+        await _db.SaveChangesAsync();
 
         // Add new steps
         int order = 0;
@@ -243,7 +266,7 @@ public class WorkflowService : IWorkflowService
                 AssignedToUserIds = userIdsCsv,
                 AssignedToRoleName = stepDto.AssignedToRoleName,
                 AssignedToDepartmentId = stepDto.AssignedToDepartmentId,
-                IsClientStep = stepDto.IsClientStep,
+                IsClientStep = stepDto.IsClientStep || assignType == AssignmentType.Client,
                 RequiredPermission = stepDto.RequiredPermission,
                 SLAHours = stepDto.SLAHours,
                 IsRequired = stepDto.IsRequired,
@@ -287,9 +310,11 @@ public class WorkflowService : IWorkflowService
         if (template == null)
             return ApiResponse<bool>.Fail("Modèle non trouvé.");
 
-        // System templates (Plan Marocain) cannot be deleted
-        if (template.IsSystem)
+        // Global Plan Marocain only — client copies can be removed
+        if (template.IsSystem && !template.ClientId.HasValue)
             return ApiResponse<bool>.Fail("Ce modèle système (Plan Marocain) ne peut pas être supprimé.");
+        if (template.ClientId.HasValue && template.IsSystem)
+            template.IsSystem = false;
 
         var hasInstances = await _db.WorkflowInstances.AnyAsync(wi => wi.WorkflowTemplateId == id && wi.Status == WorkflowInstanceStatus.Active);
         if (hasInstances)
@@ -334,7 +359,7 @@ public class WorkflowService : IWorkflowService
 
     /// <summary>
     /// Seeds all default workflow templates for each declaration type:
-    /// All (Standard), TVA, IS, IR, CNSS, Paie, Juridique, Comptabilite
+    /// TVA, IS, IR, CNSS, DTS, Paie, Juridique, Comptabilite, IR_SALAIRES
     /// Each template has optimized steps, SLAs, and assignments for its domain.
     /// </summary>
     public async Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId)
@@ -482,7 +507,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "CNSS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Initialisation automatique du bordereau CNSS du mois", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, TaskType = "Standard" },
+                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Initialisation automatique du bordereau CNSS du mois", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", TaskType = "Standard" },
                     new() { Name = "Demande état du personnel", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Demande des entrées/sorties, absences, heures supplémentaires", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Collecte données paie", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Le client transmet les éléments variables de paie du mois", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Calcul cotisations CNSS", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Calcul des parts salariales et patronales (CNSS, AMO, TFP)", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
@@ -566,6 +591,25 @@ public class WorkflowService : IWorkflowService
                     new() { Name = "Télédéclaration IR", StepOrder = 5, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Soumission de la déclaration d'IR sur le portail DGI", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Soumise, TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
                     new() { Name = "Clôture & archivage", StepOrder = 6, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage de l'accusé de dépôt et classement", TaskType = "Archiving" }
                 }
+            },
+
+            // ── DTS / État 9421 (Déclaration des Traitements et Salaires) ──
+            new()
+            {
+                Name = "DTS — État 9421 Traitements et Salaires",
+                Description = "Workflow annuel D.T.S / État 9421 : collecte des états de paie, établissement de la déclaration, contrôle, validation et télédéclaration DGI / SIMPL-Salaires.",
+                DeclarationType = "DTS", IsDefault = true,
+                Steps = new()
+                {
+                    new() { Name = "Ouverture période DTS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique de la déclaration annuelle DTS / État 9421", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", TaskType = "Standard" },
+                    new() { Name = "Demande états de paie", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Demande des états du personnel, bulletins annuels et éléments de rémunération", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Collecte données annuelles", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 120, Description = "Le client transmet les états de paie et variables de l'exercice", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Établissement État 9421", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Saisie des traitements, salaires et retenues pour l'État 9421", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Contrôle déclaration DTS", StepOrder = 4, StepType = "Controle", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Vérification masse salariale, effectif et cohérence IR / CNSS", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevision, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, RequiredPermission = "workflow.validate" },
+                    new() { Name = "Validation DTS", StepOrder = 5, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approbation finale de la déclaration des traitements et salaires", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
+                    new() { Name = "Télédéclaration DGI / SIMPL-Salaires", StepOrder = 6, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Soumission de l'État 9421 sur le portail DGI / SIMPL-Salaires", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Soumise, TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
+                    new() { Name = "Clôture & archivage DTS", StepOrder = 7, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage de l'accusé de dépôt et classement de l'État 9421", TaskType = "Archiving" }
+                }
             }
         };
     }
@@ -586,7 +630,28 @@ public class WorkflowService : IWorkflowService
         }
         else
         {
-            template = await ResolveTemplateAsync(cabinetId, dto.ClientId, dto.DeclarationType);
+            // Prefer client affectation pointer (client-owned copy) when present
+            template = null;
+            if (!string.IsNullOrWhiteSpace(dto.DeclarationType)
+                && Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var startDecl))
+            {
+                var cfg = await _db.ClientWorkflowConfigs
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c =>
+                        c.ClientId == dto.ClientId
+                        && c.CabinetId == cabinetId
+                        && c.IsActive
+                        && (c.DeclarationType == startDecl || c.DeclarationType == WorkflowDeclarationType.All)
+                        && c.WorkflowTemplateId != null);
+                if (cfg?.WorkflowTemplateId != null)
+                {
+                    template = await _db.WorkflowTemplates
+                        .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
+                        .FirstOrDefaultAsync(wt => wt.Id == cfg.WorkflowTemplateId.Value && wt.CabinetId == cabinetId && wt.IsActive && !wt.IsDeleted);
+                }
+            }
+
+            template ??= await ResolveTemplateAsync(cabinetId, dto.ClientId, dto.DeclarationType);
         }
 
         if (template == null || !template.Steps.Any(s => !s.IsDeleted))
@@ -612,6 +677,22 @@ public class WorkflowService : IWorkflowService
                 .AnyAsync(wi => wi.DeclarationId == dto.DeclarationId.Value && wi.CabinetId == cabinetId && wi.Status == WorkflowInstanceStatus.Active);
             if (existingActive)
                 return ApiResponse<WorkflowInstanceDto>.Fail("Un workflow actif existe déjà pour cette déclaration.");
+        }
+        else if (dto.ClientId > 0 && template.DeclarationType != WorkflowDeclarationType.All)
+        {
+            // Prevent two active typed workflows (CNSS, DTS, …) for the same client
+            var declType = template.DeclarationType;
+            var existingTyped = await (
+                from wi in _db.WorkflowInstances
+                join wt in _db.WorkflowTemplates on wi.WorkflowTemplateId equals wt.Id
+                where wi.CabinetId == cabinetId
+                    && wi.ClientId == dto.ClientId
+                    && wi.Status == WorkflowInstanceStatus.Active
+                    && wt.DeclarationType == declType
+                select wi.Id).AnyAsync();
+            if (existingTyped)
+                return ApiResponse<WorkflowInstanceDto>.Fail(
+                    $"Un workflow actif existe déjà pour ce client ({declType}).");
         }
 
         // 3. Load client config for overrides
@@ -688,6 +769,15 @@ public class WorkflowService : IWorkflowService
 
         await _db.SaveChangesAsync();
 
+        // 6b. Auto-create / link declaration for typed workflows (CNSS, TVA, …)
+        // so the client sees it immediately on Extranet → Déclarations
+        if (!instance.DeclarationId.HasValue && template.DeclarationType != WorkflowDeclarationType.All)
+        {
+            instance.WorkflowTemplate = template;
+            await EnsureDeclarationLinkedAsync(instance, cabinetId, userId);
+            await _db.SaveChangesAsync();
+        }
+
         // 7. Activate first step
         await ActivateStepAsync(instance.Id, 0, cabinetId, userId);
 
@@ -714,6 +804,16 @@ public class WorkflowService : IWorkflowService
 
         if (wi == null)
             return ApiResponse<WorkflowInstanceDto>.Fail("Instance de workflow non trouvée.");
+
+        // Heal open typed workflows that were started without CreateDeclaration on Init
+        if (wi.Status == WorkflowInstanceStatus.Active
+            && !wi.DeclarationId.HasValue
+            && wi.WorkflowTemplate != null
+            && wi.WorkflowTemplate.DeclarationType != WorkflowDeclarationType.All)
+        {
+            await EnsureDeclarationLinkedAsync(wi, cabinetId, wi.StartedByUserId ?? "system");
+            await _db.SaveChangesAsync();
+        }
 
         var dto = MapInstanceDto(wi);
         await EnrichStepsWithOpenTakesAsync(dto.StepInstances, cabinetId);
@@ -1314,6 +1414,10 @@ public class WorkflowService : IWorkflowService
 
     public async Task<ApiResponse<List<WorkflowStepInstanceDto>>> GetMyPendingStepsAsync(int cabinetId, string userId, int? clientId = null)
     {
+        // Extranet: create missing declarations so Mes déclarations is not empty for open WFs
+        if (clientId.HasValue)
+            await HealMissingDeclarationsForClientAsync(cabinetId, clientId.Value, userId);
+
         IQueryable<WorkflowStepInstance> query;
 
         if (clientId.HasValue)
@@ -1331,10 +1435,13 @@ public class WorkflowService : IWorkflowService
                     && s.WorkflowInstance.ClientId == clientId.Value
                     && s.WorkflowInstance.Status == WorkflowInstanceStatus.Active
                     && (
-                        (s.Status == WorkflowStepStatus.WaitingForClient
-                            && s.WorkflowStepTemplate != null
+                        // Client portal steps (WaitingForClient or mis-activated InProgress with Client assign)
+                        (s.WorkflowStepTemplate != null
                             && (s.WorkflowStepTemplate.IsClientStep
-                                || s.WorkflowStepTemplate.AssignmentType == AssignmentType.Client))
+                                || s.WorkflowStepTemplate.AssignmentType == AssignmentType.Client)
+                            && (s.Status == WorkflowStepStatus.WaitingForClient
+                                || s.Status == WorkflowStepStatus.InProgress
+                                || s.Status == WorkflowStepStatus.WaitingForValidation))
                         || ((s.Status == WorkflowStepStatus.InProgress
                                 || s.Status == WorkflowStepStatus.Pending
                                 || s.Status == WorkflowStepStatus.WaitingForValidation)
@@ -1440,6 +1547,15 @@ public class WorkflowService : IWorkflowService
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
             declType = WorkflowDeclarationType.All;
 
+        // Assigning a cabinet (global) template → clone into a client-owned workflow first
+        if (dto.WorkflowTemplateId.HasValue)
+        {
+            var ensure = await EnsureClientTemplateAsync(dto.ClientId, dto.WorkflowTemplateId.Value, declType.ToString(), cabinetId, userId);
+            if (!ensure.Success || ensure.Data == null)
+                return ApiResponse<ClientWorkflowConfigDto>.Fail(ensure.Message ?? "Impossible de créer le workflow client.");
+            dto.WorkflowTemplateId = ensure.Data.Id;
+        }
+
         var existing = await _db.ClientWorkflowConfigs
             .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
 
@@ -1451,7 +1567,7 @@ public class WorkflowService : IWorkflowService
             existing.SLAMultiplier = dto.SLAMultiplier;
             existing.AutoStartWorkflow = dto.AutoStartWorkflow;
             existing.PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId;
-            existing.IsActive = true;
+            existing.IsActive = dto.IsActive;
             existing.UpdatedBy = userId;
         }
         else
@@ -1466,7 +1582,7 @@ public class WorkflowService : IWorkflowService
                 SLAMultiplier = dto.SLAMultiplier,
                 AutoStartWorkflow = dto.AutoStartWorkflow,
                 PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId,
-                IsActive = true,
+                IsActive = dto.IsActive,
                 CabinetId = cabinetId,
                 CreatedBy = userId
             });
@@ -1477,9 +1593,301 @@ public class WorkflowService : IWorkflowService
         var configs = await GetClientConfigsAsync(dto.ClientId, cabinetId);
         var saved = configs.Data?.FirstOrDefault(c => c.DeclarationType == declType.ToString());
         return saved != null
-            ? ApiResponse<ClientWorkflowConfigDto>.Ok(saved)
+            ? ApiResponse<ClientWorkflowConfigDto>.Ok(saved, "Workflow client enregistré (copie personnalisable).")
             : ApiResponse<ClientWorkflowConfigDto>.Fail("Erreur lors de la sauvegarde.");
     }
+
+    public async Task<ApiResponse<WorkflowTemplateDto>> EnsureClientTemplateAsync(
+        int clientId, int sourceTemplateId, string? declarationType, int cabinetId, string userId)
+    {
+        var source = await _db.WorkflowTemplates
+            .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
+            .Include(wt => wt.Client)
+            .FirstOrDefaultAsync(wt => wt.Id == sourceTemplateId && wt.CabinetId == cabinetId && !wt.IsDeleted);
+
+        if (source == null)
+            return ApiResponse<WorkflowTemplateDto>.Fail("Modèle source introuvable.");
+
+        // Already the client-owned copy
+        if (source.ClientId == clientId)
+            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(source));
+
+        if (!Enum.TryParse<WorkflowDeclarationType>(declarationType ?? source.DeclarationType.ToString(), true, out var declType))
+            declType = source.DeclarationType;
+
+        // Reuse existing config pointer if it already points to a client-owned template
+        var existingConfig = await _db.ClientWorkflowConfigs
+            .Include(c => c.WorkflowTemplate)
+            .FirstOrDefaultAsync(c => c.ClientId == clientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
+
+        if (existingConfig?.WorkflowTemplateId != null
+            && existingConfig.WorkflowTemplate != null
+            && existingConfig.WorkflowTemplate.ClientId == clientId
+            && !existingConfig.WorkflowTemplate.IsDeleted)
+        {
+            var owned = await GetTemplateByIdAsync(existingConfig.WorkflowTemplateId.Value, cabinetId);
+            if (owned.Success && owned.Data != null)
+                return owned;
+        }
+
+        // Reuse an existing active client template for same declaration type
+        var existingClientTpl = await _db.WorkflowTemplates
+            .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
+            .Include(wt => wt.Client)
+            .FirstOrDefaultAsync(wt =>
+                wt.CabinetId == cabinetId
+                && wt.ClientId == clientId
+                && wt.DeclarationType == declType
+                && wt.IsActive
+                && !wt.IsDeleted
+                && !wt.IsSystem);
+
+        if (existingClientTpl != null)
+            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(existingClientTpl));
+
+        var client = await _db.Clients.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
+        if (client == null)
+            return ApiResponse<WorkflowTemplateDto>.Fail("Client introuvable.");
+
+        var cloneDto = new WorkflowTemplateCreateDto
+        {
+            Name = $"{source.Name} — {client.RaisonSociale}",
+            Description = source.Description,
+            DeclarationType = declType.ToString(),
+            ClientId = clientId,
+            IsDefault = true,
+            Steps = source.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder)
+                .Select(MapStepToCreateDto).ToList()
+        };
+
+        var created = await CreateTemplateAsync(cloneDto, cabinetId, userId);
+        if (created.Success)
+            _logger.LogInformation("Cloned workflow template {SourceId} → client {ClientId} as {NewId}", sourceTemplateId, clientId, created.Data?.Id);
+        return created;
+    }
+
+    public async Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientWorkflowCustomizationAsync(
+        ClientWorkflowCustomizeDto dto, int cabinetId, string userId)
+    {
+        if (dto.ClientId <= 0)
+            return ApiResponse<ClientWorkflowConfigDto>.Fail("Client invalide.");
+
+        if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
+            declType = WorkflowDeclarationType.All;
+
+        WorkflowTemplateDto? clientTemplate = null;
+
+        if (dto.WorkflowTemplateId.HasValue)
+        {
+            var existing = await GetTemplateByIdAsync(dto.WorkflowTemplateId.Value, cabinetId);
+            if (!existing.Success || existing.Data == null)
+                return ApiResponse<ClientWorkflowConfigDto>.Fail(existing.Message ?? "Modèle introuvable.");
+            if (existing.Data.ClientId != dto.ClientId)
+            {
+                // Accidental global id — clone first
+                var ensure = await EnsureClientTemplateAsync(dto.ClientId, dto.WorkflowTemplateId.Value, declType.ToString(), cabinetId, userId);
+                if (!ensure.Success || ensure.Data == null)
+                    return ApiResponse<ClientWorkflowConfigDto>.Fail(ensure.Message ?? "Clone impossible.");
+                clientTemplate = ensure.Data;
+            }
+            else
+            {
+                clientTemplate = existing.Data;
+            }
+        }
+        else if (dto.SourceTemplateId.HasValue)
+        {
+            var ensure = await EnsureClientTemplateAsync(dto.ClientId, dto.SourceTemplateId.Value, declType.ToString(), cabinetId, userId);
+            if (!ensure.Success || ensure.Data == null)
+                return ApiResponse<ClientWorkflowConfigDto>.Fail(ensure.Message ?? "Clone impossible.");
+            clientTemplate = ensure.Data;
+        }
+        else
+        {
+            return ApiResponse<ClientWorkflowConfigDto>.Fail("Aucun modèle source sélectionné.");
+        }
+
+        var updateDto = new WorkflowTemplateCreateDto
+        {
+            Name = string.IsNullOrWhiteSpace(dto.TemplateName) ? clientTemplate.Name : dto.TemplateName!,
+            Description = dto.TemplateDescription ?? clientTemplate.Description,
+            DeclarationType = declType.ToString(),
+            ClientId = dto.ClientId,
+            IsDefault = true,
+            Steps = dto.Steps ?? new List<WorkflowStepTemplateCreateDto>()
+        };
+
+        if (updateDto.Steps.Count == 0 && clientTemplate.Steps.Count > 0)
+        {
+            // Keep existing steps if UI posted none (config-only save)
+            updateDto.Steps = clientTemplate.Steps.Select(MapStepDtoToCreateDto).ToList();
+        }
+
+        ApiResponse<WorkflowTemplateDto> updated;
+        try
+        {
+            updated = await UpdateTemplateAsync(clientTemplate.Id, updateDto, cabinetId, userId);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Customize save failed for client {ClientId} template {TemplateId}", dto.ClientId, clientTemplate.Id);
+            return ApiResponse<ClientWorkflowConfigDto>.Fail(
+                "Impossible d'enregistrer les étapes (conflit d'ordre d'étapes). Réessayez — si le problème continue, rouvrez Personnaliser.");
+        }
+
+        if (!updated.Success || updated.Data == null)
+            return ApiResponse<ClientWorkflowConfigDto>.Fail(updated.Message ?? "Erreur lors de la mise à jour des étapes.");
+
+        var configDto = new ClientWorkflowConfigCreateDto
+        {
+            ClientId = dto.ClientId,
+            DeclarationType = declType.ToString(),
+            WorkflowTemplateId = updated.Data.Id,
+            ClientValidationEnabled = dto.ClientValidationEnabled,
+            DocumentRequestEnabled = dto.DocumentRequestEnabled,
+            SLAMultiplier = dto.SLAMultiplier,
+            AutoStartWorkflow = dto.AutoStartWorkflow,
+            PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId,
+            IsActive = dto.IsActive
+        };
+
+        // Bypass re-clone: point already to client template — call internal upsert without Ensure
+        return await UpsertClientConfigAsync(configDto, cabinetId, userId, skipClone: true);
+    }
+
+    private async Task<ApiResponse<ClientWorkflowConfigDto>> UpsertClientConfigAsync(
+        ClientWorkflowConfigCreateDto dto, int cabinetId, string userId, bool skipClone)
+    {
+        if (!skipClone)
+            return await SaveClientConfigAsync(dto, cabinetId, userId);
+
+        if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
+            declType = WorkflowDeclarationType.All;
+
+        var existing = await _db.ClientWorkflowConfigs
+            .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
+
+        if (existing != null)
+        {
+            existing.WorkflowTemplateId = dto.WorkflowTemplateId;
+            existing.ClientValidationEnabled = dto.ClientValidationEnabled;
+            existing.DocumentRequestEnabled = dto.DocumentRequestEnabled;
+            existing.SLAMultiplier = dto.SLAMultiplier;
+            existing.AutoStartWorkflow = dto.AutoStartWorkflow;
+            existing.PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId;
+            existing.IsActive = dto.IsActive;
+            existing.UpdatedBy = userId;
+        }
+        else
+        {
+            _db.ClientWorkflowConfigs.Add(new ClientWorkflowConfig
+            {
+                ClientId = dto.ClientId,
+                DeclarationType = declType,
+                WorkflowTemplateId = dto.WorkflowTemplateId,
+                ClientValidationEnabled = dto.ClientValidationEnabled,
+                DocumentRequestEnabled = dto.DocumentRequestEnabled,
+                SLAMultiplier = dto.SLAMultiplier,
+                AutoStartWorkflow = dto.AutoStartWorkflow,
+                PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId,
+                IsActive = dto.IsActive,
+                CabinetId = cabinetId,
+                CreatedBy = userId
+            });
+        }
+
+        await _db.SaveChangesAsync();
+        var configs = await GetClientConfigsAsync(dto.ClientId, cabinetId);
+        var saved = configs.Data?.FirstOrDefault(c => c.DeclarationType == declType.ToString());
+        return saved != null
+            ? ApiResponse<ClientWorkflowConfigDto>.Ok(saved, "Personnalisation enregistrée pour ce client.")
+            : ApiResponse<ClientWorkflowConfigDto>.Fail("Erreur lors de la sauvegarde.");
+    }
+
+    private static WorkflowStepTemplateCreateDto MapStepToCreateDto(WorkflowStepTemplate s) => new()
+    {
+        Name = s.Name,
+        Description = s.Description,
+        StepOrder = s.StepOrder,
+        StepType = s.StepType.ToString(),
+        AssignmentType = s.AssignmentType.ToString(),
+        AssignedToUserId = s.AssignedToUserId,
+        AssignedToUserIds = string.IsNullOrWhiteSpace(s.AssignedToUserIds)
+            ? (string.IsNullOrWhiteSpace(s.AssignedToUserId) ? null : new List<string> { s.AssignedToUserId })
+            : s.AssignedToUserIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+        AssignedToRoleName = s.AssignedToRoleName,
+        AssignedToDepartmentId = s.AssignedToDepartmentId,
+        IsClientStep = s.IsClientStep,
+        RequiredPermission = s.RequiredPermission,
+        SLAHours = s.SLAHours,
+        IsRequired = s.IsRequired,
+        IsBlocking = s.IsBlocking,
+        AutoCreateTask = s.AutoCreateTask,
+        TaskType = s.TaskType.ToString(),
+        TaskPriority = s.TaskPriority,
+        AutoNotify = s.AutoNotify,
+        ValidationRulesJson = s.ValidationRulesJson,
+        DeclarationStatusOnComplete = s.DeclarationStatusOnComplete,
+        DeclarationStatusOnEntry = s.DeclarationStatusOnEntry,
+        ActionOnEntry = s.ActionOnEntry.ToString(),
+        ActionOnComplete = s.ActionOnComplete.ToString(),
+        ActionConfigJson = s.ActionConfigJson,
+        CronExpression = s.CronExpression,
+        CronDescription = s.CronDescription,
+        IsScheduled = s.IsScheduled,
+        MaxRetries = s.MaxRetries,
+        RetryIntervalHours = s.RetryIntervalHours,
+        OnMaxRetriesAction = s.OnMaxRetriesAction,
+        RoutingMode = s.RoutingMode.ToString(),
+        RoutingConditionsJson = s.RoutingConditionsJson,
+        GotoStepOrder = s.GotoStepOrder,
+        TriggerSource = s.TriggerSource.ToString(),
+        UseServiceContratAffectation = s.UseServiceContratAffectation,
+        ServiceContratTypeCode = s.ServiceContratTypeCode
+    };
+
+    private static WorkflowStepTemplateCreateDto MapStepDtoToCreateDto(WorkflowStepTemplateDto s) => new()
+    {
+        Name = s.Name,
+        Description = s.Description,
+        StepOrder = s.StepOrder,
+        StepType = s.StepType,
+        AssignmentType = s.AssignmentType,
+        AssignedToUserId = s.AssignedToUserId,
+        AssignedToUserIds = s.AssignedToUserIdList?.Count > 0
+            ? s.AssignedToUserIdList
+            : (string.IsNullOrWhiteSpace(s.AssignedToUserId) ? null : new List<string> { s.AssignedToUserId }),
+        AssignedToRoleName = s.AssignedToRoleName,
+        AssignedToDepartmentId = s.AssignedToDepartmentId,
+        IsClientStep = s.IsClientStep,
+        RequiredPermission = s.RequiredPermission,
+        SLAHours = s.SLAHours,
+        IsRequired = s.IsRequired,
+        IsBlocking = s.IsBlocking,
+        AutoCreateTask = s.AutoCreateTask,
+        TaskType = s.TaskType,
+        TaskPriority = s.TaskPriority,
+        AutoNotify = s.AutoNotify,
+        ValidationRulesJson = s.ValidationRulesJson,
+        DeclarationStatusOnComplete = s.DeclarationStatusOnComplete,
+        DeclarationStatusOnEntry = s.DeclarationStatusOnEntry,
+        ActionOnEntry = s.ActionOnEntry,
+        ActionOnComplete = s.ActionOnComplete,
+        ActionConfigJson = s.ActionConfigJson,
+        CronExpression = s.CronExpression,
+        CronDescription = s.CronDescription,
+        IsScheduled = s.IsScheduled,
+        MaxRetries = s.MaxRetries,
+        RetryIntervalHours = s.RetryIntervalHours,
+        OnMaxRetriesAction = s.OnMaxRetriesAction,
+        RoutingMode = s.RoutingMode,
+        RoutingConditionsJson = s.RoutingConditionsJson,
+        GotoStepOrder = s.GotoStepOrder,
+        TriggerSource = s.TriggerSource,
+        UseServiceContratAffectation = s.UseServiceContratAffectation,
+        ServiceContratTypeCode = s.ServiceContratTypeCode
+    };
 
     // ╔══════════════════════════════════════════════════════════════════════╗
     // ║                    DASHBOARD / MONITORING                            ║
@@ -1634,6 +2042,15 @@ public class WorkflowService : IWorkflowService
         stepInstance.ActivatedAt = DateTime.UtcNow;
         stepInstance.StartedAt = DateTime.UtcNow;
 
+        // Ensure a declaration exists for Init / CreateDeclaration before status updates
+        if (!instance.DeclarationId.HasValue
+            && (template.ActionOnEntry == WorkflowActionType.CreateDeclaration
+                || template.StepType == WorkflowStepType.Initialisation
+                || !string.IsNullOrWhiteSpace(template.DeclarationStatusOnEntry)))
+        {
+            await EnsureDeclarationLinkedAsync(instance, cabinetId, triggerUserId);
+        }
+
         if (template.ActionOnEntry != WorkflowActionType.None)
             await ExecuteStepActionAsync(template.ActionOnEntry, instance, stepInstance, cabinetId, triggerUserId);
 
@@ -1668,8 +2085,11 @@ public class WorkflowService : IWorkflowService
             if (template.DeclarationStatusOnComplete != null && instance.Declaration != null)
                 instance.Declaration.Statut = template.DeclarationStatusOnComplete;
         }
-        else if (template.IsClientStep)
+        else if (template.IsClientStep || template.AssignmentType == AssignmentType.Client)
         {
+            // Always expose on extranet as WaitingForClient (AssignmentType.Client implies client step)
+            if (!template.IsClientStep)
+                template.IsClientStep = true;
             stepInstance.Status = WorkflowStepStatus.WaitingForClient;
         }
         else
@@ -1963,23 +2383,47 @@ public class WorkflowService : IWorkflowService
         }
     }
 
+    public async Task HealMissingDeclarationsForClientAsync(int cabinetId, int clientId, string userId)
+    {
+        var orphans = await _db.WorkflowInstances
+            .Include(wi => wi.WorkflowTemplate)
+            .Where(wi => wi.CabinetId == cabinetId
+                && wi.ClientId == clientId
+                && wi.Status == WorkflowInstanceStatus.Active
+                && wi.DeclarationId == null
+                && wi.WorkflowTemplate != null
+                && wi.WorkflowTemplate.DeclarationType != WorkflowDeclarationType.All)
+            .ToListAsync();
+
+        if (orphans.Count == 0) return;
+
+        foreach (var wi in orphans)
+            await EnsureDeclarationLinkedAsync(wi, cabinetId, userId);
+
+        await _db.SaveChangesAsync();
+    }
+
     private async Task EnsureDeclarationLinkedAsync(WorkflowInstance instance, int cabinetId, string userId)
     {
         if (instance.DeclarationId.HasValue) return;
         if (instance.ClientId <= 0) return;
 
-        var declType = instance.WorkflowTemplate?.DeclarationType.ToString()
+        var rawType = instance.WorkflowTemplate?.DeclarationType.ToString()
             ?? (await _db.WorkflowTemplates.Where(t => t.Id == instance.WorkflowTemplateId).Select(t => t.DeclarationType.ToString()).FirstOrDefaultAsync())
             ?? "TVA";
 
-        if (!string.Equals(declType, "TVA", StringComparison.OrdinalIgnoreCase))
+        var declType = DeclarationServiceCatalog.NormalizeType(rawType);
+        if (string.Equals(declType, "All", StringComparison.OrdinalIgnoreCase) || string.Equals(declType, "0", StringComparison.OrdinalIgnoreCase))
+            declType = "TVA";
+
+        if (!DeclarationServiceCatalog.IsSupported(declType))
         {
-            _logger.LogInformation("CreateDeclaration skipped for non-TVA type {Type} on WF {Id}", declType, instance.Id);
+            _logger.LogInformation("CreateDeclaration skipped for unsupported type {Type} on WF {Id}", declType, instance.Id);
             return;
         }
 
         var existing = await _db.Declarations
-            .Where(d => d.CabinetId == cabinetId && d.ClientId == instance.ClientId && d.Type == "TVA"
+            .Where(d => d.CabinetId == cabinetId && d.ClientId == instance.ClientId && d.Type == declType
                 && d.Statut != RefCodes.StatutDeclaration.Cloturee
                 && d.Statut != RefCodes.StatutDeclaration.Archivee)
             .OrderByDescending(d => d.Id)
@@ -1992,16 +2436,22 @@ public class WorkflowService : IWorkflowService
             return;
         }
 
-        var created = await _declarations.CreateTVAAsync(instance.ClientId, cabinetId, userId);
+        var created = await _declarations.CreateAsync(new CreateDeclarationDto
+        {
+            ClientId = instance.ClientId,
+            Type = declType,
+            AnneeFiscale = DateTime.UtcNow.Year
+        }, cabinetId, userId);
+
         if (created.Success && created.Data != null)
         {
             instance.DeclarationId = created.Data.Id;
             instance.Declaration = await _db.Declarations.FindAsync(created.Data.Id);
-            _logger.LogInformation("Created TVA declaration {DeclId} for workflow {WfId}", created.Data.Id, instance.Id);
+            _logger.LogInformation("Created {Type} declaration {DeclId} for workflow {WfId}", declType, created.Data.Id, instance.Id);
         }
         else
         {
-            _logger.LogWarning("CreateDeclaration failed for WF {Id}: {Msg}", instance.Id, created.Message);
+            _logger.LogWarning("CreateDeclaration failed for WF {Id} type {Type}: {Msg}", instance.Id, declType, created.Message);
         }
     }
 

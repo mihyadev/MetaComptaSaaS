@@ -66,6 +66,26 @@ public sealed class ApiClient : IApiClient
         }
     }
 
+    public async Task<byte[]?> GetBytesAsync(string url, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = CreateClient();
+            var response = await client.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("API GET bytes failed: {Url} → HTTP {Status}", url, (int)response.StatusCode);
+                return null;
+            }
+            return await response.Content.ReadAsByteArrayAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "API GET bytes failed: {Url}", url);
+            return null;
+        }
+    }
+
     public async Task<ApiResponse<T>?> PostAsync<T>(string url, object data, CancellationToken ct = default)
     {
         try

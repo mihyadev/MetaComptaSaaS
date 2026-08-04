@@ -95,6 +95,8 @@ public class DeclarationsController : ExtranetBaseController
                 case "AMO":
                     var cnss = await GetAsync<ApiResponse<DeclarationCNSSDto>>($"api/client-declarations/{id}/cnss");
                     ViewBag.CNSSData = cnss?.Data;
+                    var roster = await GetAsync<ApiResponse<CnssEmployeeRosterDto>>($"api/client-declarations/{id}/cnss/employees");
+                    ViewBag.CnssRoster = roster?.Data;
                     break;
             }
         }

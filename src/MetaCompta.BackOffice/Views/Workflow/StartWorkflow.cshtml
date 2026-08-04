@@ -59,7 +59,7 @@
                         <label class="sw-form-label">Type de déclaration</label>
                         <select asp-for="DeclarationType" class="form-select sw-form-select">
                             <option value="">&#8212; Auto (selon modèle) &#8212;</option>
-                            @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique",
+                            @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique",
                                                         "Comptabilite" })
                             {
                                 <option value="@t">@t</option>

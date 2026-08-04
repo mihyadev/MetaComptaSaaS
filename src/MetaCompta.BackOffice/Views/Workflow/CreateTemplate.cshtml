@@ -73,7 +73,7 @@
                 <label class="ct-form-label">Type de déclaration</label>
                 <select asp-for="DeclarationType" class="form-select ct-form-select" id="declType">
                     <option value="All">Tous types</option>
-                    @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique",
+                    @foreach (var t in new[] { "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique",
                                         "Comptabilite" })
                     {
                         <option value="@t">@t</option>

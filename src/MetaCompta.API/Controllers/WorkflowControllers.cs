@@ -189,6 +189,16 @@ public class WorkflowController : ControllerBase
     public async Task<IActionResult> SaveClientConfig([FromBody] ClientWorkflowConfigCreateDto dto)
         => Ok(await _workflow.SaveClientConfigAsync(dto, CabinetId, UserId));
 
+    [HttpPost("client-config/ensure-template")]
+    [Authorize(Policy = ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> EnsureClientTemplate([FromBody] EnsureClientWorkflowDto dto)
+        => Ok(await _workflow.EnsureClientTemplateAsync(dto.ClientId, dto.SourceTemplateId, dto.DeclarationType, CabinetId, UserId));
+
+    [HttpPost("client-config/customize")]
+    [Authorize(Policy = ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> SaveClientWorkflowCustomization([FromBody] ClientWorkflowCustomizeDto dto)
+        => Ok(await _workflow.SaveClientWorkflowCustomizationAsync(dto, CabinetId, UserId));
+
     // ── Dashboard & History ──────────────────────────────────────
 
     [HttpGet("dashboard")]
@@ -284,10 +294,16 @@ public class ClientWorkflowController : ControllerBase
 public class ClientDeclarationsController : ControllerBase
 {
     private readonly IDeclarationService _service;
-    public ClientDeclarationsController(IDeclarationService service) => _service = service;
+    private readonly IWorkflowService _workflows;
+    public ClientDeclarationsController(IDeclarationService service, IWorkflowService workflows)
+    {
+        _service = service;
+        _workflows = workflows;
+    }
 
     private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
     private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+    private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? type = null, [FromQuery] string? statut = null,
@@ -295,6 +311,8 @@ public class ClientDeclarationsController : ControllerBase
     {
         // Security: always enforce ClientId from JWT — client cannot browse other clients
         if (ClientId == 0) return Forbid();
+        // Open CNSS/TVA workflows started without CreateDeclaration → create so Extranet list is not empty
+        await _workflows.HealMissingDeclarationsForClientAsync(CabinetId, ClientId, UserId);
         return Ok(await _service.GetAllAsync(CabinetId, ClientId, type, statut, page, pageSize));
     }
 
@@ -344,6 +362,15 @@ public class ClientDeclarationsController : ControllerBase
         if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
             return NotFound(ApiResponse<DeclarationCNSSDto>.Fail("Introuvable."));
         return Ok(await _service.GetCNSSDataAsync(id, CabinetId));
+    }
+
+    [HttpGet("{id}/cnss/employees")]
+    public async Task<IActionResult> GetCnssEmployees(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<CnssEmployeeRosterDto>.Fail("Introuvable."));
+        return Ok(await _service.GetCnssEmployeesAsync(id, CabinetId));
     }
 }
 

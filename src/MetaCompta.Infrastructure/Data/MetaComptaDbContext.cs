@@ -402,7 +402,10 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
         builder.Entity<WorkflowStepTemplate>(e =>
         {
             e.Property(ws => ws.Name).HasMaxLength(300).IsRequired();
-            e.HasIndex(ws => new { ws.WorkflowTemplateId, ws.StepOrder }).IsUnique();
+            // Soft-deleted rows must not block reuse of StepOrder on template update
+            e.HasIndex(ws => new { ws.WorkflowTemplateId, ws.StepOrder })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
             e.HasOne(ws => ws.WorkflowTemplate).WithMany(wt => wt.Steps).HasForeignKey(ws => ws.WorkflowTemplateId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(ws => ws.AssignedToUser).WithMany().HasForeignKey(ws => ws.AssignedToUserId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(ws => ws.AssignedToDepartment).WithMany().HasForeignKey(ws => ws.AssignedToDepartmentId).OnDelete(DeleteBehavior.NoAction);
@@ -777,6 +780,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             new ReferenceData { Id = 51, Category = "TYPE_DECLARATION", Code = "IR", Label = "Impôt sur le Revenu", SortOrder = 3, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#059669", CssClass = "bg-success-subtle text-success", Icone = "bi-person" },
             new ReferenceData { Id = 52, Category = "TYPE_DECLARATION", Code = "CNSS", Label = "CNSS", SortOrder = 4, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0891b2", CssClass = "bg-info-subtle text-info", Icone = "bi-shield" },
             new ReferenceData { Id = 53, Category = "TYPE_DECLARATION", Code = "IR_SALAIRES", Label = "IR Salaires", SortOrder = 5, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#d97706", CssClass = "bg-warning-subtle text-warning", Icone = "bi-cash" },
+            new ReferenceData { Id = 355, Category = "TYPE_DECLARATION", Code = "DTS", Label = "D.T.S / État 9421", SortOrder = 6, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#047857", CssClass = "bg-success-subtle text-success", Icone = "bi-file-earmark-person" },
 
             // Statut Déclaration
             new ReferenceData { Id = 54, Category = "STATUT_DECLARATION", Code = "Brouillon", Label = "Brouillon", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#94a3b8", CssClass = "badge-brouillon", Icone = "bi-pencil" },

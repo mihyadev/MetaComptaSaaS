@@ -145,6 +145,14 @@
                 @if (ViewBag.CanWorkflowConfigure as bool? ?? false)
                 {
                 <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Builder" ? "active" : "")" href="@Url.Action("Builder", "Workflow")"><i class="bi bi-tools"></i> Builder</a></li>
+                @if (hasClient && int.TryParse(selectedClientId, out var affectClientIdCab))
+                {
+                <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Details" ? "active" : "")" href="@Url.Action("Details", "Clients", new { id = affectClientIdCab, tab = "workflow" })"><i class="bi bi-person-gear"></i> Affectation client</a></li>
+                }
+                else
+                {
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("Workspace", "Home")" title="Sélectionnez d'abord un client"><i class="bi bi-person-gear"></i> Affectation client</a></li>
+                }
                 }
                 }
                 @if (canNavDepartments)
@@ -231,57 +239,88 @@
                     var canTasks = PermissionHelper.HasAnyDomain(Context.Session, "task");
 
                     var showComptaFam = canCompta && HasAny("COMPTABILITE", "TRESORERIE", "BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG");
-                    var showFiscalFam = canFiscalAny && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM");
-                    var showIsFam = canFiscalIs && HasAny("ACOMPTES", "REG_IS", "IS");
+                    var showFiscalFam = canFiscalAny && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM", "ACOMPTES", "REG_IS", "IS", "LIASSEFISCALE");
+                    var showIsFam = canFiscalIs && HasAny("ACOMPTES", "REG_IS", "IS", "DRF", "CM", "LIASSEFISCALE");
                     var showSocialFam = canSocial && HasAny("CNSS", "DTS", "PAIE");
                     var showJuridiqueFam = canJuridique && HasAny("PV_AGO", "DEPOT_RC");
                     var declType = ViewBag.Type?.ToString();
+                    var isFiscalDeclPage = currentController == "Declarations"
+                        && !string.Equals(declType, "CNSS", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(declType, "DTS", StringComparison.OrdinalIgnoreCase);
+                    bool DeclActive(string t)
+                    {
+                        if (string.Equals(declType, t, StringComparison.OrdinalIgnoreCase)) return true;
+                        var listAct = DeclarationServiceCatalog.GetListAction(t);
+                        return string.Equals(currentAction, listAct, StringComparison.OrdinalIgnoreCase);
+                    }
+                    bool CanDeclMenu(string declarationType)
+                    {
+                        var entry = DeclarationServiceCatalog.Get(declarationType);
+                        if (entry == null) return false;
+                        if (!DeclarationServiceCatalog.HasContractService(declarationType, activeServices)) return false;
+                        return entry.ClaimDomain switch
+                        {
+                            "tva" => canFiscalTva,
+                            "ir" => canFiscalIr,
+                            "is" => canFiscalIs,
+                            "cnss" => canCnss,
+                            _ => canFiscalAny
+                        };
+                    }
                 }
 
                 @if (showFiscalFam || showIsFam)
                 {
                 <li class="nav-item">
                     <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuFiscalite" role="button"
-                       aria-expanded="@(currentController == "Declarations" && declType != "CNSS" ? "true" : "false")">
+                       aria-expanded="@(isFiscalDeclPage ? "true" : "false")">
                         <i class="bi bi-receipt"></i><span>Déclarations fiscales</span><i class="bi bi-chevron-down chevron-icon"></i>
                     </a>
-                    <div class="collapse sidebar-submenu @(currentController == "Declarations" && declType != "CNSS" ? "show" : "")" id="menuFiscalite">
+                    <div class="collapse sidebar-submenu @(isFiscalDeclPage ? "show" : "")" id="menuFiscalite">
                         <ul class="nav flex-column">
-                            @if (canFiscalTva && HasSvc("TVA"))
+                            @if (CanDeclMenu("TVA"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "TVA" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "TVA" })"><i class="bi bi-receipt-cutoff"></i> TVA</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("TVA") ? "active" : "")" href="@Url.Action("TVA", "Declarations")"><i class="bi bi-receipt-cutoff"></i> TVA</a></li>
                             }
-                            @if (canFiscalIr && HasAny("IR_SAL", "IR"))
+                            @if (CanDeclMenu("IR_SAL"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "IR" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IR" })"><i class="bi bi-person-lines-fill"></i> IR / Salaires</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("IR_SAL") ? "active" : "")" href="@Url.Action("IrSalaires", "Declarations")"><i class="bi bi-person-lines-fill"></i> IR / Salaires</a></li>
                             }
-                            @if (canFiscalIr && HasSvc("RAS_FONC"))
+                            @if (CanDeclMenu("IR"))
                             {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Declarations", new { type = "IR" })"><i class="bi bi-house"></i> RAS / Foncier</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("IR") ? "active" : "")" href="@Url.Action("IR", "Declarations")"><i class="bi bi-person-vcard"></i> IR — Revenu</a></li>
                             }
-                            @if (canFiscalIr && HasSvc("RAS_DIV"))
+                            @if (CanDeclMenu("RAS_FONC"))
                             {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Declarations", new { type = "IR" })"><i class="bi bi-pie-chart"></i> RAS / Dividendes</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("RAS_FONC") ? "active" : "")" href="@Url.Action("RasFoncier", "Declarations")"><i class="bi bi-house"></i> RAS / Foncier</a></li>
                             }
-                            @if (canFiscalIs && HasSvc("DRF"))
+                            @if (CanDeclMenu("RAS_DIV"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "IS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-file-earmark-ruled"></i> D.R.F</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("RAS_DIV") ? "active" : "")" href="@Url.Action("RasDividendes", "Declarations")"><i class="bi bi-pie-chart"></i> RAS / Dividendes</a></li>
                             }
-                            @if (canFiscalIs && HasSvc("CM"))
+                            @if (CanDeclMenu("IS"))
                             {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-cash-coin"></i> Cotisation minimale</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("IS") ? "active" : "")" href="@Url.Action("IS", "Declarations")"><i class="bi bi-building"></i> IS — Liasse</a></li>
                             }
-                            @if (canFiscalIs && HasAny("ACOMPTES", "IS"))
+                            @if (CanDeclMenu("DRF"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "IS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-calendar3"></i> Acomptes IS</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("DRF") ? "active" : "")" href="@Url.Action("DRF", "Declarations")"><i class="bi bi-file-earmark-ruled"></i> D.R.F</a></li>
                             }
-                            @if (canFiscalIs && HasSvc("REG_IS"))
+                            @if (CanDeclMenu("CM"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "IS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "IS" })"><i class="bi bi-bank2"></i> Régularisation / Solde IS</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("CM") ? "active" : "")" href="@Url.Action("CM", "Declarations")"><i class="bi bi-cash-coin"></i> Cotisation minimale</a></li>
+                            }
+                            @if (CanDeclMenu("ACOMPTES"))
+                            {
+                                <li class="nav-item"><a class="nav-link @(DeclActive("ACOMPTES") ? "active" : "")" href="@Url.Action("Acomptes", "Declarations")"><i class="bi bi-calendar3"></i> Acomptes IS</a></li>
+                            }
+                            @if (CanDeclMenu("REG_IS"))
+                            {
+                                <li class="nav-item"><a class="nav-link @(DeclActive("REG_IS") ? "active" : "")" href="@Url.Action("RegIs", "Declarations")"><i class="bi bi-bank2"></i> Régularisation / Solde IS</a></li>
                             }
                             @if (canFiscalAny)
                             {
-                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && declType == null ? "active" : "")" href="@Url.Action("Index", "Declarations")"><i class="bi bi-clock-history"></i> Historique fiscal</a></li>
+                            <li class="nav-item"><a class="nav-link @(currentController == "Declarations" && string.IsNullOrEmpty(declType) ? "active" : "")" href="@Url.Action("Index", "Declarations")"><i class="bi bi-clock-history"></i> Historique fiscal</a></li>
                             }
                         </ul>
                     </div>
@@ -336,18 +375,18 @@
                 {
                 <li class="nav-item">
                     <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuPaie" role="button"
-                       aria-expanded="@(currentController == "Payroll" || currentController == "Employees" || declType == "CNSS" ? "true" : "false")">
+                       aria-expanded="@(currentController == "Payroll" || currentController == "Employees" || DeclActive("CNSS") || DeclActive("DTS") ? "true" : "false")">
                         <i class="bi bi-cash-stack"></i><span>Social &amp; Paie</span><i class="bi bi-chevron-down chevron-icon"></i>
                     </a>
-                    <div class="collapse sidebar-submenu @(currentController == "Payroll" || currentController == "Employees" || declType == "CNSS" ? "show" : "")" id="menuPaie">
+                    <div class="collapse sidebar-submenu @(currentController == "Payroll" || currentController == "Employees" || DeclActive("CNSS") || DeclActive("DTS") ? "show" : "")" id="menuPaie">
                         <ul class="nav flex-column">
-                            @if (canCnss && HasSvc("CNSS"))
+                            @if (CanDeclMenu("CNSS"))
                             {
-                                <li class="nav-item"><a class="nav-link @(declType == "CNSS" ? "active" : "")" href="@Url.Action("Index", "Declarations", new { type = "CNSS" })"><i class="bi bi-shield-check"></i> CNSS (Damancom)</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("CNSS") ? "active" : "")" href="@Url.Action("CNSS", "Declarations")"><i class="bi bi-shield-check"></i> CNSS (Damancom)</a></li>
                             }
-                            @if (canCnss && HasSvc("DTS"))
+                            @if (CanDeclMenu("DTS"))
                             {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Etat9421" ? "active" : "")" href="@Url.Action("Etat9421", "EtatsFiscaux")"><i class="bi bi-file-text"></i> D.T.S / État 9421</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("DTS") ? "active" : "")" href="@Url.Action("Dts", "Declarations")"><i class="bi bi-file-text"></i> D.T.S / État 9421</a></li>
                             }
                             @if (canPayroll && HasSvc("PAIE"))
                             {
@@ -411,6 +450,17 @@
                 <li class="nav-item"><a class="nav-link" href="@Url.Action("MyTasks", "Tasks")"><i class="bi bi-person-check"></i> Mes tâches</a></li>
                 <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Tasks")"><i class="bi bi-check2-square"></i> Tâches client</a></li>
                 <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Planning")"><i class="bi bi-calendar3"></i> Planning client</a></li>
+                }
+                @if (ViewBag.CanWorkflowConfigure as bool? ?? false)
+                {
+                <li class="nav-item mt-2">
+                    <div class="nav-section px-0"><i class="bi bi-diagram-3 me-1"></i> Workflow dossier <span class="section-line"></span></div>
+                </li>
+                @if (int.TryParse(selectedClientId, out var affectClientIdDos))
+                {
+                <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Details" ? "active" : "")" href="@Url.Action("Details", "Clients", new { id = affectClientIdDos, tab = "workflow" })"><i class="bi bi-person-gear"></i> Affectation templates</a></li>
+                }
+                <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Instances" ? "active" : "")" href="@Url.Action("Instances", "Workflow")"><i class="bi bi-play-circle"></i> Instances client</a></li>
                 }
             </ul>
             }

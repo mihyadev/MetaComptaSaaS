@@ -181,6 +181,25 @@
                             <input type="date" name="DateEmbauche" class="form-control"
                                 value="@(Model?.DateEmbauche.ToString("yyyy-MM-dd"))" required />
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Date de Sortie</label>
+                            <input type="date" name="DateSortie" class="form-control"
+                                value="@(Model?.DateSortie?.ToString("yyyy-MM-dd"))" />
+                            <small class="text-muted">Employé du client — pas du cabinet</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Motif de Sortie</label>
+                            <select name="MotifSortie" class="form-select">
+                                <option value="">— Aucun —</option>
+                                @{
+                                    var motifsEdit = new[] { "Démission", "Licenciement", "Fin de CDD", "Retraite", "Décès", "Autre" };
+                                    foreach (var m in motifsEdit)
+                                    {
+                                        <option value="@m" selected="@(Model?.MotifSortie == m)">@m</option>
+                                    }
+                                }
+                            </select>
+                        </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Type de Contrat</label>
                             <select name="TypeContrat" class="form-select">

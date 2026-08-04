@@ -86,7 +86,9 @@ public class EmployeeService : IEmployeeService
         var employee = _mapper.Map<Employee>(dto);
         employee.CabinetId = cabinetId;
         employee.CreatedBy = userId;
-        employee.Statut = RefCodes.StatutEmploye.Actif;
+        employee.Statut = dto.DateSortie.HasValue
+            ? RefCodes.StatutEmploye.Inactif
+            : RefCodes.StatutEmploye.Actif;
 
         _db.Employees.Add(employee);
         await _db.SaveChangesAsync();
@@ -118,6 +120,10 @@ public class EmployeeService : IEmployeeService
         _mapper.Map(dto, employee);
         employee.UpdatedBy = userId;
         employee.UpdatedAt = DateTime.UtcNow;
+        if (dto.DateSortie.HasValue)
+            employee.Statut = RefCodes.StatutEmploye.Inactif;
+        else if (employee.Statut == RefCodes.StatutEmploye.Inactif)
+            employee.Statut = RefCodes.StatutEmploye.Actif;
 
         await _db.SaveChangesAsync();
 

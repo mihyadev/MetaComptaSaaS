@@ -261,6 +261,82 @@ public class DeclarationsController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpPost("{id}/shell")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> SaveShell(int id, [FromBody] DeclarationShellSaveDto dto)
+    {
+        var result = await _service.SaveShellAsync(id, dto.MontantDu, dto.MontantCredit, dto.Notes, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("{id}/suggest-acompte")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> SuggestAcompte(int id)
+    {
+        var result = await _service.SuggestAcompteAsync(id, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("{id}/suggest-reg-is")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> SuggestRegIs(int id)
+    {
+        var result = await _service.SuggestRegIsAsync(id, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("{id}/cnss/export-dns")]
+    [Authorize(Policy = "declaration.view")]
+    public async Task<IActionResult> ExportCnssDns(int id)
+    {
+        var result = await _service.ExportCnssDnsCsvAsync(id, CabinetId);
+        if (!result.Success || result.Data == null) return BadRequest(result);
+        return File(result.Data, "text/csv", $"DNS_CNSS_{id}.csv");
+    }
+
+    [HttpGet("{id}/cnss/employees")]
+    [Authorize(Policy = "declaration.view")]
+    public async Task<IActionResult> GetCnssEmployees(int id)
+    {
+        var result = await _service.GetCnssEmployeesAsync(id, CabinetId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("{id}/cnss/employees")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> AddCnssEmployee(int id, [FromBody] CnssEmployeeAddDto dto)
+    {
+        var result = await _service.AddCnssEmployeeAsync(id, dto, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPut("{id}/cnss/employees/{employeeId:int}")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> UpdateCnssEmployee(int id, int employeeId, [FromBody] CnssEmployeeAddDto dto)
+    {
+        var result = await _service.UpdateCnssEmployeeAsync(id, employeeId, dto, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("{id}/cnss/employees/import")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> ImportCnssEmployees(int id, [FromBody] List<CnssEmployeeImportRowDto> rows)
+    {
+        var result = await _service.ImportCnssEmployeesAsync(id, rows, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("{id}/cnss/employees/template")]
+    [Authorize(Policy = "declaration.view")]
+    public IActionResult CnssEmployeesCsvTemplate(int id)
+    {
+        var csv = "Matricule;CIN;CNSS;Nom;Prenom;DateEmbauche;DateSortie;MotifSortie;JoursTravailles;SalaireBrut;Sexe\r\n"
+                + "E001;BE123456;1234567890;Alaoui;Karim;2026-01-05;;;26;8500;M\r\n"
+                + "E002;BE654321;0987654321;Benali;Sara;2025-03-01;2026-01-20;Démission;15;7200;F\r\n";
+        var bytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray();
+        return File(bytes, "text/csv", $"CNSS_Employees_Template_{id}.csv");
+    }
+
     [HttpDelete("{id}")]
     [Authorize(Policy = "declaration.edit")]
     public async Task<IActionResult> Delete(int id)

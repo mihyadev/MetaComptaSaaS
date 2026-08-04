@@ -213,8 +213,10 @@ public class EmployeeDto
     public int ClientId { get; set; }
     public string? ClientName { get; set; }
     public string? NumeroCNSS { get; set; }
+    public string? MatriculeEmployeur { get; set; }
     public DateTime DateEmbauche { get; set; }
     public DateTime? DateSortie { get; set; }
+    public string? MotifSortie { get; set; }
     public string? TypeContrat { get; set; }
     public string? Poste { get; set; }
     public string? Departement { get; set; }
@@ -244,7 +246,10 @@ public class EmployeeCreateDto
     public int NombreEnfantsACharge { get; set; }
     public string? Sexe { get; set; }
     public string? NumeroCNSS { get; set; }
+    public string? MatriculeEmployeur { get; set; }
     public DateTime DateEmbauche { get; set; }
+    public DateTime? DateSortie { get; set; }
+    public string? MotifSortie { get; set; }
     public string? TypeContrat { get; set; }
     public int? DureeContratMois { get; set; }
     public string? Poste { get; set; }
@@ -1045,9 +1050,16 @@ public class EtatFiscalDto
 public class CreateDeclarationDto
 {
     public int ClientId { get; set; }
-    public string Type { get; set; } = string.Empty; // TVA, IS, IR, CNSS
+    public string Type { get; set; } = string.Empty; // TVA, IS, IR, CNSS, ACOMPTES, …
     public string? Periode { get; set; } // optional override "2026-01", "2026-Q1", "2026"
     public int? AnneeFiscale { get; set; } // for IS/IR annual declarations
+}
+
+public class DeclarationShellSaveDto
+{
+    public decimal? MontantDu { get; set; }
+    public decimal? MontantCredit { get; set; }
+    public string? Notes { get; set; }
 }
 
 // ===== Fiscalité Extended =====
@@ -1102,6 +1114,88 @@ public class DeclarationCNSSDto
     public decimal MontantTotal { get; set; }
     public int NombreEmployes { get; set; }
     public string? DetailEmployesJson { get; set; }
+}
+
+/// <summary>One client employee line for a CNSS declaration period (not cabinet staff).</summary>
+public class CnssEmployeeLineDto
+{
+    public int EmployeeId { get; set; }
+    public string CIN { get; set; } = string.Empty;
+    public string Nom { get; set; } = string.Empty;
+    public string Prenom { get; set; } = string.Empty;
+    public string? NumeroCNSS { get; set; }
+    public string? MatriculeEmployeur { get; set; }
+    public DateTime DateEmbauche { get; set; }
+    public DateTime? DateSortie { get; set; }
+    public string? MotifSortie { get; set; }
+    public bool IsEntrant { get; set; }
+    public bool IsSortant { get; set; }
+    public string Movement
+    {
+        get
+        {
+            if (IsEntrant && IsSortant) return "Entrant+Sortant";
+            if (IsEntrant) return "Entrant";
+            if (IsSortant) return "Sortant";
+            return "Present";
+        }
+    }
+    public int JoursTravailles { get; set; }
+    public decimal SalaireBrut { get; set; }
+    public string? Sexe { get; set; }
+}
+
+public class CnssEmployeeRosterDto
+{
+    public int DeclarationId { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientName { get; set; }
+    public DateTime DateDebut { get; set; }
+    public DateTime DateFin { get; set; }
+    public int PresentCount { get; set; }
+    public int EntrantCount { get; set; }
+    public int SortantCount { get; set; }
+    public List<CnssEmployeeLineDto> Employees { get; set; } = new();
+}
+
+public class CnssEmployeeAddDto
+{
+    public string CIN { get; set; } = string.Empty;
+    public string Nom { get; set; } = string.Empty;
+    public string Prenom { get; set; } = string.Empty;
+    public string? NumeroCNSS { get; set; }
+    public string? MatriculeEmployeur { get; set; }
+    public DateTime DateEmbauche { get; set; }
+    public DateTime? DateSortie { get; set; }
+    public string? MotifSortie { get; set; }
+    public decimal SalaireBase { get; set; }
+    public string? Sexe { get; set; }
+    public int? JoursTravailles { get; set; }
+    /// <summary>When set, updates this client employee instead of creating.</summary>
+    public int? EmployeeId { get; set; }
+}
+
+public class CnssEmployeeImportRowDto
+{
+    public string? Matricule { get; set; }
+    public string CIN { get; set; } = string.Empty;
+    public string? CNSS { get; set; }
+    public string Nom { get; set; } = string.Empty;
+    public string Prenom { get; set; } = string.Empty;
+    public DateTime? DateEmbauche { get; set; }
+    public DateTime? DateSortie { get; set; }
+    public string? MotifSortie { get; set; }
+    public int? JoursTravailles { get; set; }
+    public decimal? SalaireBrut { get; set; }
+    public string? Sexe { get; set; }
+}
+
+public class CnssEmployeeImportResultDto
+{
+    public int Created { get; set; }
+    public int Updated { get; set; }
+    public List<string> Errors { get; set; } = new();
+    public CnssEmployeeRosterDto? Roster { get; set; }
 }
 
 // ===== API Response =====
@@ -1445,6 +1539,33 @@ public class ClientWorkflowConfigCreateDto
     public decimal SLAMultiplier { get; set; } = 1.0m;
     public bool AutoStartWorkflow { get; set; } = true;
     public string? PrimaryAssigneeUserId { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+/// <summary>Ensure / open a client-owned clone of a cabinet template.</summary>
+public class EnsureClientWorkflowDto
+{
+    public int ClientId { get; set; }
+    public int SourceTemplateId { get; set; }
+    public string? DeclarationType { get; set; }
+}
+
+/// <summary>Personnaliser save: client config overrides + full editable step graph for the client copy.</summary>
+public class ClientWorkflowCustomizeDto
+{
+    public int ClientId { get; set; }
+    public string DeclarationType { get; set; } = "All";
+    public int? SourceTemplateId { get; set; }
+    public int? WorkflowTemplateId { get; set; }
+    public string? TemplateName { get; set; }
+    public string? TemplateDescription { get; set; }
+    public bool ClientValidationEnabled { get; set; } = true;
+    public bool DocumentRequestEnabled { get; set; } = true;
+    public decimal SLAMultiplier { get; set; } = 1.0m;
+    public bool AutoStartWorkflow { get; set; } = true;
+    public string? PrimaryAssigneeUserId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public List<WorkflowStepTemplateCreateDto> Steps { get; set; } = new();
 }
 
 // ===== Workflow Dashboard / Summary =====

@@ -14,7 +14,7 @@
     var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
     var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
     var roles = new[] { "Gerant", "Manager", "Collaborateur", "Assistant", "Stagiaire" };
-    var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" };
+    var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" };
     var declStatuses = new[] { "Brouillon", "ACompleter", "EnCours", "EnPreparation", "Completee", "EnRevision", "Validee", "Soumise", "Payee", "Refusee", "Rejetee" };
     var actionTypes = new[] { "None", "CreateDeclaration", "CompleteDeclaration", "ValidateDeclaration", "SubmitDeclaration", "SuspendDeclaration", "ArchiveDeclaration", "RelanceClient", "NotifyEmployee", "NotifyClient", "GeneratePDF", "ExportXML", "SendEmail", "CreateTask", "RequestDocuments", "ApproveByClient", "PaymentReminder" };
     var routingModes = new[] { "Sequential", "ConditionalBranch", "SkipToStep", "EndWorkflow" };
@@ -26,6 +26,7 @@
         ["IS"] = ("#fce7f3", "#be185d", "bi-building"),
         ["IR"] = ("#ede9fe", "#7c3aed", "bi-person-vcard"),
         ["CNSS"] = ("#d1fae5", "#059669", "bi-shield-plus"),
+        ["DTS"] = ("#ecfdf5", "#047857", "bi-file-earmark-person"),
         ["Paie"] = ("#fef3c7", "#d97706", "bi-cash-stack"),
         ["Juridique"] = ("#fee2e2", "#dc2626", "bi-file-earmark-text"),
         ["Comptabilite"] = ("#e0f2fe", "#0284c7", "bi-journal-bookmark-fill"),
@@ -219,7 +220,7 @@
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label-sm">Type d'étape</label>
-                                                <select name="Steps[@i].StepType" class="form-select form-select-sm">
+                                                <select name="Steps[@i].StepType" class="form-select form-select-sm step-type-select" onchange="onStepTypeOrAssignChange(this)">
                                                     @foreach (var st in stepTypes) { <option value="@st" selected="@(step.StepType == st)">@(stepTypeLabels.ContainsKey(st) ? stepTypeLabels[st] : st)</option> }
                                                 </select>
                                             </div>
@@ -239,7 +240,7 @@
                                         <div class="row g-2">
                                             <div class="col-md-4">
                                                 <label class="form-label-sm">Type d'assignation</label>
-                                                <select name="Steps[@i].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this)">
+                                                <select name="Steps[@i].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this); onStepTypeOrAssignChange(this)">
                                                     @foreach (var at in assignmentTypes) { <option value="@at" selected="@(step.AssignmentType == at)">@(assignLabels.ContainsKey(at) ? assignLabels[at] : at)</option> }
                                                 </select>
                                             </div>
@@ -334,16 +335,31 @@
                                     </div>
                                     <!-- S6: Planification / Visual Cron Builder -->
                                     <div class="field-section schedule-section @(showSched ? "" : "d-none")">
-                                        <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification de l'exécution</div>
-                                        <div class="cron-builder" data-cron="@step.CronExpression">
+                                        <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification / Initialisation</div>
+                                        <div class="init-schedule-panel mb-2 @(step.StepType == "Initialisation" && step.AssignmentType == "AutoSystem" ? "" : "d-none")">
+                                            <div class="alert alert-light border mb-2 py-2 px-3" style="font-size:0.78rem;">
+                                                <i class="bi bi-info-circle text-primary me-1"></i>
+                                                Étape <strong>Initialisation</strong> automatique : choisissez la fréquence cron et si le démarrage manuel reste autorisé.
+                                            </div>
+                                            <label class="form-label-sm mb-1">Mode de déclenchement</label>
+                                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                                <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="schedule" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'schedule')"><i class="bi bi-clock-history"></i> Planifié</button>
+                                                <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="manual" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'manual')"><i class="bi bi-hand-index"></i> Manuel</button>
+                                                <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
+                                            </div>
+                                            <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
+                                            <input type="hidden" name="Steps[@i].ActionConfigJson" class="action-config-input" value="@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true}" : step.ActionConfigJson)" />
+                                        </div>
+                                        <div class="cron-builder cron-freq-panel" data-cron="@step.CronExpression">
                                             <div class="mb-2">
                                                 <label class="form-label-sm mb-1">Fréquence</label>
                                                 <div class="d-flex flex-wrap gap-1">
-                                                    <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
-                                                    <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdomadaire</button>
                                                     <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
                                                     <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
                                                     <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
+                                                    <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
                                                 </div>
                                             </div>
                                             <div class="cron-options-weekly d-none mb-2">
@@ -372,7 +388,7 @@
                                             </div>
                                             <div class="cron-options-quarterly d-none mb-2">
                                                 <label class="form-label-sm mb-1">Mois d'exécution</label>
-                                                <div class="d-flex flex-wrap gap-1">
+                                                <div class="d-flex flex-wrap gap-1 mb-2">
                                                     <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
                                                     <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
                                                     <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
@@ -386,6 +402,10 @@
                                                     <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
                                                     <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
                                                 </div>
+                                                <label class="form-label-sm">Jour</label>
+                                                <select class="form-select form-select-sm cron-quarterly-day" style="max-width:120px;" onchange="buildCron(this.closest('.cron-builder'))">
+                                                    <option value="1">1</option><option value="5">5</option><option value="10">10</option><option value="15">15</option>
+                                                </select>
                                             </div>
                                             <div class="cron-options-annually d-none mb-2">
                                                 <label class="form-label-sm mb-1">Mois et jour</label>
@@ -402,6 +422,20 @@
                                                         <select class="form-select form-select-sm cron-annual-day" onchange="buildCron(this.closest('.cron-builder'))">
                                                             <option value="1">1er</option><option value="5">5</option><option value="10">10</option>
                                                             <option value="15">15</option><option value="20">20</option><option value="25">25</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="cron-options-custom d-none mb-2">
+                                                <label class="form-label-sm mb-1">Date personnalisée</label>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6">
+                                                        <input type="date" class="form-control form-control-sm cron-custom-date" onchange="buildCron(this.closest('.cron-builder'))" />
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <select class="form-select form-select-sm cron-custom-repeat" onchange="buildCron(this.closest('.cron-builder'))">
+                                                            <option value="yearly">Répéter chaque année</option>
+                                                            <option value="monthly">Répéter chaque mois (jour)</option>
                                                         </select>
                                                     </div>
                                                 </div>
@@ -441,7 +475,7 @@
                                             <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-signpost-split-fill"></i>Routage Avancé<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
                                             <div class="row g-2 mt-1">
                                                 <div class="col-md-4"><label class="form-label-sm">Mode de routage</label><select name="Steps[@i].RoutingMode" class="form-select form-select-sm">@foreach (var rm in routingModes) { <option value="@rm" selected="@(step.RoutingMode == rm)">@rm</option> }</select></div>
-                                                <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[@i].TriggerSource" class="form-select form-select-sm">@foreach (var ts in triggerSources) { <option value="@ts" selected="@(step.TriggerSource == ts)">@ts</option> }</select></div>
+                                                <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[@i].TriggerSource" class="form-select form-select-sm init-trigger-source">@foreach (var ts in triggerSources) { <option value="@ts" selected="@(step.TriggerSource == ts)">@ts</option> }</select></div>
                                                 <div class="col-md-4"><label class="form-label-sm">Aller à l'étape N°</label><input type="number" name="Steps[@i].GotoStepOrder" value="@step.GotoStepOrder" class="form-control form-control-sm" placeholder="N° étape" min="0" /></div>
                                             </div>
                                         </details>
@@ -496,7 +530,7 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label-sm">Type d'étape</label>
-                        <select name="Steps[__IDX__].StepType" class="form-select form-select-sm">
+                        <select name="Steps[__IDX__].StepType" class="form-select form-select-sm step-type-select" onchange="onStepTypeOrAssignChange(this)">
                             <option value="Initialisation">Initialisation</option>
                             <option value="DemandePieces">Demande pièces</option>
                             <option value="Collecte">Collecte</option>
@@ -524,7 +558,7 @@
                 <div class="row g-2">
                     <div class="col-md-4">
                         <label class="form-label-sm">Type d'assignation</label>
-                        <select name="Steps[__IDX__].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this)">
+                        <select name="Steps[__IDX__].AssignmentType" class="form-select form-select-sm assign-select" onchange="toggleAssignFields(this); onStepTypeOrAssignChange(this)">
                             <option value="Employee">Employé</option>
                             <option value="Role">Rôle</option>
                             <option value="Department">Département</option>
@@ -624,16 +658,31 @@
             </div>
             <!-- T-S6: Planification / Visual Cron Builder -->
             <div class="field-section schedule-section d-none">
-                <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification de l'exécution</div>
-                <div class="cron-builder" data-cron="">
+                <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification / Initialisation</div>
+                <div class="init-schedule-panel mb-2 d-none">
+                    <div class="alert alert-light border mb-2 py-2 px-3" style="font-size:0.78rem;">
+                        <i class="bi bi-info-circle text-primary me-1"></i>
+                        Étape <strong>Initialisation</strong> automatique : choisissez la fréquence cron et si le démarrage manuel reste autorisé.
+                    </div>
+                    <label class="form-label-sm mb-1">Mode de déclenchement</label>
+                    <div class="d-flex flex-wrap gap-1 mb-2">
+                        <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="schedule" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'schedule')"><i class="bi bi-clock-history"></i> Planifié</button>
+                        <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="manual" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'manual')"><i class="bi bi-hand-index"></i> Manuel</button>
+                        <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
+                    </div>
+                    <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
+                    <input type="hidden" name="Steps[__IDX__].ActionConfigJson" class="action-config-input" value='{"initTrigger":"both","allowManualInit":true}' />
+                </div>
+                <div class="cron-builder cron-freq-panel" data-cron="">
                     <div class="mb-2">
                         <label class="form-label-sm mb-1">Fréquence</label>
                         <div class="d-flex flex-wrap gap-1">
-                            <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
-                            <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdomadaire</button>
                             <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
                             <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
                             <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
+                            <button type="button" class="cron-freq-btn" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
+                            <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
+                            <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
                         </div>
                     </div>
                     <div class="cron-options-weekly d-none mb-2">
@@ -662,7 +711,7 @@
                     </div>
                     <div class="cron-options-quarterly d-none mb-2">
                         <label class="form-label-sm mb-1">Mois d'exécution</label>
-                        <div class="d-flex flex-wrap gap-1">
+                        <div class="d-flex flex-wrap gap-1 mb-2">
                             <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
                             <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
                             <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
@@ -676,6 +725,10 @@
                             <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
                             <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
                         </div>
+                        <label class="form-label-sm">Jour</label>
+                        <select class="form-select form-select-sm cron-quarterly-day" style="max-width:120px;" onchange="buildCron(this.closest('.cron-builder'))">
+                            <option value="1">1</option><option value="5">5</option><option value="10">10</option><option value="15">15</option>
+                        </select>
                     </div>
                     <div class="cron-options-annually d-none mb-2">
                         <label class="form-label-sm mb-1">Mois et jour</label>
@@ -692,6 +745,20 @@
                                 <select class="form-select form-select-sm cron-annual-day" onchange="buildCron(this.closest('.cron-builder'))">
                                     <option value="1">1er</option><option value="5">5</option><option value="10">10</option>
                                     <option value="15">15</option><option value="20">20</option><option value="25">25</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cron-options-custom d-none mb-2">
+                        <label class="form-label-sm mb-1">Date personnalisée</label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input type="date" class="form-control form-control-sm cron-custom-date" onchange="buildCron(this.closest('.cron-builder'))" />
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select form-select-sm cron-custom-repeat" onchange="buildCron(this.closest('.cron-builder'))">
+                                    <option value="yearly">Répéter chaque année</option>
+                                    <option value="monthly">Répéter chaque mois (jour)</option>
                                 </select>
                             </div>
                         </div>
@@ -731,7 +798,7 @@
                     <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-signpost-split-fill"></i>Routage Avancé<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
                     <div class="row g-2 mt-1">
                         <div class="col-md-4"><label class="form-label-sm">Mode de routage</label><select name="Steps[__IDX__].RoutingMode" class="form-select form-select-sm"><option value="Sequential">Sequential</option><option value="ConditionalBranch">ConditionalBranch</option><option value="SkipToStep">SkipToStep</option><option value="EndWorkflow">EndWorkflow</option></select></div>
-                        <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[__IDX__].TriggerSource" class="form-select form-select-sm"><option value="Manual">Manual</option><option value="System">System</option><option value="Employee">Employee</option><option value="Client">Client</option><option value="Extranet">Extranet</option><option value="API">API</option><option value="Schedule">Schedule</option></select></div>
+                        <div class="col-md-4"><label class="form-label-sm">Déclencheur</label><select name="Steps[__IDX__].TriggerSource" class="form-select form-select-sm init-trigger-source"><option value="Manual">Manual</option><option value="System">System</option><option value="Employee">Employee</option><option value="Client">Client</option><option value="Extranet">Extranet</option><option value="API">API</option><option value="Schedule">Schedule</option></select></div>
                         <div class="col-md-4"><label class="form-label-sm">Aller à l'étape N°</label><input type="number" name="Steps[__IDX__].GotoStepOrder" class="form-control form-control-sm" placeholder="N° étape" min="0" /></div>
                     </div>
                 </details>
@@ -745,6 +812,7 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="~/js/workflow-cron.js" asp-append-version="true"></script>
 <style>
     .employee-multi + .select2-container { width: 100% !important; }
     .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
@@ -876,171 +944,18 @@
         }
     }
 
+    function onStepTypeOrAssignChange(el) {
+        const card = el.closest('.step-card');
+        if (card && window.WfCron) WfCron.syncInitScheduleVisibility(card);
+    }
+
     // === Toggle schedule section visibility ===
     function toggleSchedule(chk) {
         const section = chk.closest('.step-card').querySelector('.schedule-section');
         if (section) section.classList.toggle('d-none', !chk.checked);
     }
 
-    // === CRON BUILDER FUNCTIONS ===
-
-    const dayNames = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
-    const monthNames = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-
-    function setCronFreq(btn, freq) {
-        const builder = btn.closest('.cron-builder');
-        // Toggle active state on frequency buttons
-        builder.querySelectorAll('.cron-freq-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        builder.dataset.freq = freq;
-
-        // Show/hide option panels
-        builder.querySelector('.cron-options-weekly').classList.toggle('d-none', freq !== 'weekly');
-        builder.querySelector('.cron-options-monthly').classList.toggle('d-none', freq !== 'monthly');
-        builder.querySelector('.cron-options-quarterly').classList.toggle('d-none', freq !== 'quarterly');
-        builder.querySelector('.cron-options-annually').classList.toggle('d-none', freq !== 'annually');
-
-        buildCron(builder);
-    }
-
-    function toggleCronDay(btn) {
-        btn.classList.toggle('active');
-        buildCron(btn.closest('.cron-builder'));
-    }
-
-    function toggleCronDom(btn) {
-        btn.classList.toggle('active');
-        buildCron(btn.closest('.cron-builder'));
-    }
-
-    function toggleCronMonth(btn) {
-        btn.classList.toggle('active');
-        buildCron(btn.closest('.cron-builder'));
-    }
-
-    function buildCron(builder) {
-        const freq = builder.dataset.freq;
-        if (!freq) { hideCronPreview(builder); return; }
-
-        const timeInput = builder.querySelector('.cron-time');
-        const [h, m] = (timeInput.value || '08:00').split(':').map(Number);
-        let cron = '', desc = '';
-
-        if (freq === 'daily') {
-            cron = m + ' ' + h + ' * * *';
-            desc = 'Tous les jours à ' + pad(h) + ':' + pad(m);
-        }
-        else if (freq === 'weekly') {
-            const days = [...builder.querySelectorAll('.cron-options-weekly .cron-day-btn.active')].map(b => b.dataset.dow);
-            if (days.length === 0) { hideCronPreview(builder); return; }
-            cron = m + ' ' + h + ' * * ' + days.join(',');
-            const dayLabels = days.map(d => dayNames[parseInt(d)]).join(', ');
-            desc = 'Chaque ' + dayLabels + ' à ' + pad(h) + ':' + pad(m);
-        }
-        else if (freq === 'monthly') {
-            const doms = [...builder.querySelectorAll('.cron-options-monthly .cron-day-btn.active')].map(b => b.dataset.dom);
-            if (doms.length === 0) { hideCronPreview(builder); return; }
-            cron = m + ' ' + h + ' ' + doms.join(',') + ' * *';
-            desc = 'Le ' + doms.join(', ') + ' de chaque mois à ' + pad(h) + ':' + pad(m);
-        }
-        else if (freq === 'quarterly') {
-            const months = [...builder.querySelectorAll('.cron-options-quarterly .cron-month-btn.active')].map(b => b.dataset.m);
-            if (months.length === 0) { hideCronPreview(builder); return; }
-            cron = m + ' ' + h + ' 1 ' + months.join(',') + ' *';
-            const mLabels = months.map(mm => monthNames[parseInt(mm)]).join(', ');
-            desc = 'Le 1er de ' + mLabels + ' à ' + pad(h) + ':' + pad(m);
-        }
-        else if (freq === 'annually') {
-            const monthSel = builder.querySelector('.cron-annual-month');
-            const daySel = builder.querySelector('.cron-annual-day');
-            const mm = monthSel ? monthSel.value : '1';
-            const dd = daySel ? daySel.value : '1';
-            cron = m + ' ' + h + ' ' + dd + ' ' + mm + ' *';
-            desc = 'Le ' + dd + ' ' + monthNames[parseInt(mm)] + ' à ' + pad(h) + ':' + pad(m);
-        }
-
-        // Update hidden inputs
-        const section = builder.closest('.schedule-section');
-        if (section) {
-            const cronInput = section.querySelector('.cron-input');
-            const descInput = section.querySelector('.cron-desc-input');
-            if (cronInput) cronInput.value = cron;
-            if (descInput) descInput.value = desc;
-        }
-
-        // Show preview
-        const preview = builder.querySelector('.cron-preview');
-        if (preview) {
-            preview.classList.remove('d-none');
-            preview.querySelector('.cron-preview-text').textContent = desc;
-            preview.querySelector('.cron-preview-cron').textContent = cron;
-        }
-    }
-
-    function hideCronPreview(builder) {
-        const preview = builder.querySelector('.cron-preview');
-        if (preview) preview.classList.add('d-none');
-    }
-
-    function pad(n) { return String(n).padStart(2, '0'); }
-
-    // === Parse existing cron expression back to UI ===
-    function parseCronToUI(builder) {
-        const cronStr = builder.dataset.cron;
-        if (!cronStr || !cronStr.trim()) return;
-
-        const parts = cronStr.trim().split(/\s+/);
-        if (parts.length < 5) return;
-
-        const [mm, hh, dom, mon, dow] = parts;
-        const timeInput = builder.querySelector('.cron-time');
-        if (timeInput) timeInput.value = pad(parseInt(hh)) + ':' + pad(parseInt(mm));
-
-        // Determine frequency from pattern
-        if (dow !== '*') {
-            // Weekly
-            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="weekly"]');
-            if (freqBtn) setCronFreq(freqBtn, 'weekly');
-            dow.split(',').forEach(d => {
-                const btn = builder.querySelector('.cron-day-btn[data-dow="' + d + '"]');
-                if (btn) btn.classList.add('active');
-            });
-        } else if (mon !== '*') {
-            const months = mon.split(',');
-            if (months.length <= 4) {
-                // Quarterly
-                const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="quarterly"]');
-                if (freqBtn) setCronFreq(freqBtn, 'quarterly');
-                builder.querySelectorAll('.cron-options-quarterly .cron-month-btn').forEach(b => b.classList.remove('active'));
-                months.forEach(m => {
-                    const btn = builder.querySelector('.cron-month-btn[data-m="' + m + '"]');
-                    if (btn) btn.classList.add('active');
-                });
-            } else {
-                // Annually
-                const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="annually"]');
-                if (freqBtn) setCronFreq(freqBtn, 'annually');
-                const mSel = builder.querySelector('.cron-annual-month');
-                const dSel = builder.querySelector('.cron-annual-day');
-                if (mSel) mSel.value = months[0];
-                if (dSel) dSel.value = dom;
-            }
-        } else if (dom !== '*') {
-            // Monthly
-            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="monthly"]');
-            if (freqBtn) setCronFreq(freqBtn, 'monthly');
-            dom.split(',').forEach(d => {
-                const btn = builder.querySelector('.cron-day-btn[data-dom="' + d + '"]');
-                if (btn) btn.classList.add('active');
-            });
-        } else {
-            // Daily
-            const freqBtn = builder.querySelector('.cron-freq-btn[data-freq="daily"]');
-            if (freqBtn) setCronFreq(freqBtn, 'daily');
-        }
-
-        buildCron(builder);
-    }
+    // Cron helpers are provided by ~/js/workflow-cron.js (global setCronFreq, buildCron, …)
 
     // === INIT on page load ===
     document.addEventListener('DOMContentLoaded', function() {
@@ -1055,10 +970,25 @@
         });
         initEmployeeSelect2(document.getElementById('stepsContainer'));
 
-        // Parse existing cron expressions
+        // Parse existing cron expressions + Init AutoSystem panels
         document.querySelectorAll('.cron-builder').forEach(builder => {
-            parseCronToUI(builder);
+            if (window.WfCron) WfCron.parseCronToUI(builder);
         });
+        document.querySelectorAll('#stepsContainer .step-card').forEach(card => {
+            if (window.WfCron) WfCron.syncInitScheduleVisibility(card);
+        });
+
+        const builderForm = document.getElementById('builderForm');
+        if (builderForm) {
+            builderForm.addEventListener('submit', function (e) {
+                if (!window.WfCron) return;
+                const err = WfCron.validateInitSteps(document.getElementById('stepsContainer'));
+                if (err) {
+                    e.preventDefault();
+                    alert(err);
+                }
+            });
+        }
     });
 </script>
 }

@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Modifier CNSS";
     var declaration = ViewBag.Declaration as DeclarationDto;
+    var roster = ViewBag.CnssRoster as CnssEmployeeRosterDto;
 }
 
 
@@ -13,7 +14,7 @@
     <div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
-                <li class="breadcrumb-item"><a href="/Declarations?type=CNSS">CNSS</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("CNSS", "Declarations")">CNSS</a></li>
                 @if (declaration != null)
                 {
                     <li class="breadcrumb-item"><a href="/Declarations/Details/@declaration.Id">Détails</a></li>
@@ -24,29 +25,220 @@
         <h4 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Déclaration CNSS (DMS) — @(declaration?.Periode ?? "")</h4>
         @if (declaration != null)
         {
-            <p class="text-muted mb-0 mt-1">Client : <strong>@declaration.ClientName</strong> | Employés : <strong>@Model.NombreEmployes</strong></p>
+            <p class="text-muted mb-0 mt-1">Client : <strong>@declaration.ClientName</strong> | Employés période : <strong>@(roster?.PresentCount ?? Model.NombreEmployes)</strong></p>
         }
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         <form asp-action="CalculateCNSS" asp-route-id="@Model.DeclarationId" method="post" class="d-inline">
             @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-info rounded-pill px-3" title="Recalcule automatiquement à partir des employés du client">
+            <button type="submit" class="btn btn-info rounded-pill px-3" title="Recalcule depuis les employés du client (période)">
                 <i class="bi bi-arrow-clockwise me-1"></i> Auto-Calculer depuis Employés
             </button>
         </form>
+        <a asp-action="ExportCnssDns" asp-route-id="@Model.DeclarationId" class="btn btn-outline-warning rounded-pill px-3" title="Export CSV type DNS / eBDS">
+            <i class="bi bi-download me-1"></i> Export DNS CSV
+        </a>
         <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
+    </div>
+</div>
+
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning rounded-3">@TempData["Warning"]</div>
+}
+
+@* ── Personnel du CLIENT (pas du cabinet) ── *@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-success me-2"></i>Personnel du client</h6>
+            <small class="text-muted">Salariés de l'entreprise cliente uniquement — jamais les collaborateurs du cabinet</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="CnssEmployeesTemplate" asp-route-id="@Model.DeclarationId" class="btn btn-sm btn-outline-secondary rounded-pill">
+                <i class="bi bi-file-earmark-arrow-down me-1"></i> Modèle CSV
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" id="btnToggleCsvImport">
+                <i class="bi bi-upload me-1"></i> Importer CSV
+            </button>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill" id="btnOpenCreateEmployee">
+                <i class="bi bi-person-plus me-1"></i> Ajouter un salarié
+            </button>
+        </div>
+    </div>
+    <div class="card-body px-4 pb-4">
+        <div class="alert alert-light border rounded-3 mb-3 py-2" style="font-size:0.85rem;">
+            <i class="bi bi-info-circle text-primary me-1"></i>
+            <strong>Entrants</strong> = embauchés dans la période ·
+            <strong>Sortants</strong> = sortis dans la période ·
+            <strong>Présents</strong> = actifs sur la période (DNS / Damancom)
+            @if (roster != null)
+            {
+                <span class="ms-1">(@roster.DateDebut.ToString("dd/MM/yyyy") → @roster.DateFin.ToString("dd/MM/yyyy"))</span>
+            }
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap mb-3">
+            <span class="badge rounded-pill text-bg-primary px-3 py-2">Présents : @(roster?.PresentCount ?? 0)</span>
+            <span class="badge rounded-pill text-bg-success px-3 py-2">Entrants : @(roster?.EntrantCount ?? 0)</span>
+            <span class="badge rounded-pill text-bg-danger px-3 py-2">Sortants : @(roster?.SortantCount ?? 0)</span>
+        </div>
+
+        <div class="cnss-emp-scroll">
+            <table class="table table-hover cnss-emp-table" id="cnssEmployeesTable">
+                <colgroup>
+                    <col class="cnss-col-mov" />
+                    <col class="cnss-col-emp" />
+                    <col class="cnss-col-dates" />
+                    <col class="cnss-col-jours" />
+                    <col class="cnss-col-salary" />
+                    <col class="cnss-col-actions" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Mvt</th>
+                        <th>Salarié</th>
+                        <th>Dates</th>
+                        <th class="text-center">Jours</th>
+                        <th class="text-end">Salaire</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (roster?.Employees == null || roster.Employees.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            Aucun salarié du client pour cette période. Ajoutez manuellement ou importez un CSV.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var e in roster.Employees)
+                    {
+                        var badge = e.IsEntrant && e.IsSortant ? "text-bg-warning"
+                            : e.IsEntrant ? "text-bg-success"
+                            : e.IsSortant ? "text-bg-danger"
+                            : "text-bg-primary";
+                        var mvtShort = e.IsEntrant && e.IsSortant ? "E+S"
+                            : e.IsEntrant ? "E"
+                            : e.IsSortant ? "S"
+                            : "P";
+                        <tr data-employee-id="@e.EmployeeId"
+                            data-cin="@e.CIN"
+                            data-nom="@e.Nom"
+                            data-prenom="@e.Prenom"
+                            data-cnss="@(e.NumeroCNSS ?? "")"
+                            data-matricule="@(e.MatriculeEmployeur ?? "")"
+                            data-sexe="@(e.Sexe ?? "")"
+                            data-embauche="@e.DateEmbauche.ToString("yyyy-MM-dd")"
+                            data-sortie="@(e.DateSortie?.ToString("yyyy-MM-dd") ?? "")"
+                            data-motif="@(e.MotifSortie ?? "")"
+                            data-salaire="@e.SalaireBrut.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            title="@e.Movement — @e.Prenom @e.Nom">
+                            <td><span class="badge @badge" title="@e.Movement">@mvtShort</span></td>
+                            <td>
+                                <div class="cnss-emp-name">@e.Prenom @e.Nom</div>
+                                <div class="cnss-emp-meta">
+                                    @(string.IsNullOrWhiteSpace(e.MatriculeEmployeur) ? "—" : e.MatriculeEmployeur)
+                                    · @e.CIN
+                                    · @(string.IsNullOrWhiteSpace(e.NumeroCNSS) ? "—" : e.NumeroCNSS)
+                                </div>
+                            </td>
+                            <td class="cnss-emp-dates">
+                                <div>@e.DateEmbauche.ToString("dd/MM/yy")</div>
+                                <div class="text-muted">
+                                    @(e.DateSortie.HasValue ? e.DateSortie.Value.ToString("dd/MM/yy") : "—")
+                                    @if (!string.IsNullOrEmpty(e.MotifSortie))
+                                    {
+                                        <span title="@e.MotifSortie">· @e.MotifSortie</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-center cnss-emp-jours">@e.JoursTravailles</td>
+                            <td class="text-end cnss-emp-salary fw-semibold">@e.SalaireBrut.ToString("N2")</td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary btn-edit-cnss-emp py-0 px-1" title="Modifier">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @* Inline create/edit form — opens under the table *@
+        <div id="cnssEmployeeFormPanel" class="border rounded-3 p-3 mt-3 bg-light" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0" id="cnssEmployeeFormTitle">Ajouter un salarié du client</h6>
+                <button type="button" class="btn btn-sm btn-link text-muted" id="btnCancelEmployeeForm">Fermer</button>
+            </div>
+            <p class="small text-muted mb-3">Employé de <strong>@(declaration?.ClientName ?? "le client")</strong> — pas du cabinet.</p>
+            <form asp-action="AddCnssEmployee" asp-route-id="@Model.DeclarationId" method="post" id="cnssEmployeeForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="EmployeeId" id="empEmployeeId" value="" />
+                <div class="row g-3">
+                    <div class="col-md-4"><label class="form-label">CIN *</label><input name="CIN" id="empCIN" class="form-control" required /></div>
+                    <div class="col-md-4"><label class="form-label">Nom *</label><input name="Nom" id="empNom" class="form-control" required /></div>
+                    <div class="col-md-4"><label class="form-label">Prénom *</label><input name="Prenom" id="empPrenom" class="form-control" required /></div>
+                    <div class="col-md-4"><label class="form-label">N° CNSS</label><input name="NumeroCNSS" id="empCNSS" class="form-control" /></div>
+                    <div class="col-md-4"><label class="form-label">Matricule</label><input name="MatriculeEmployeur" id="empMatricule" class="form-control" /></div>
+                    <div class="col-md-4"><label class="form-label">Sexe</label>
+                        <select name="Sexe" id="empSexe" class="form-select"><option value="">—</option><option value="M">M</option><option value="F">F</option></select>
+                    </div>
+                    <div class="col-md-4"><label class="form-label">Date embauche *</label><input type="date" name="DateEmbauche" id="empEmbauche" class="form-control" required value="@(roster?.DateDebut.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" /></div>
+                    <div class="col-md-4"><label class="form-label">Date sortie</label><input type="date" name="DateSortie" id="empSortie" class="form-control" /></div>
+                    <div class="col-md-4"><label class="form-label">Motif sortie</label>
+                        <select name="MotifSortie" id="empMotif" class="form-select">
+                            <option value="">—</option>
+                            <option>Démission</option><option>Licenciement</option><option>Fin de CDD</option><option>Retraite</option><option>Décès</option><option>Autre</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4"><label class="form-label">Salaire de base</label><input type="number" step="0.01" min="0" name="SalaireBase" id="empSalaire" class="form-control" value="0" /></div>
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-secondary" id="btnCancelEmployeeForm2">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitEmployeeForm">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+
+        @* Inline CSV import *@
+        <div id="cnssCsvImportPanel" class="border rounded-3 p-3 mt-3" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0">Importer salariés (CSV)</h6>
+                <button type="button" class="btn btn-sm btn-link text-muted" id="btnCancelCsvImport">Fermer</button>
+            </div>
+            <p class="small text-muted mb-2">
+                Format : <code>Matricule;CIN;CNSS;Nom;Prenom;DateEmbauche;DateSortie;MotifSortie;JoursTravailles;SalaireBrut;Sexe</code>
+                — upsert par N° CNSS puis CIN, pour ce client uniquement.
+            </p>
+            <form asp-action="ImportCnssEmployees" asp-route-id="@Model.DeclarationId" method="post" enctype="multipart/form-data" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-8">
+                    <input type="file" name="fichierCSV" accept=".csv,text/csv" class="form-control" required />
+                </div>
+                <div class="col-md-4 text-end">
+                    <button type="submit" class="btn btn-primary">Importer</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
 <form asp-action="EditCNSS" asp-route-id="@Model.DeclarationId" method="post">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="DeclarationId" />
+    <input type="hidden" asp-for="DetailEmployesJson" />
 
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm rounded-4 mb-3">
                 <div class="card-header bg-transparent border-0 px-4 pt-3">
-                    <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-primary me-2"></i>Masse Salariale</h6>
+                    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack text-primary me-2"></i>Masse Salariale</h6>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -60,7 +252,7 @@
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm rounded-4 mb-3">
                 <div class="card-header bg-transparent border-0 px-4 pt-3">
-                    <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack text-success me-2"></i>Cotisations</h6>
+                    <h6 class="fw-bold mb-0"><i class="bi bi-percent text-success me-2"></i>Cotisations</h6>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -91,7 +283,7 @@
 
     <div class="alert alert-warning rounded-3 mb-3" style="font-size:0.85rem;">
         <i class="bi bi-lightbulb me-1"></i>
-        <strong>Astuce :</strong> Saisissez le <em>Total Salaires Bruts</em> pour auto-calculer toutes les cotisations, ou modifiez chaque cotisation manuellement.
+        <strong>Astuce :</strong> Gérez d'abord le personnel (entrants/sortants), puis cliquez <em>Auto-Calculer depuis Employés</em>, ou saisissez le total bruts manuellement.
     </div>
 
     <div class="d-flex justify-content-end gap-2">
@@ -127,5 +319,77 @@
 
     document.getElementById("TotalSalairesBruts").addEventListener("input", calcFromBruts);
     document.querySelectorAll(".cnss-cot").forEach(function(el) { el.addEventListener("input", updateTotal); });
+
+    (function () {
+        var panel = document.getElementById("cnssEmployeeFormPanel");
+        var csvPanel = document.getElementById("cnssCsvImportPanel");
+        var defaultEmbauche = "@(roster?.DateDebut.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))";
+
+        function hidePanels() {
+            panel.style.display = "none";
+            csvPanel.style.display = "none";
+        }
+
+        function resetEmployeeForm() {
+            document.getElementById("empEmployeeId").value = "";
+            document.getElementById("empCIN").value = "";
+            document.getElementById("empNom").value = "";
+            document.getElementById("empPrenom").value = "";
+            document.getElementById("empCNSS").value = "";
+            document.getElementById("empMatricule").value = "";
+            document.getElementById("empSexe").value = "";
+            document.getElementById("empEmbauche").value = defaultEmbauche;
+            document.getElementById("empSortie").value = "";
+            document.getElementById("empMotif").value = "";
+            document.getElementById("empSalaire").value = "0";
+            document.getElementById("cnssEmployeeFormTitle").textContent = "Ajouter un salarié du client";
+            document.getElementById("btnSubmitEmployeeForm").textContent = "Enregistrer";
+        }
+
+        function openCreate() {
+            csvPanel.style.display = "none";
+            resetEmployeeForm();
+            panel.style.display = "block";
+            panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            document.getElementById("empCIN").focus();
+        }
+
+        function openEdit(tr) {
+            csvPanel.style.display = "none";
+            document.getElementById("empEmployeeId").value = tr.getAttribute("data-employee-id") || "";
+            document.getElementById("empCIN").value = tr.getAttribute("data-cin") || "";
+            document.getElementById("empNom").value = tr.getAttribute("data-nom") || "";
+            document.getElementById("empPrenom").value = tr.getAttribute("data-prenom") || "";
+            document.getElementById("empCNSS").value = tr.getAttribute("data-cnss") || "";
+            document.getElementById("empMatricule").value = tr.getAttribute("data-matricule") || "";
+            document.getElementById("empSexe").value = tr.getAttribute("data-sexe") || "";
+            document.getElementById("empEmbauche").value = tr.getAttribute("data-embauche") || defaultEmbauche;
+            document.getElementById("empSortie").value = tr.getAttribute("data-sortie") || "";
+            document.getElementById("empMotif").value = tr.getAttribute("data-motif") || "";
+            document.getElementById("empSalaire").value = tr.getAttribute("data-salaire") || "0";
+            document.getElementById("cnssEmployeeFormTitle").textContent = "Modifier le salarié du client";
+            document.getElementById("btnSubmitEmployeeForm").textContent = "Mettre à jour";
+            panel.style.display = "block";
+            panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            document.getElementById("empCIN").focus();
+        }
+
+        document.getElementById("btnOpenCreateEmployee").addEventListener("click", openCreate);
+        document.getElementById("btnCancelEmployeeForm").addEventListener("click", hidePanels);
+        document.getElementById("btnCancelEmployeeForm2").addEventListener("click", hidePanels);
+        document.getElementById("btnToggleCsvImport").addEventListener("click", function () {
+            panel.style.display = "none";
+            csvPanel.style.display = csvPanel.style.display === "none" ? "block" : "none";
+            if (csvPanel.style.display === "block")
+                csvPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+        document.getElementById("btnCancelCsvImport").addEventListener("click", hidePanels);
+
+        document.querySelectorAll(".btn-edit-cnss-emp").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                openEdit(btn.closest("tr"));
+            });
+        });
+    })();
 </script>
 }

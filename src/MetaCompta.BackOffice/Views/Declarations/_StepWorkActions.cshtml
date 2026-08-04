@@ -175,13 +175,7 @@
 
     @if (canEdit)
     {
-        var editAction = type switch {
-            "TVA"  => "EditTVA",
-            "IS"   => "EditIS",
-            "IR"   => "EditIR",
-            "CNSS" => "EditCNSS",
-            _      => "Details"
-        };
+        var editAction = DeclarationServiceCatalog.GetEditAction(type);
         <a href="@Url.Action(editAction, "Declarations", new { id = declId })" class="wf-btn wf-btn-edit" title="Modifier / saisie">
             <i class="bi bi-pencil-square"></i> <span>@(type == "TVA" && (statut == RefCodes.StatutDeclaration.CalculTVA || stepType == "Saisie") ? "Saisie / Calcul TVA" : "Modifier")</span>
         </a>

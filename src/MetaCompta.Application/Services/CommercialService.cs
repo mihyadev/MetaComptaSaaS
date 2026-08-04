@@ -2265,8 +2265,8 @@ public class CommercialService : ICommercialService
                 sc.DelaiDeclarationMois = 1;
                 break;
             case "DTS":
-                sc.JourLimiteDeclaration = 28; // End of February
-                sc.DelaiDeclarationMois = 2;
+                sc.JourLimiteDeclaration = 31; // 31 March N+1 (align ResolvePeriod)
+                sc.DelaiDeclarationMois = 3;
                 break;
             case "ACOMPTES":
                 sc.JourLimiteDeclaration = 31; // Mar/Jun/Sep/Dec

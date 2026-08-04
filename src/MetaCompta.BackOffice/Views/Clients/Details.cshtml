@@ -1,4 +1,5 @@
 @using MetaCompta.Application.DTOs
+@using MetaCompta.Domain.Common
 @model ClientDto
 @{
     ViewData["Title"] = "Details Client - " + Model.RaisonSociale;
@@ -12,6 +13,14 @@
     var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new();
     var wfInstances = ViewBag.WorkflowInstances as List<WorkflowInstanceDto> ?? new();
     var wfPendingSteps = ViewBag.WorkflowPendingSteps as List<WorkflowStepInstanceDto> ?? new();
+    var wfConfigs = ViewBag.WorkflowConfigs as List<ClientWorkflowConfigDto> ?? new();
+    var activeTemplates = wfTemplates.Where(t => t.IsActive).OrderBy(t => t.DeclarationType).ThenBy(t => t.Name).ToList();
+    var cabinetTemplates = activeTemplates.Where(t => t.ClientId == null).ToList();
+    var canWfConfigure = ViewBag.CanWorkflowConfigure as bool? ?? false;
+    var cabinetEmployees = ViewBag.CabinetEmployees as List<CabinetEmployeeDto> ?? new();
+    var wfInProgress = wfInstances.Count(i => string.Equals(i.Status, "InProgress", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(i.Status, "Active", StringComparison.OrdinalIgnoreCase));
+    var wfCompleted = wfInstances.Count(i => string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase));
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -330,10 +339,10 @@
         </div>
     </div>
 
-    <!-- ??????????? WORKFLOW ??????????? -->
+    <!-- ═══════════ WORKFLOW ═══════════ -->
     <div class="tab-pane fade" id="tabWorkflow">
 
-        <!-- Row 1: Quick summary cards -->
+        <!-- Summary cards -->
         <div class="row g-3 mb-3">
             <div class="col-md-4">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
@@ -346,8 +355,7 @@
             <div class="col-md-4">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body text-center py-3">
-                        <div style="font-size:1.6rem; font-weight:800; color:#059669;">@wfInstances.Count(i => i.Status
-                                                        == "InProgress")</div>
+                        <div style="font-size:1.6rem; font-weight:800; color:#059669;">@wfInProgress</div>
                         <div class="text-muted" style="font-size:0.78rem;">En cours</div>
                     </div>
                 </div>
@@ -355,80 +363,413 @@
             <div class="col-md-4">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body text-center py-3">
-                        <div style="font-size:1.6rem; font-weight:800; color:#d97706;">@wfPendingSteps.Count</div>
-                        <div class="text-muted" style="font-size:0.78rem;">&#201;tapes en attente</div>
+                        <div style="font-size:1.6rem; font-weight:800; color:#2563eb;">@wfCompleted</div>
+                        <div class="text-muted" style="font-size:0.78rem;">Terminés</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Row 2: Start Workflow -->
+        <!-- Styles Personnaliser (Builder) -->
+        <style>
+            #wfCustomizePanel .builder-card { border: 0; border-radius: 16px; box-shadow: var(--monday-shadow); }
+            #wfCustomizePanel .step-card { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; margin-bottom: 1rem; position: relative; overflow: hidden; }
+            #wfCustomizePanel .step-card.collapsed-step .step-body { display: none; }
+            #wfCustomizePanel .step-card.collapsed-step .step-header { border-bottom: 0; }
+            #wfCustomizePanel .step-card.collapsed-step .chevron-icon { transform: rotate(-90deg); }
+            #wfCustomizePanel .step-num { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.82rem; color: #fff; background: var(--monday-blue); flex-shrink: 0; }
+            #wfCustomizePanel .step-header { display: flex; align-items: center; gap: 0.7rem; cursor: pointer; padding: 0.9rem 1.1rem; background: var(--monday-bg); border-bottom: 1px solid var(--monday-border); }
+            #wfCustomizePanel .step-header h6 { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--monday-text); }
+            #wfCustomizePanel .step-type-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); color: var(--monday-blue); border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .assign-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-green) 12%, var(--monday-surface)); color: var(--monday-green); font-weight: 600; border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .sla-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-orange) 12%, var(--monday-surface)); color: var(--monday-orange); font-weight: 600; border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .chevron-icon { transition: transform .25s ease; font-size: 0.9rem; color: var(--monday-muted); }
+            #wfCustomizePanel .step-body { padding: 1.1rem; background: var(--monday-surface); }
+            #wfCustomizePanel .field-section { background: var(--monday-bg); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.65rem; }
+            #wfCustomizePanel .field-section-title { font-size: 0.72rem; font-weight: 800; color: var(--monday-blue); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.55rem; display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--monday-border); }
+            #wfCustomizePanel .form-label-sm { font-size: 0.74rem; font-weight: 600; color: var(--monday-muted); margin-bottom: 0.2rem; display: block; }
+            #wfCustomizePanel .tpl-mini { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.8rem; border: 1px solid var(--monday-border); border-radius: 12px; margin-bottom: 0.45rem; cursor: pointer; font-size: 0.8rem; text-decoration: none; background: var(--monday-surface); color: inherit; width: 100%; text-align: left; }
+            #wfCustomizePanel .tpl-mini.active { background: color-mix(in srgb, var(--monday-blue) 8%, var(--monday-surface)); border-color: var(--monday-blue); }
+            #wfCustomizePanel .tpl-mini .tpl-type { font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+            #wfCustomizePanel .chk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.45rem; }
+            #wfCustomizePanel .chk-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.65rem; background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 10px; font-size: 0.74rem; font-weight: 600; color: var(--monday-text); cursor: pointer; }
+            #wfCustomizePanel .chk-item input:checked ~ span { color: var(--monday-blue); font-weight: 700; }
+            #wfCustomizePanel .chk-item .form-check-input { width: 1rem; height: 1rem; margin: 0; }
+            #wfCustomizePanel .section-title { font-size: 0.8rem; font-weight: 800; color: var(--monday-text); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.6rem; }
+            #wfCustomizePanel .section-title i { font-size: 0.9rem; color: var(--monday-blue); }
+            #wfCustomizePanel .btn-add-step { border: 2px dashed var(--monday-border); border-radius: 14px; padding: 1rem; text-align: center; color: var(--monday-blue); font-weight: 700; font-size: 0.85rem; background: transparent; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+            #wfCustomizePanel .btn-delete-step { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--monday-border); background: var(--monday-surface); color: var(--monday-red); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; }
+            #wfCustomizePanel .client-copy-banner { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.65rem 0.9rem; font-size: 0.78rem; font-weight: 600; color: var(--monday-text); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+            #wfCustomizePanel .cron-freq-btn, #wfCustomizePanel .cron-day-btn, #wfCustomizePanel .cron-month-btn { border: 1px solid var(--monday-border); border-radius: 10px; cursor: pointer; font-size: 0.76rem; font-weight: 600; color: var(--monday-text); background: var(--monday-surface); padding: 0.35rem 0.65rem; }
+            #wfCustomizePanel .cron-freq-btn.active, #wfCustomizePanel .cron-day-btn.active, #wfCustomizePanel .cron-month-btn.active { background: var(--monday-blue); color: #fff; border-color: var(--monday-blue); }
+            #wfCustomizePanel .cron-preview { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+            #wfCustomizePanel .cron-preview-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--monday-green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+            #wfCustomizePanel .cron-preview-text { font-size: 0.78rem; font-weight: 600; color: var(--monday-text); }
+            #wfCustomizePanel .cron-preview-cron { font-size: 0.68rem; color: var(--monday-muted); font-family: monospace; }
+        </style>
+
+        <!-- 1) Affectation / personnaliser (FORM FIRST) -->
+        @if (canWfConfigure)
+        {
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-0" id="wfAffectFormTitle"><i class="bi bi-plus-circle text-success me-2"></i>Affecter / personnaliser un workflow</h6>
+                            <p class="text-muted mb-0" style="font-size:0.78rem;">Associez un modèle cabinet — une copie est créée pour ce client.</p>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary rounded-pill px-3 btn-wf-customize"
+                                data-type="All"
+                                data-type-label="Tous types"
+                                data-template=""
+                                data-sla="1.0"
+                                data-valclient="true"
+                                data-docs="true"
+                                data-auto="true"
+                                data-active="true"
+                                data-assignee="">
+                            <i class="bi bi-sliders me-1"></i>Ouvrir le Personnaliser
+                        </button>
+                    </div>
+                    <form asp-action="SaveWorkflowAffectation" method="post" id="clientWfAffectForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ClientId" value="@Model.Id" />
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Type de déclaration</label>
+                                <select name="DeclarationType" id="wfAffectType" class="form-select">
+                                    <option value="All">Tous types</option>
+                                    @foreach (var e in DeclarationServiceCatalog.All)
+                                    {
+                                        <option value="@e.DeclarationType">@e.DisplayName (@e.DeclarationType)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Modèle de workflow (cabinet)</label>
+                                <select name="WorkflowTemplateId" id="wfAffectTemplate" class="form-select">
+                                    <option value="" data-type="">— Choisir un modèle —</option>
+                                    @foreach (var t in cabinetTemplates)
+                                    {
+                                        <option value="@t.Id" data-type="@(t.DeclarationType ?? "")">@t.Name (@(t.DeclarationType ?? "?"))</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Responsable principal</label>
+                                <select name="PrimaryAssigneeUserId" id="wfAffectAssignee" class="form-select">
+                                    <option value="">— Non défini —</option>
+                                    @foreach (var emp in cabinetEmployees)
+                                    {
+                                        <option value="@emp.Id">@emp.FullName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Multiplicateur SLA</label>
+                                <input name="SLAMultiplier" id="wfAffectSla" type="number" step="0.1" min="0.1" max="5" class="form-control" value="1.0" />
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="ClientValidationEnabled" type="checkbox" class="form-check-input" value="true" checked id="wfValClient" />
+                                    <label class="form-check-label" for="wfValClient">Valid. client</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="DocumentRequestEnabled" type="checkbox" class="form-check-input" value="true" checked id="wfDocs" />
+                                    <label class="form-check-label" for="wfDocs">Docs</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" checked id="wfAuto" />
+                                    <label class="form-check-label" for="wfAuto">Auto-start</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="IsActive" type="checkbox" class="form-check-input" value="true" checked id="wfActive" />
+                                    <label class="form-check-label" for="wfActive">Actif</label>
+                                </div>
+                            </div>
+                            <div class="col-md-12 d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfAffectReset" style="display:none;">
+                                    Nouvelle affectation
+                                </button>
+                                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                    <i class="bi bi-check-lg me-1"></i>Affecter au client
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <!-- Personnaliser panel (hidden until click) -->
+        <div id="wfCustomizePanel" style="display:none;" class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h4 class="fw-bold mb-0"><i class="bi bi-kanban-fill text-primary me-2"></i>Personnaliser le workflow</h4>
+                    <p class="text-muted mb-0" style="font-size:0.82rem;" id="wfCustomizeSubtitle">Une copie est créée pour ce client — modifiez les étapes librement.</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="#" id="wfCustOpenBuilder" class="btn btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener">
+                        <i class="bi bi-tools me-1"></i>Ouvrir dans le Builder
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfCustomizeClose">
+                        <i class="bi bi-x-lg me-1"></i>Fermer
+                    </button>
+                </div>
+            </div>
+
+            <form asp-action="SaveClientWorkflowCustomization" method="post" id="wfCustomizeForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ClientId" value="@Model.Id" />
+                <input type="hidden" name="DeclarationType" id="wfCustType" />
+                <input type="hidden" name="SourceTemplateId" id="wfCustSourceTemplateId" value="" />
+                <input type="hidden" name="WorkflowTemplateId" id="wfCustTemplateId" value="" />
+
+                <div class="row g-3">
+                    <div class="col-lg-3">
+                        <div class="card builder-card">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1" style="font-size:0.82rem;"><i class="bi bi-collection text-primary me-1"></i>Modèles cabinet</h6>
+                                <p class="text-muted mb-3" style="font-size:0.72rem;">Choisir un modèle crée / ouvre la copie de ce client.</p>
+                                <div id="wfCustTplList">
+                                    @{
+                                        var typeColorsCust = new Dictionary<string, (string bg, string fg)> {
+                                            ["TVA"] = ("#dbeafe", "#2563eb"),
+                                            ["IS"] = ("#fce7f3", "#be185d"),
+                                            ["IR"] = ("#ede9fe", "#7c3aed"),
+                                            ["CNSS"] = ("#d1fae5", "#059669"),
+                                            ["Paie"] = ("#fef3c7", "#d97706"),
+                                            ["Juridique"] = ("#fee2e2", "#dc2626"),
+                                            ["Comptabilite"] = ("#e0f2fe", "#0284c7"),
+                                            ["IR_SALAIRES"] = ("#f5f3ff", "#6d28d9"),
+                                            ["All"] = ("#f1f5f9", "#475569")
+                                        };
+                                    }
+                                    @foreach (var t in cabinetTemplates)
+                                    {
+                                        var tc = typeColorsCust.ContainsKey(t.DeclarationType ?? "") ? typeColorsCust[t.DeclarationType!] : typeColorsCust["All"];
+                                        <button type="button" class="tpl-mini wf-cust-tpl"
+                                                data-id="@t.Id"
+                                                data-type="@(t.DeclarationType ?? "")"
+                                                data-name="@t.Name"
+                                                data-steps="@t.StepCount">
+                                            <span class="tpl-type" style="background:@tc.bg; color:@tc.fg;">@(t.DeclarationType ?? "All")</span>
+                                            <span class="fw-semibold text-dark" style="font-size:0.78rem;">@t.Name</span>
+                                            <span class="ms-auto text-muted" style="font-size:0.65rem;">@t.StepCount ét.</span>
+                                        </button>
+                                    }
+                                </div>
+                                @if (!cabinetTemplates.Any())
+                                {
+                                    <div class="text-center text-muted py-3" style="font-size:0.8rem;"><i class="bi bi-inbox d-block mb-1" style="font-size:1.3rem;"></i>Aucun modèle</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-9">
+                        <div id="wfCustCopyBanner" class="client-copy-banner" style="display:none;">
+                            <i class="bi bi-person-check-fill text-success"></i>
+                            <span id="wfCustCopyBannerText">Copie workflow de ce client</span>
+                        </div>
+
+                        <div class="card builder-card mb-3">
+                            <div class="card-body">
+                                <div class="section-title"><i class="bi bi-gear-fill"></i>Configuration générale (ce client)</div>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Type de déclaration</label>
+                                        <input type="text" class="form-control form-control-sm" id="wfCustTypeLabel" readonly />
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label-sm">Nom du workflow (copie client)</label>
+                                        <input type="text" name="TemplateName" id="wfCustTemplateName" class="form-control form-control-sm" placeholder="Nom de la copie client" />
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label-sm">Description</label>
+                                        <input type="text" name="TemplateDescription" id="wfCustTemplateDesc" class="form-control form-control-sm" placeholder="Description…" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Multiplicateur SLA</label>
+                                        <input name="SLAMultiplier" id="wfCustSla" type="number" step="0.1" min="0.1" max="5" class="form-control form-control-sm" value="1.0" required />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Responsable principal</label>
+                                        <select name="PrimaryAssigneeUserId" id="wfCustAssignee" class="form-select form-select-sm">
+                                            <option value="">— Non défini —</option>
+                                            @foreach (var emp in cabinetEmployees)
+                                            {
+                                                <option value="@emp.Id">@emp.FullName</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <div class="chk-grid w-100" style="grid-template-columns:1fr 1fr;">
+                                            <label class="chk-item">
+                                                <input type="hidden" name="IsActive" value="false" />
+                                                <input name="IsActive" type="checkbox" class="form-check-input" value="true" id="wfCustActive" />
+                                                <span>Actif</span>
+                                            </label>
+                                            <label class="chk-item">
+                                                <input type="hidden" name="AutoStartWorkflow" value="false" />
+                                                <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" id="wfCustAuto" />
+                                                <span>Auto-start</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label-sm">Options</label>
+                                        <div class="chk-grid">
+                                            <label class="chk-item">
+                                                <input type="hidden" name="ClientValidationEnabled" value="false" />
+                                                <input name="ClientValidationEnabled" type="checkbox" class="form-check-input" value="true" id="wfCustVal" />
+                                                <span>Valid. client</span>
+                                            </label>
+                                            <label class="chk-item">
+                                                <input type="hidden" name="DocumentRequestEnabled" value="false" />
+                                                <input name="DocumentRequestEnabled" type="checkbox" class="form-check-input" value="true" id="wfCustDocs" />
+                                                <span>Demande docs</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card builder-card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div class="section-title mb-0"><i class="bi bi-list-ol"></i>Étapes du workflow (modifiable)</div>
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2" id="wfCustStepCount" style="font-size:0.78rem;">0 étapes</span>
+                                </div>
+                                <div id="wfCustomizeSteps"></div>
+                                <button type="button" class="btn-add-step mt-2" id="wfCustAddStep">
+                                    <i class="bi bi-plus-lg"></i> Ajouter une étape
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfCustomizeClose2">Annuler</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                <i class="bi bi-check-lg me-1"></i>Enregistrer la copie client
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- 2) Table: all workflows attached to this client -->
         <div class="card border-0 shadow-sm rounded-4 mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="fw-bold mb-0"><i class="bi bi-play-circle-fill text-success me-2"></i>D&#233;marrer un
-                        workflow</h6>
+                    <h6 class="fw-bold mb-0"><i class="bi bi-person-gear text-primary me-2"></i>Workflows attachés à ce client</h6>
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">@wfConfigs.Count</span>
                 </div>
-                @if (wfTemplates.Any())
+
+                @if (wfConfigs.Any())
                 {
-                    <div class="row g-2">
-                        @foreach (var tpl in wfTemplates.Take(6))
-                        {
-                            var bgColor = tpl.DeclarationType switch
-                            {
-                                "TVA" => "#dbeafe",
-                                "IS" => "#fce7f3",
-                                "IR" => "#ede9fe",
-                                "CNSS" => "#d1fae5",
-                                "Paie" => "#fef3c7",
-                                _ => "#f1f5f9"
-                            };
-                            var fgColor = tpl.DeclarationType switch
-                            {
-                                "TVA" => "#2563eb",
-                                "IS" => "#be185d",
-                                "IR" => "#7c3aed",
-                                "CNSS" => "#059669",
-                                "Paie" => "#d97706",
-                                _ => "#475569"
-                            };
-                            <div class="col-md-4 col-lg-3">
-                                <form asp-controller="Workflow" asp-action="StartWorkflow" method="post" class="d-inline">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="WorkflowTemplateId" value="@tpl.Id" />
-                                    <input type="hidden" name="ClientId" value="@Model.Id" />
-                                    <button type="submit" class="btn w-100 text-start p-2"
-                                        style="background:@bgColor; border:1px solid transparent; border-radius:10px;"
-                                        onclick="return confirm('D&#233;marrer le workflow \'@tpl.Name\' ?')">
-                                        <div class="fw-bold" style="font-size:0.8rem; color:@fgColor;">@tpl.Name</div>
-                                        <div style="font-size:0.68rem; color:#94a3b8;">@tpl.DeclarationType &middot;
-                                            @tpl.StepCount &#233;tapes</div>
-                                    </button>
-                                </form>
-                            </div>
-                        }
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Type</th>
+                                    <th>Workflow (copie client)</th>
+                                    <th>Responsable</th>
+                                    <th class="text-center">Valid. client</th>
+                                    <th class="text-center">Docs</th>
+                                    <th>SLA</th>
+                                    <th class="text-center">Auto-start</th>
+                                    <th class="text-center">Actif</th>
+                                    <th class="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cfg in wfConfigs)
+                                {
+                                    var typeLabel = DeclarationServiceCatalog.Get(cfg.DeclarationType)?.DisplayName ?? cfg.DeclarationType;
+                                    <tr>
+                                        <td class="ps-3"><span class="badge bg-primary-subtle text-primary rounded-pill">@typeLabel</span></td>
+                                        <td class="fw-semibold">@(cfg.WorkflowTemplateName ?? "Auto")</td>
+                                        <td class="small">@(cfg.PrimaryAssigneeName ?? "—")</td>
+                                        <td class="text-center">@(cfg.ClientValidationEnabled ? "Oui" : "Non")</td>
+                                        <td class="text-center">@(cfg.DocumentRequestEnabled ? "Oui" : "Non")</td>
+                                        <td><span class="badge bg-info-subtle text-info rounded-pill">x@(cfg.SLAMultiplier)</span></td>
+                                        <td class="text-center">@(cfg.AutoStartWorkflow ? "Oui" : "Non")</td>
+                                        <td class="text-center">
+                                            @if (cfg.IsActive)
+                                            {
+                                                <span class="badge bg-success-subtle text-success rounded-pill">Actif</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactif</span>
+                                            }
+                                        </td>
+                                        <td class="text-end pe-3 text-nowrap">
+                                            @if (canWfConfigure)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2 btn-wf-customize"
+                                                    style="font-size:0.7rem;"
+                                                    data-type="@cfg.DeclarationType"
+                                                    data-type-label="@typeLabel"
+                                                    data-template="@(cfg.WorkflowTemplateId?.ToString() ?? "")"
+                                                    data-template-name="@(cfg.WorkflowTemplateName ?? "")"
+                                                    data-sla="@cfg.SLAMultiplier.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                    data-valclient="@(cfg.ClientValidationEnabled ? "true" : "false")"
+                                                    data-docs="@(cfg.DocumentRequestEnabled ? "true" : "false")"
+                                                    data-auto="@(cfg.AutoStartWorkflow ? "true" : "false")"
+                                                    data-active="@(cfg.IsActive ? "true" : "false")"
+                                                    data-assignee="@(cfg.PrimaryAssigneeUserId ?? "")">
+                                                    <i class="bi bi-sliders me-1"></i>Personnaliser
+                                                </button>
+                                            }
+                                            @if (cfg.WorkflowTemplateId.HasValue)
+                                            {
+                                                <form asp-controller="Workflow" asp-action="StartWorkflow" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="WorkflowTemplateId" value="@cfg.WorkflowTemplateId.Value" />
+                                                    <input type="hidden" name="ClientId" value="@Model.Id" />
+                                                    <input type="hidden" name="DeclarationType" value="@cfg.DeclarationType" />
+                                                    <button type="submit" class="btn btn-sm btn-success rounded-pill px-2"
+                                                            style="font-size:0.7rem;"
+                                                            onclick="return confirm('Démarrer le workflow \'@(cfg.WorkflowTemplateName ?? "sélectionné")\' pour ce client ?')">
+                                                        <i class="bi bi-play-fill me-1"></i>Démarrer
+                                                    </button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 }
                 else
                 {
-                    <div class="text-center text-muted py-3" style="font-size:0.85rem;">
+                    <div class="text-center text-muted py-3 mb-0" style="font-size:0.85rem;">
                         <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
-                        Aucun mod&#232;le disponible. <a href="@Url.Action("Templates", "Workflow")">Cr&#233;er un
-                            mod&#232;le</a>.
+                        Aucun workflow attaché. Utilisez le formulaire ci-dessus pour en affecter un.
                     </div>
                 }
             </div>
         </div>
 
-        <!-- Row 3: Active Workflow Instances -->
+        <!-- Tous les workflows -->
+
         <div class="card border-0 shadow-sm rounded-4 mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="fw-bold mb-0"><i class="bi bi-collection-fill text-primary me-2"></i>Workflows actifs
-                    </h6>
+                    <h6 class="fw-bold mb-0"><i class="bi bi-collection-fill text-primary me-2"></i>Instances lancées pour ce client</h6>
                     <a href="@Url.Action("Instances", "Workflow", new { clientId = Model.Id })"
-                        class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size:0.75rem;">Voir
-                        tout</a>
+                        class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size:0.75rem;">Voir tout</a>
                 </div>
                 @if (wfInstances.Any())
                 {
@@ -439,17 +780,17 @@
                                     <th class="ps-3">Workflow</th>
                                     <th>Type</th>
                                     <th>Statut</th>
-                                    <th>&#201;tape</th>
-                                    <th>D&#233;marr&#233;</th>
+                                    <th>Étape</th>
+                                    <th>Démarré</th>
                                     <th class="text-end pe-3">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var inst in wfInstances.OrderByDescending(i => i.StartedAt).Take(10))
+                                @foreach (var inst in wfInstances.OrderByDescending(i => i.StartedAt).Take(20))
                                 {
                                     var statusBadge = inst.Status switch
                                     {
-                                        "InProgress" => "bg-success-subtle text-success",
+                                        "InProgress" or "Active" => "bg-success-subtle text-success",
                                         "Completed" => "bg-primary-subtle text-primary",
                                         "Cancelled" => "bg-danger-subtle text-danger",
                                         "Paused" => "bg-warning-subtle text-warning",
@@ -457,23 +798,22 @@
                                     };
                                     var statusLabel = inst.Status switch
                                     {
-                                        "InProgress" => "En cours",
-                                        "Completed" => "Termin&#233;",
-                                        "Cancelled" => "Annul&#233;",
+                                        "InProgress" or "Active" => "En cours",
+                                        "Completed" => "Terminé",
+                                        "Cancelled" => "Annulé",
                                         "Paused" => "En pause",
                                         _ => inst.Status
                                     };
                                     <tr>
                                         <td class="ps-3 fw-semibold">@inst.WorkflowTemplateName</td>
-                                        <td><span class="badge bg-light text-dark rounded-pill">@inst.DeclarationType</span>
-                                        </td>
+                                        <td><span class="badge bg-light text-dark rounded-pill">@inst.DeclarationType</span></td>
                                         <td><span class="badge @statusBadge rounded-pill">@statusLabel</span></td>
                                         <td>@(inst.CurrentStepName ?? "-")</td>
                                         <td>@inst.StartedAt.ToString("dd/MM/yyyy")</td>
                                         <td class="text-end pe-3">
                                             <a href="@Url.Action("InstanceDetails", "Workflow", new { id = inst.Id })"
                                                 class="btn btn-sm btn-outline-primary rounded-pill px-2"
-                                                style="font-size:0.7rem;"><i class="bi bi-eye me-1"></i>D&#233;tails</a>
+                                                style="font-size:0.7rem;"><i class="bi bi-eye me-1"></i>Détails</a>
                                         </td>
                                     </tr>
                                 }
@@ -485,26 +825,25 @@
                 {
                     <div class="text-center text-muted py-3" style="font-size:0.85rem;">
                         <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
-                        Aucun workflow lanc&#233; pour ce client.
+                        Aucun workflow lancé pour ce client.
                     </div>
                 }
             </div>
         </div>
 
-        <!-- Row 4: Pending Steps for this client -->
+        <!-- Pending steps -->
         @if (wfPendingSteps.Any())
         {
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-body">
-                    <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split text-warning me-2"></i>&#201;tapes en attente
-                    </h6>
+                    <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split text-warning me-2"></i>Étapes en attente</h6>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-3">&#201;tape</th>
+                                    <th class="ps-3">Étape</th>
                                     <th>Workflow</th>
-                                    <th>Assign&#233; &#224;</th>
+                                    <th>Assigné à</th>
                                     <th>SLA</th>
                                     <th class="text-end pe-3">Action</th>
                                 </tr>
@@ -516,12 +855,11 @@
                                         <td class="ps-3 fw-semibold">@step.StepName</td>
                                         <td>@step.WorkflowInstanceId</td>
                                         <td>@(step.AssignedToUserName ?? "Non assigné")</td>
-                                        <td>@(step.DueDate.HasValue? step.DueDate.Value.ToString("dd/MM HH:mm") : "-")</td>
+                                        <td>@(step.DueDate.HasValue ? step.DueDate.Value.ToString("dd/MM HH:mm") : "-")</td>
                                         <td class="text-end pe-3">
                                             <a href="@Url.Action("InstanceDetails", "Workflow", new { id = step.WorkflowInstanceId })"
                                                 class="btn btn-sm btn-outline-success rounded-pill px-2"
-                                                style="font-size:0.7rem;"><i
-                                                    class="bi bi-arrow-right-circle me-1"></i>Traiter</a>
+                                                style="font-size:0.7rem;"><i class="bi bi-arrow-right-circle me-1"></i>Traiter</a>
                                         </td>
                                     </tr>
                                 }
@@ -758,6 +1096,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/workflow-cron.js" asp-append-version="true"></script>
     <script>
         document.querySelectorAll('.btn-sync-services').forEach(btn => {
             btn.addEventListener('click', async function () {
@@ -777,6 +1116,485 @@
                 } catch { alert('Erreur r\u00e9seau.'); this.disabled = false; this.innerHTML = original; }
             });
         });
+
+        (function activateWorkflowTab() {
+            var params = new URLSearchParams(window.location.search);
+            var want = (params.get('tab') || '').toLowerCase() === 'workflow'
+                || (window.location.hash || '').toLowerCase() === '#tabworkflow';
+            if (!want) return;
+            var trigger = document.querySelector('a[href="#tabWorkflow"]');
+            if (trigger && window.bootstrap) {
+                var tab = new bootstrap.Tab(trigger);
+                tab.show();
+            } else if (trigger) {
+                trigger.click();
+            }
+        })();
+
+        (function filterWfTemplates() {
+            var typeSel = document.getElementById('wfAffectType');
+            var tplSel = document.getElementById('wfAffectTemplate');
+            if (!typeSel || !tplSel) return;
+            var allOptions = Array.prototype.map.call(tplSel.options, function (o) {
+                return { value: o.value, text: o.text, type: (o.getAttribute('data-type') || '').toUpperCase() };
+            });
+            function refresh() {
+                var want = (typeSel.value || '').toUpperCase();
+                var keep = tplSel.value;
+                tplSel.innerHTML = '';
+                allOptions.forEach(function (opt) {
+                    if (!opt.value || want === 'ALL' || !opt.type || opt.type === want) {
+                        var o = document.createElement('option');
+                        o.value = opt.value;
+                        o.textContent = opt.text;
+                        o.setAttribute('data-type', opt.type);
+                        tplSel.appendChild(o);
+                    }
+                });
+                if (Array.prototype.some.call(tplSel.options, function (o) { return o.value === keep; })) {
+                    tplSel.value = keep;
+                }
+            }
+            typeSel.addEventListener('change', refresh);
+            window._wfRefreshTemplates = refresh;
+        })();
+
+        (function customizeAffectation() {
+            var panel = document.getElementById('wfCustomizePanel');
+            var stepsEl = document.getElementById('wfCustomizeSteps');
+            var stepCountBadge = document.getElementById('wfCustStepCount');
+            var subtitle = document.getElementById('wfCustomizeSubtitle');
+            var closeBtn = document.getElementById('wfCustomizeClose');
+            var closeBtn2 = document.getElementById('wfCustomizeClose2');
+            var tplHidden = document.getElementById('wfCustTemplateId');
+            var sourceHidden = document.getElementById('wfCustSourceTemplateId');
+            var nameInput = document.getElementById('wfCustTemplateName');
+            var descInput = document.getElementById('wfCustTemplateDesc');
+            var slaInput = document.getElementById('wfCustSla');
+            var builderLink = document.getElementById('wfCustOpenBuilder');
+            var copyBanner = document.getElementById('wfCustCopyBanner');
+            var copyBannerText = document.getElementById('wfCustCopyBannerText');
+            var ensureUrl = '@Url.Action("EnsureClientWorkflow", "Clients")';
+            var builderUrlBase = '@Url.Action("Builder", "Workflow")';
+            var clientId = @Model.Id;
+            var antiforgery = document.querySelector('#wfCustomizeForm input[name="__RequestVerificationToken"]')?.value
+                || document.querySelector('input[name="__RequestVerificationToken"]')?.value
+                || '';
+            var currentDeclType = 'All';
+            var employees = [
+@foreach (var emp in cabinetEmployees)
+{
+                @: { id: '@emp.Id', name: '@Html.Raw((emp.FullName ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))' },
+}
+            ];
+            var stepTypes = [
+                { v: 'Initialisation', l: 'Initialisation' },
+                { v: 'DemandePieces', l: 'Demande pièces' },
+                { v: 'Collecte', l: 'Collecte' },
+                { v: 'Saisie', l: 'Saisie' },
+                { v: 'Controle', l: 'Contrôle' },
+                { v: 'ValidationInterne', l: 'Valid. interne' },
+                { v: 'ValidationClient', l: 'Valid. client' },
+                { v: 'DepotSoumission', l: 'Dépôt' },
+                { v: 'ClotureArchivage', l: 'Clôture' }
+            ];
+            var assignTypes = [
+                { v: 'Employee', l: 'Employé' },
+                { v: 'Role', l: 'Rôle' },
+                { v: 'Department', l: 'Département' },
+                { v: 'Client', l: 'Client' },
+                { v: 'AutoSystem', l: 'Automatique' }
+            ];
+            var roles = ['Gerant', 'Manager', 'Collaborateur', 'Assistant', 'Stagiaire'];
+
+            function setCheck(id, on) {
+                var el = document.getElementById(id);
+                if (el) el.checked = !!on;
+            }
+
+            function esc(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function optList(items, selected, valueKey, labelKey) {
+                valueKey = valueKey || 'v';
+                labelKey = labelKey || 'l';
+                return items.map(function (it) {
+                    var v = typeof it === 'string' ? it : it[valueKey];
+                    var l = typeof it === 'string' ? it : it[labelKey];
+                    return '<option value="' + esc(v) + '"' + (String(v) === String(selected || '') ? ' selected' : '') + '>' + esc(l) + '</option>';
+                }).join('');
+            }
+
+            function empOpts(selected) {
+                var html = '<option value="">— Non défini —</option>';
+                employees.forEach(function (e) {
+                    html += '<option value="' + esc(e.id) + '"' + (e.id === (selected || '') ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+                });
+                return html;
+            }
+
+            function labelOf(list, v) {
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i].v === v) return list[i].l;
+                }
+                return v || '';
+            }
+
+            function setActiveTpl(sourceId) {
+                document.querySelectorAll('#wfCustTplList .wf-cust-tpl').forEach(function (btn) {
+                    btn.classList.toggle('active', btn.getAttribute('data-id') === String(sourceId));
+                });
+                if (sourceHidden) sourceHidden.value = sourceId || '';
+            }
+
+            function updateBuilderLink(templateId) {
+                if (!builderLink) return;
+                if (templateId) {
+                    builderLink.href = builderUrlBase + '/' + encodeURIComponent(templateId);
+                    builderLink.classList.remove('disabled');
+                } else {
+                    builderLink.href = '#';
+                    builderLink.classList.add('disabled');
+                }
+            }
+
+            function filterTplList(declType) {
+                currentDeclType = declType || 'All';
+                var type = currentDeclType.toLowerCase();
+                var firstMatch = '';
+                var firstAll = '';
+                document.querySelectorAll('#wfCustTplList .wf-cust-tpl').forEach(function (btn) {
+                    var ot = (btn.getAttribute('data-type') || '').toLowerCase();
+                    var match = !ot || ot === 'all' || ot === type || type === 'all';
+                    btn.style.display = match ? '' : 'none';
+                    if (match && !firstMatch && ot === type) firstMatch = btn.getAttribute('data-id');
+                    if (match && !firstAll && (!ot || ot === 'all')) firstAll = btn.getAttribute('data-id');
+                });
+                return { firstMatch: firstMatch, firstAll: firstAll };
+            }
+
+            function syncStepHeaders(card) {
+                var name = card.querySelector('.step-name-input')?.value || 'Étape';
+                var type = card.querySelector('.step-type-select')?.value || '';
+                var assign = card.querySelector('.assign-select')?.value || '';
+                var sla = card.querySelector('.step-sla-input')?.value;
+                var h = card.querySelector('h6');
+                if (h) h.textContent = name;
+                var tb = card.querySelector('.step-type-badge');
+                if (tb) tb.textContent = labelOf(stepTypes, type);
+                var ab = card.querySelector('.assign-badge');
+                if (ab) ab.innerHTML = '<i class="bi bi-person-fill me-1"></i>' + esc(labelOf(assignTypes, assign));
+                var sb = card.querySelector('.sla-badge');
+                if (sb) {
+                    if (sla) { sb.style.display = ''; sb.innerHTML = '<i class="bi bi-clock me-1"></i>' + esc(sla) + ' h'; }
+                    else sb.style.display = 'none';
+                }
+            }
+
+            function toggleAssignFields(sel) {
+                var card = sel.closest('.step-card');
+                if (!card) return;
+                var v = sel.value;
+                card.querySelectorAll('.assign-employee-field').forEach(function (el) { el.classList.toggle('d-none', v !== 'Employee'); });
+                card.querySelectorAll('.assign-role-field').forEach(function (el) { el.classList.toggle('d-none', v !== 'Role'); });
+                if (window.WfCron) WfCron.syncInitScheduleVisibility(card);
+            }
+
+            function syncInitCronSlot(card) {
+                if (!card || !window.WfCron) return;
+                var type = card.querySelector('.step-type-select')?.value || '';
+                var assign = card.querySelector('.assign-select')?.value || '';
+                var slot = card.querySelector('.init-cron-slot');
+                if (!slot) return;
+                var isInitAuto = type === 'Initialisation' && assign === 'AutoSystem';
+                if (!isInitAuto) {
+                    slot.innerHTML = '';
+                    return;
+                }
+                if (slot.querySelector('.schedule-section')) {
+                    WfCron.syncInitScheduleVisibility(card);
+                    return;
+                }
+                var prefix = '';
+                var nameEl = card.querySelector('[name^="Steps["][name$=".Name"]');
+                if (nameEl) prefix = nameEl.name.replace(/\.Name$/, '');
+                else prefix = 'Steps[' + (card.dataset.index || 0) + ']';
+                var cron = slot.getAttribute('data-cron') || '';
+                var cronDesc = slot.getAttribute('data-cron-desc') || '';
+                var actionCfg = slot.getAttribute('data-action-cfg') || '';
+                slot.innerHTML = WfCron.cronBuilderHtml(prefix, cron, cronDesc);
+                if (actionCfg) {
+                    var cfgInput = slot.querySelector('.action-config-input');
+                    if (cfgInput) cfgInput.value = actionCfg;
+                }
+                var builder = slot.querySelector('.cron-builder');
+                if (builder) WfCron.parseCronToUI(builder);
+                WfCron.syncInitScheduleVisibility(card);
+            }
+
+            function reindexSteps() {
+                var cards = stepsEl.querySelectorAll('.step-card');
+                if (stepCountBadge) stepCountBadge.textContent = cards.length + ' étape' + (cards.length !== 1 ? 's' : '');
+                cards.forEach(function (card, i) {
+                    var num = card.querySelector('.step-num');
+                    if (num) num.textContent = String(i + 1);
+                    card.querySelectorAll('[name^="Steps["]').forEach(function (input) {
+                        input.name = input.name.replace(/Steps\[\d+]/, 'Steps[' + i + ']');
+                    });
+                    var order = card.querySelector('.step-order-input');
+                    if (order) order.value = String(i);
+                });
+            }
+
+            function buildStepCard(s, index) {
+                s = s || {};
+                var name = s.name || s.Name || ('Étape ' + (index + 1));
+                var stepType = s.stepType || s.StepType || 'Initialisation';
+                var assign = s.assignmentType || s.AssignmentType || 'Employee';
+                var sla = s.slaHours != null ? s.slaHours : (s.SLAHours != null ? s.SLAHours : '');
+                var desc = s.description || s.Description || '';
+                var userId = s.assignedToUserId || s.AssignedToUserId || '';
+                var role = s.assignedToRoleName || s.AssignedToRoleName || '';
+                var isClient = !!(s.isClientStep || s.IsClientStep);
+                var isRequired = s.isRequired != null ? s.isRequired : (s.IsRequired != null ? s.IsRequired : true);
+                var isBlocking = s.isBlocking != null ? s.isBlocking : (s.IsBlocking != null ? s.IsBlocking : true);
+                var cronExpr = s.cronExpression || s.CronExpression || '';
+                var cronDesc = s.cronDescription || s.CronDescription || '';
+                var actionCfg = s.actionConfigJson || s.ActionConfigJson || '';
+                var isScheduled = !!(s.isScheduled || s.IsScheduled);
+                var triggerSource = s.triggerSource || s.TriggerSource || '';
+                var p = 'Steps[' + index + ']';
+                var isInitAuto = stepType === 'Initialisation' && assign === 'AutoSystem';
+
+                var html = '<div class="step-card collapsed-step" data-index="' + index + '">'
+                    + '<div class="step-header" onclick="if(!event.target.closest(\'.btn-delete-step\')) this.parentElement.classList.toggle(\'collapsed-step\')">'
+                    + '<span class="step-num">' + (index + 1) + '</span>'
+                    + '<h6>' + esc(name) + '</h6>'
+                    + '<span class="step-type-badge">' + esc(labelOf(stepTypes, stepType)) + '</span>'
+                    + '<span class="assign-badge"><i class="bi bi-person-fill me-1"></i>' + esc(labelOf(assignTypes, assign)) + '</span>'
+                    + '<span class="sla-badge"' + (sla === '' ? ' style="display:none"' : '') + '><i class="bi bi-clock me-1"></i>' + esc(sla) + ' h</span>'
+                    + '<span class="ms-auto d-flex align-items-center gap-2">'
+                    + '<button type="button" class="btn-delete-step" title="Supprimer" onclick="event.stopPropagation();window._wfCustRemoveStep(this)"><i class="bi bi-trash3"></i></button>'
+                    + '<i class="bi bi-chevron-down chevron-icon"></i></span></div>'
+                    + '<div class="step-body">'
+                    + '<input type="hidden" class="step-order-input" name="' + p + '.StepOrder" value="' + index + '" />'
+                    + '<div class="field-section"><div class="field-section-title"><i class="bi bi-tag-fill"></i>Identification</div><div class="row g-2">'
+                    + '<div class="col-md-5"><label class="form-label-sm">Nom de l\'étape</label>'
+                    + '<input type="text" name="' + p + '.Name" value="' + esc(name) + '" class="form-control form-control-sm step-name-input" /></div>'
+                    + '<div class="col-md-4"><label class="form-label-sm">Type d\'étape</label>'
+                    + '<select name="' + p + '.StepType" class="form-select form-select-sm step-type-select">' + optList(stepTypes, stepType) + '</select></div>'
+                    + '<div class="col-md-3"><label class="form-label-sm">SLA (heures)</label>'
+                    + '<input type="number" name="' + p + '.SLAHours" value="' + esc(sla) + '" class="form-control form-control-sm step-sla-input" min="0" placeholder="24" /></div>'
+                    + '<div class="col-12"><label class="form-label-sm">Description</label>'
+                    + '<input type="text" name="' + p + '.Description" value="' + esc(desc) + '" class="form-control form-control-sm" placeholder="Description de l\'étape…" /></div>'
+                    + '</div></div>'
+                    + '<div class="field-section"><div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div><div class="row g-2">'
+                    + '<div class="col-md-4"><label class="form-label-sm">Type d\'assignation</label>'
+                    + '<select name="' + p + '.AssignmentType" class="form-select form-select-sm assign-select">' + optList(assignTypes, assign) + '</select></div>'
+                    + '<div class="col-md-8 assign-employee-field' + (assign !== 'Employee' ? ' d-none' : '') + '"><label class="form-label-sm">Employé</label>'
+                    + '<select name="' + p + '.AssignedToUserId" class="form-select form-select-sm">' + empOpts(userId) + '</select></div>'
+                    + '<div class="col-md-4 assign-role-field' + (assign !== 'Role' ? ' d-none' : '') + '"><label class="form-label-sm">Rôle</label>'
+                    + '<select name="' + p + '.AssignedToRoleName" class="form-select form-select-sm"><option value="">--</option>' + optList(roles, role) + '</select></div>'
+                    + '<div class="col-12"><div class="chk-grid" style="grid-template-columns:repeat(3,1fr);">'
+                    + '<label class="chk-item"><input type="hidden" name="' + p + '.IsClientStep" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsClientStep" value="true"' + (isClient ? ' checked' : '') + ' /><span>Étape client</span></label>'
+                    + '<label class="chk-item"><input type="hidden" name="' + p + '.IsRequired" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsRequired" value="true"' + (isRequired ? ' checked' : '') + ' /><span>Obligatoire</span></label>'
+                    + '<label class="chk-item"><input type="hidden" name="' + p + '.IsBlocking" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsBlocking" value="true"' + (isBlocking ? ' checked' : '') + ' /><span>Bloquant</span></label>'
+                    + '</div></div></div></div>'
+                    + '<div class="init-cron-slot" data-cron="' + esc(cronExpr) + '" data-cron-desc="' + esc(cronDesc) + '" data-action-cfg="' + esc(actionCfg) + '" data-scheduled="' + (isScheduled ? '1' : '0') + '" data-trigger="' + esc(triggerSource) + '"></div>';
+
+                if (isInitAuto && window.WfCron) {
+                    // placeholder filled after insert via syncInitCronSlot
+                } else if (!isInitAuto && (cronExpr || isScheduled)) {
+                    // Preserve cron fields for non-init scheduled steps
+                    html += '<input type="hidden" name="' + p + '.CronExpression" class="cron-input" value="' + esc(cronExpr) + '" />'
+                        + '<input type="hidden" name="' + p + '.CronDescription" class="cron-desc-input" value="' + esc(cronDesc) + '" />'
+                        + '<input type="hidden" name="' + p + '.IsScheduled" value="' + (isScheduled ? 'true' : 'false') + '" />'
+                        + '<input type="hidden" name="' + p + '.TriggerSource" value="' + esc(triggerSource || 'Manual') + '" />'
+                        + (actionCfg ? '<input type="hidden" name="' + p + '.ActionConfigJson" value="' + esc(actionCfg) + '" />' : '');
+                }
+
+                html += '</div></div>';
+                return html;
+            }
+
+            function renderEditableSteps(steps) {
+                var list = steps || [];
+                if (!list.length) {
+                    stepsEl.innerHTML = '<div class="text-center text-muted py-3" style="font-size:0.85rem;">Aucune étape — ajoutez-en ci-dessous.</div>';
+                    if (stepCountBadge) stepCountBadge.textContent = '0 étapes';
+                    return;
+                }
+                var html = '';
+                list.forEach(function (s, i) { html += buildStepCard(s, i); });
+                stepsEl.innerHTML = html;
+                bindStepCardEvents();
+                reindexSteps();
+            }
+
+            function bindStepCardEvents() {
+                stepsEl.querySelectorAll('.step-card').forEach(function (card) {
+                    card.querySelectorAll('.step-name-input, .step-type-select, .assign-select, .step-sla-input').forEach(function (el) {
+                        el.addEventListener('input', function () { syncStepHeaders(card); });
+                        el.addEventListener('change', function () { syncStepHeaders(card); });
+                    });
+                    var as = card.querySelector('.assign-select');
+                    if (as) as.addEventListener('change', function () { toggleAssignFields(as); syncInitCronSlot(card); });
+                    var ts = card.querySelector('.step-type-select');
+                    if (ts) ts.addEventListener('change', function () { syncInitCronSlot(card); });
+                    syncInitCronSlot(card);
+                });
+            }
+
+            window._wfCustRemoveStep = function (btn) {
+                var card = btn.closest('.step-card');
+                if (card) card.remove();
+                reindexSteps();
+            };
+
+            function applyClientTemplate(data, sourceId) {
+                var id = data.id || data.Id;
+                var name = data.name || data.Name || '';
+                var desc = data.description || data.Description || '';
+                var steps = data.steps || data.Steps || [];
+                if (tplHidden) tplHidden.value = id || '';
+                if (sourceHidden) sourceHidden.value = sourceId || '';
+                if (nameInput) nameInput.value = name;
+                if (descInput) descInput.value = desc || '';
+                updateBuilderLink(id);
+                if (copyBanner) copyBanner.style.display = '';
+                if (copyBannerText) copyBannerText.textContent = 'Copie client #' + id + ' — ' + name + ' (modifiable sans toucher au modèle cabinet)';
+                if (subtitle) subtitle.textContent = 'Copie pour ce client — modifiez les étapes, SLA et assignations puis enregistrez.';
+                renderEditableSteps(steps);
+            }
+
+            function ensureAndLoad(sourceId) {
+                if (!sourceId) {
+                    stepsEl.innerHTML = '<div class="text-center text-muted py-4">Sélectionnez un modèle cabinet.</div>';
+                    return;
+                }
+                setActiveTpl(sourceId);
+                stepsEl.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Création / chargement de la copie client…</div>';
+                fetch(ensureUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': antiforgery,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        clientId: clientId,
+                        sourceTemplateId: parseInt(sourceId, 10),
+                        declarationType: currentDeclType || 'All'
+                    })
+                })
+                    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                    .then(function (res) {
+                        if (!res.ok || !res.j || !res.j.success || !res.j.data) {
+                            throw new Error((res.j && res.j.message) || 'Clone impossible');
+                        }
+                        applyClientTemplate(res.j.data, sourceId);
+                    })
+                    .catch(function (err) {
+                        stepsEl.innerHTML = '<div class="text-danger text-center py-4">' + esc(err.message || 'Erreur') + '</div>';
+                    });
+            }
+
+            function openPanel(btn) {
+                if (!panel) return;
+                var type = btn.getAttribute('data-type') || 'All';
+                var typeLabel = btn.getAttribute('data-type-label') || type;
+                var template = btn.getAttribute('data-template') || '';
+                var sla = btn.getAttribute('data-sla') || '1.0';
+                var assignee = btn.getAttribute('data-assignee') || '';
+
+                var typeHidden = document.getElementById('wfCustType');
+                if (typeHidden) typeHidden.value = type;
+                var typeLabelEl = document.getElementById('wfCustTypeLabel');
+                if (typeLabelEl) typeLabelEl.value = typeLabel;
+                if (slaInput) slaInput.value = sla;
+                var assigneeSel = document.getElementById('wfCustAssignee');
+                if (assigneeSel) assigneeSel.value = assignee;
+
+                setCheck('wfCustVal', btn.getAttribute('data-valclient') === 'true');
+                setCheck('wfCustDocs', btn.getAttribute('data-docs') === 'true');
+                setCheck('wfCustAuto', btn.getAttribute('data-auto') === 'true');
+                setCheck('wfCustActive', btn.getAttribute('data-active') === 'true');
+
+                var picks = filterTplList(type);
+                // Prefer existing client copy id if present; else matching cabinet source
+                var sourceId = template || picks.firstMatch || picks.firstAll || '';
+                // If template is already a client copy, still pass as source — Ensure returns it as-is
+                panel.style.display = '';
+                ensureAndLoad(sourceId);
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            function closePanel() {
+                if (panel) panel.style.display = 'none';
+            }
+
+            document.querySelectorAll('.btn-wf-customize').forEach(function (btn) {
+                btn.addEventListener('click', function () { openPanel(btn); });
+            });
+
+            document.querySelectorAll('#wfCustTplList .wf-cust-tpl').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    currentDeclType = document.getElementById('wfCustType')?.value || btn.getAttribute('data-type') || 'All';
+                    ensureAndLoad(btn.getAttribute('data-id'));
+                });
+            });
+
+            var addBtn = document.getElementById('wfCustAddStep');
+            if (addBtn) {
+                addBtn.addEventListener('click', function () {
+                    var i = stepsEl.querySelectorAll('.step-card').length;
+                    var wrap = document.createElement('div');
+                    wrap.innerHTML = buildStepCard({ name: 'Nouvelle étape', stepType: 'Saisie', assignmentType: 'Employee', slaHours: 24, isRequired: true, isBlocking: true }, i);
+                    var card = wrap.firstElementChild;
+                    stepsEl.appendChild(card);
+                    bindStepCardEvents();
+                    reindexSteps();
+                    card.classList.remove('collapsed-step');
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                });
+            }
+
+            if (closeBtn) closeBtn.addEventListener('click', closePanel);
+            if (closeBtn2) closeBtn2.addEventListener('click', closePanel);
+
+            var custForm = document.getElementById('wfCustomizeForm');
+            if (custForm) {
+                custForm.addEventListener('submit', function (e) {
+                    if (!window.WfCron) return;
+                    var err = WfCron.validateInitSteps(stepsEl);
+                    if (err) {
+                        e.preventDefault();
+                        alert(err);
+                    }
+                });
+            }
+
+            var affectForm = document.getElementById('clientWfAffectForm');
+            var title = document.getElementById('wfAffectFormTitle');
+            var resetBtn = document.getElementById('wfAffectReset');
+            if (resetBtn && affectForm) {
+                resetBtn.addEventListener('click', function () {
+                    affectForm.reset();
+                    setCheck('wfValClient', true);
+                    setCheck('wfDocs', true);
+                    setCheck('wfAuto', true);
+                    setCheck('wfActive', true);
+                    if (window._wfRefreshTemplates) window._wfRefreshTemplates();
+                    if (title) title.innerHTML = '<i class="bi bi-plus-circle text-success me-1"></i>Affecter / personnaliser un template';
+                    resetBtn.style.display = 'none';
+                });
+            }
+        })();
+
     </script>
     @Html.AntiForgeryToken()
 }

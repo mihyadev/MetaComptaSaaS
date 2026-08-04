@@ -198,6 +198,48 @@ public sealed class DeclarationFacade : IDeclarationFacade
     public async Task<ApiResponse<DeclarationDto>?> CreateAsync(CreateDeclarationDto dto)
         => await _api.PostAsync<DeclarationDto>("api/declarations", dto);
 
+    public async Task<ApiResponse<DeclarationDto>?> SaveShellAsync(int declarationId, decimal? montantDu, decimal? montantCredit, string? notes)
+        => await _api.PostAsync<DeclarationDto>($"api/declarations/{declarationId}/shell", new DeclarationShellSaveDto
+        {
+            MontantDu = montantDu,
+            MontantCredit = montantCredit,
+            Notes = notes
+        });
+
+    public async Task<ApiResponse<DeclarationDto>?> SuggestAcompteAsync(int declarationId)
+        => await _api.PostAsync<DeclarationDto>($"api/declarations/{declarationId}/suggest-acompte", new { });
+
+    public async Task<ApiResponse<DeclarationDto>?> SuggestRegIsAsync(int declarationId)
+        => await _api.PostAsync<DeclarationDto>($"api/declarations/{declarationId}/suggest-reg-is", new { });
+
+    public async Task<(byte[]? Bytes, string? Error)> ExportCnssDnsCsvAsync(int declarationId)
+    {
+        try
+        {
+            var bytes = await _api.GetBytesAsync($"api/declarations/{declarationId}/cnss/export-dns");
+            return (bytes, bytes == null || bytes.Length == 0 ? "Export vide." : null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+
+    public async Task<CnssEmployeeRosterDto?> GetCnssEmployeesAsync(int declarationId)
+    {
+        var result = await _api.GetAsync<CnssEmployeeRosterDto>($"api/declarations/{declarationId}/cnss/employees");
+        return result?.Data;
+    }
+
+    public async Task<ApiResponse<CnssEmployeeRosterDto>?> AddCnssEmployeeAsync(int declarationId, CnssEmployeeAddDto dto)
+        => await _api.PostAsync<CnssEmployeeRosterDto>($"api/declarations/{declarationId}/cnss/employees", dto);
+
+    public async Task<ApiResponse<CnssEmployeeRosterDto>?> UpdateCnssEmployeeAsync(int declarationId, int employeeId, CnssEmployeeAddDto dto)
+        => await _api.PutAsync<CnssEmployeeRosterDto>($"api/declarations/{declarationId}/cnss/employees/{employeeId}", dto);
+
+    public async Task<ApiResponse<CnssEmployeeImportResultDto>?> ImportCnssEmployeesAsync(int declarationId, List<CnssEmployeeImportRowDto> rows)
+        => await _api.PostAsync<CnssEmployeeImportResultDto>($"api/declarations/{declarationId}/cnss/employees/import", rows);
+
     public async Task<ApiResponse<bool>?> DeleteAsync(int id)
         => await _api.DeleteAsync<bool>($"api/declarations/{id}");
 
@@ -982,6 +1024,12 @@ public sealed class WorkflowFacade : IWorkflowFacade
 
     public async Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto)
         => await _api.PostAsync<ClientWorkflowConfigDto>("api/workflow/client-config", dto);
+
+    public async Task<ApiResponse<WorkflowTemplateDto>?> EnsureClientTemplateAsync(EnsureClientWorkflowDto dto)
+        => await _api.PostAsync<WorkflowTemplateDto>("api/workflow/client-config/ensure-template", dto);
+
+    public async Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientWorkflowCustomizationAsync(ClientWorkflowCustomizeDto dto)
+        => await _api.PostAsync<ClientWorkflowConfigDto>("api/workflow/client-config/customize", dto);
 
     // ── Dashboard & History ──────────────────────────────────────
 

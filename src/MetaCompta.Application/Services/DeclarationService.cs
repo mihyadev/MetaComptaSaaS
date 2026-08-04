@@ -189,18 +189,506 @@ public class DeclarationService : IDeclarationService
     // ─── GENERIC CREATE ────────────────────────────────────────────
     public async Task<ApiResponse<DeclarationDto>> CreateAsync(CreateDeclarationDto dto, int cabinetId, string userId)
     {
-        // ── Contract guard: client must have an active/valid contract ──
         if (!await HasActiveContractAsync(dto.ClientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration : le client n'a aucun contrat actif ou validé.");
 
-        return dto.Type.ToUpper() switch
+        var type = DeclarationServiceCatalog.NormalizeType(dto.Type);
+        dto.Type = type;
+
+        return type switch
         {
             "TVA" => await CreateTVAAsync(dto.ClientId, cabinetId, userId),
             "IS" => await CreateISAsync(dto.ClientId, dto.AnneeFiscale ?? DateTime.UtcNow.Year, cabinetId, userId),
             "IR" => await CreateIRAsync(dto.ClientId, dto.AnneeFiscale ?? DateTime.UtcNow.Year, cabinetId, userId),
             "CNSS" => await CreateCNSSAsync(dto.ClientId, cabinetId, userId),
+            _ when DeclarationServiceCatalog.IsSupported(type) => await CreateShellAsync(dto, cabinetId, userId),
             _ => ApiResponse<DeclarationDto>.Fail($"Type de déclaration '{dto.Type}' non supporté.")
         };
+    }
+
+    /// <summary>
+    /// Platform shell create for catalogue services (same lifecycle as TVA: contract, period, échéance).
+    /// </summary>
+    public async Task<ApiResponse<DeclarationDto>> CreateShellAsync(CreateDeclarationDto dto, int cabinetId, string userId)
+    {
+        var type = DeclarationServiceCatalog.NormalizeType(dto.Type);
+        var entry = DeclarationServiceCatalog.Get(type);
+        if (entry == null)
+            return ApiResponse<DeclarationDto>.Fail($"Type de déclaration '{type}' non supporté.");
+
+        if (!await HasActiveContractAsync(dto.ClientId, cabinetId))
+            return ApiResponse<DeclarationDto>.Fail($"Impossible de créer une déclaration {entry.DisplayName} : aucun contrat actif.");
+
+        var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == dto.ClientId && c.CabinetId == cabinetId);
+        if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
+
+        var (debut, fin, limite, periode) = ResolvePeriod(type, dto.AnneeFiscale, dto.Periode);
+
+        var declaration = new Declaration
+        {
+            ClientId = dto.ClientId,
+            CabinetId = cabinetId,
+            Type = type,
+            Periode = periode,
+            DateDebut = debut,
+            DateFin = fin,
+            DateLimite = limite,
+            Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
+            AssistantId = userId,
+            CreatedBy = userId,
+            DonneesJson = "{}"
+        };
+        _db.Declarations.Add(declaration);
+        await _db.SaveChangesAsync();
+        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration), $"Déclaration {entry.DisplayName} créée.");
+    }
+
+    public async Task<ApiResponse<DeclarationDto>> SaveShellAsync(int declarationId, decimal? montantDu, decimal? montantCredit, string? notes, int cabinetId, string userId)
+    {
+        var declaration = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (declaration == null) return ApiResponse<DeclarationDto>.Fail("Déclaration non trouvée.");
+        if (!await HasActiveContractAsync(declaration.ClientId, cabinetId))
+            return ApiResponse<DeclarationDto>.Fail("Modification impossible : aucun contrat actif.");
+        if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
+            return ApiResponse<DeclarationDto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
+        if (lockErr != null) return ApiResponse<DeclarationDto>.Fail(lockErr);
+
+        declaration.MontantDu = montantDu;
+        declaration.MontantCredit = montantCredit;
+        if (!string.IsNullOrWhiteSpace(notes))
+        {
+            var payload = new { Notes = notes, UpdatedAt = DateTime.UtcNow };
+            declaration.DonneesJson = System.Text.Json.JsonSerializer.Serialize(payload);
+        }
+        declaration.UpdatedAt = DateTime.UtcNow;
+        declaration.UpdatedBy = userId;
+        if (declaration.Statut == RefCodes.StatutDeclaration.CreeeParSysteme || declaration.Statut == RefCodes.StatutDeclaration.Brouillon)
+            declaration.Statut = RefCodes.StatutDeclaration.ACompleter;
+
+        await _db.SaveChangesAsync();
+        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration), "Déclaration enregistrée.");
+    }
+
+    public async Task<ApiResponse<DeclarationDto>> SuggestAcompteAsync(int declarationId, int cabinetId, string userId)
+    {
+        var declaration = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (declaration == null) return ApiResponse<DeclarationDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(declaration.Type, "ACOMPTES", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<DeclarationDto>.Fail("Suggestion disponible uniquement pour ACOMPTES.");
+
+        var year = declaration.DateDebut.Year;
+        var prevIs = await _db.DeclarationsIS
+            .Where(i => i.CabinetId == cabinetId && i.Declaration!.ClientId == declaration.ClientId && i.AnneeFiscale == year - 1)
+            .OrderByDescending(i => i.Id)
+            .FirstOrDefaultAsync();
+
+        var baseIs = prevIs?.ISDu ?? 0m;
+        var acompte = Math.Round(baseIs * 0.25m, 2);
+        declaration.MontantDu = acompte;
+        declaration.MontantCredit = 0;
+        declaration.DonneesJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Source = "SuggestAcompte",
+            PreviousYearIsDu = baseIs,
+            Rate = 0.25m,
+            Suggested = acompte
+        });
+        declaration.UpdatedAt = DateTime.UtcNow;
+        declaration.UpdatedBy = userId;
+        await _db.SaveChangesAsync();
+        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration),
+            baseIs > 0
+                ? $"Acompte suggéré = 25% × IS {year - 1} ({baseIs:N2}) = {acompte:N2} MAD."
+                : "Aucun IS N-1 trouvé — acompte mis à 0. Saisissez le montant manuellement.");
+    }
+
+    public async Task<ApiResponse<DeclarationDto>> SuggestRegIsAsync(int declarationId, int cabinetId, string userId)
+    {
+        var declaration = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (declaration == null) return ApiResponse<DeclarationDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(declaration.Type, "REG_IS", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(declaration.Type, "CM", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(declaration.Type, "DRF", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<DeclarationDto>.Fail("Suggestion disponible pour REG_IS / CM / DRF.");
+
+        var year = int.TryParse(declaration.Periode, out var y) ? y : declaration.DateDebut.Year;
+        var isData = await _db.DeclarationsIS
+            .Where(i => i.CabinetId == cabinetId && i.Declaration!.ClientId == declaration.ClientId && i.AnneeFiscale == year)
+            .OrderByDescending(i => i.Id)
+            .FirstOrDefaultAsync();
+
+        if (isData == null)
+            return ApiResponse<DeclarationDto>.Fail($"Aucune liasse IS {year} trouvée pour ce client. Créez d'abord la déclaration IS.");
+
+        var due = isData.ISDu;
+        var cm = Math.Max(isData.ResultatComptable * 0.005m, 3000m);
+        due = Math.Max(due, cm);
+        var acomptes = isData.AcomptesVerses;
+        if (acomptes <= 0)
+            acomptes = isData.Acompte1 + isData.Acompte2 + isData.Acompte3 + isData.Acompte4;
+        var net = Math.Round(due - acomptes, 2);
+        declaration.MontantDu = Math.Max(0, net);
+        declaration.MontantCredit = net < 0 ? Math.Abs(net) : 0;
+        declaration.DonneesJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Source = "SuggestRegIs",
+            ISDu = isData.ISDu,
+            CotisationMinimale = cm,
+            Acomptes = acomptes,
+            Net = net
+        });
+        declaration.UpdatedAt = DateTime.UtcNow;
+        declaration.UpdatedBy = userId;
+        await _db.SaveChangesAsync();
+        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration),
+            $"Régularisation suggérée = max(IS, CM) − acomptes = {declaration.MontantDu:N2} MAD.");
+    }
+
+    public async Task<ApiResponse<byte[]>> ExportCnssDnsCsvAsync(int declarationId, int cabinetId)
+    {
+        var dec = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (dec == null) return ApiResponse<byte[]>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(dec.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<byte[]>.Fail("Export DNS réservé aux déclarations CNSS.");
+
+        var roster = await BuildCnssRosterAsync(dec);
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Matricule;CIN;CNSS;Nom;Prenom;DateEmbauche;DateSortie;MotifSortie;Mouvement;JoursTravailles;SalaireBrut;Periode");
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        foreach (var e in roster.Employees)
+        {
+            sb.AppendLine(string.Join(';',
+                e.MatriculeEmployeur,
+                e.CIN,
+                e.NumeroCNSS,
+                e.Nom,
+                e.Prenom,
+                e.DateEmbauche.ToString("yyyy-MM-dd"),
+                e.DateSortie?.ToString("yyyy-MM-dd") ?? "",
+                e.MotifSortie,
+                e.Movement,
+                e.JoursTravailles,
+                e.SalaireBrut.ToString(inv),
+                dec.Periode));
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return ApiResponse<byte[]>.Ok(bytes, $"{roster.Employees.Count} salarié(s) exporté(s).");
+    }
+
+    public async Task<ApiResponse<CnssEmployeeRosterDto>> GetCnssEmployeesAsync(int declarationId, int cabinetId)
+    {
+        var dec = await _db.Declarations.Include(d => d.Client)
+            .FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (dec == null) return ApiResponse<CnssEmployeeRosterDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(dec.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Réservé aux déclarations CNSS.");
+
+        var roster = await BuildCnssRosterAsync(dec);
+        return ApiResponse<CnssEmployeeRosterDto>.Ok(roster);
+    }
+
+    public async Task<ApiResponse<CnssEmployeeRosterDto>> AddCnssEmployeeAsync(int declarationId, CnssEmployeeAddDto dto, int cabinetId, string userId)
+    {
+        var dec = await _db.Declarations.Include(d => d.Client)
+            .FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (dec == null) return ApiResponse<CnssEmployeeRosterDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(dec.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Réservé aux déclarations CNSS.");
+        if (!await HasActiveContractAsync(dec.ClientId, cabinetId))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Le client n'a aucun contrat actif ou validé.");
+        if (string.IsNullOrWhiteSpace(dto.CIN) || string.IsNullOrWhiteSpace(dto.Nom) || string.IsNullOrWhiteSpace(dto.Prenom))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("CIN, Nom et Prénom sont obligatoires.");
+
+        // Client employees only — ClientId forced from declaration
+        if (await _db.Employees.AnyAsync(e => e.CabinetId == cabinetId && e.CIN == dto.CIN && !e.IsDeleted))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Un employé avec ce CIN existe déjà.");
+        if (!string.IsNullOrWhiteSpace(dto.NumeroCNSS)
+            && await _db.Employees.AnyAsync(e => e.ClientId == dec.ClientId && e.NumeroCNSS == dto.NumeroCNSS && !e.IsDeleted))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Un employé avec ce numéro CNSS existe déjà pour ce client.");
+
+        var employee = new Employee
+        {
+            ClientId = dec.ClientId,
+            CabinetId = cabinetId,
+            CreatedBy = userId,
+            CIN = dto.CIN.Trim(),
+            Nom = dto.Nom.Trim(),
+            Prenom = dto.Prenom.Trim(),
+            NumeroCNSS = string.IsNullOrWhiteSpace(dto.NumeroCNSS) ? null : dto.NumeroCNSS.Trim(),
+            MatriculeEmployeur = string.IsNullOrWhiteSpace(dto.MatriculeEmployeur) ? null : dto.MatriculeEmployeur.Trim(),
+            DateEmbauche = dto.DateEmbauche == default ? dec.DateDebut : dto.DateEmbauche,
+            DateSortie = dto.DateSortie,
+            MotifSortie = dto.MotifSortie,
+            SalaireBase = dto.SalaireBase,
+            Sexe = dto.Sexe,
+            Statut = dto.DateSortie.HasValue ? RefCodes.StatutEmploye.Inactif : RefCodes.StatutEmploye.Actif
+        };
+        _db.Employees.Add(employee);
+        await _db.SaveChangesAsync();
+
+        var roster = await BuildCnssRosterAsync(dec);
+        return ApiResponse<CnssEmployeeRosterDto>.Ok(roster, "Salarié du client ajouté.");
+    }
+
+    public async Task<ApiResponse<CnssEmployeeRosterDto>> UpdateCnssEmployeeAsync(
+        int declarationId, int employeeId, CnssEmployeeAddDto dto, int cabinetId, string userId)
+    {
+        var dec = await _db.Declarations.Include(d => d.Client)
+            .FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (dec == null) return ApiResponse<CnssEmployeeRosterDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(dec.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Réservé aux déclarations CNSS.");
+        if (!await HasActiveContractAsync(dec.ClientId, cabinetId))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Le client n'a aucun contrat actif ou validé.");
+        if (string.IsNullOrWhiteSpace(dto.CIN) || string.IsNullOrWhiteSpace(dto.Nom) || string.IsNullOrWhiteSpace(dto.Prenom))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("CIN, Nom et Prénom sont obligatoires.");
+
+        var employee = await _db.Employees.FirstOrDefaultAsync(e =>
+            e.Id == employeeId && e.ClientId == dec.ClientId && e.CabinetId == cabinetId && !e.IsDeleted);
+        if (employee == null)
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Salarié du client introuvable.");
+
+        if (await _db.Employees.AnyAsync(e =>
+                e.CabinetId == cabinetId && e.CIN == dto.CIN && e.Id != employeeId && !e.IsDeleted))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Un employé avec ce CIN existe déjà.");
+        if (!string.IsNullOrWhiteSpace(dto.NumeroCNSS)
+            && await _db.Employees.AnyAsync(e =>
+                e.ClientId == dec.ClientId && e.NumeroCNSS == dto.NumeroCNSS && e.Id != employeeId && !e.IsDeleted))
+            return ApiResponse<CnssEmployeeRosterDto>.Fail("Un employé avec ce numéro CNSS existe déjà pour ce client.");
+
+        employee.CIN = dto.CIN.Trim();
+        employee.Nom = dto.Nom.Trim();
+        employee.Prenom = dto.Prenom.Trim();
+        employee.NumeroCNSS = string.IsNullOrWhiteSpace(dto.NumeroCNSS) ? null : dto.NumeroCNSS.Trim();
+        employee.MatriculeEmployeur = string.IsNullOrWhiteSpace(dto.MatriculeEmployeur) ? null : dto.MatriculeEmployeur.Trim();
+        employee.DateEmbauche = dto.DateEmbauche == default ? employee.DateEmbauche : dto.DateEmbauche;
+        employee.DateSortie = dto.DateSortie;
+        employee.MotifSortie = dto.MotifSortie;
+        employee.SalaireBase = dto.SalaireBase;
+        if (!string.IsNullOrWhiteSpace(dto.Sexe)) employee.Sexe = dto.Sexe;
+        employee.Statut = dto.DateSortie.HasValue ? RefCodes.StatutEmploye.Inactif : RefCodes.StatutEmploye.Actif;
+        employee.UpdatedBy = userId;
+        employee.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        var roster = await BuildCnssRosterAsync(dec);
+        return ApiResponse<CnssEmployeeRosterDto>.Ok(roster, "Salarié du client mis à jour.");
+    }
+
+    public async Task<ApiResponse<CnssEmployeeImportResultDto>> ImportCnssEmployeesAsync(
+        int declarationId, List<CnssEmployeeImportRowDto> rows, int cabinetId, string userId)
+    {
+        var dec = await _db.Declarations.Include(d => d.Client)
+            .FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (dec == null) return ApiResponse<CnssEmployeeImportResultDto>.Fail("Déclaration non trouvée.");
+        if (!string.Equals(dec.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<CnssEmployeeImportResultDto>.Fail("Réservé aux déclarations CNSS.");
+        if (!await HasActiveContractAsync(dec.ClientId, cabinetId))
+            return ApiResponse<CnssEmployeeImportResultDto>.Fail("Le client n'a aucun contrat actif ou validé.");
+        if (rows == null || rows.Count == 0)
+            return ApiResponse<CnssEmployeeImportResultDto>.Fail("Aucune ligne à importer.");
+
+        var result = new CnssEmployeeImportResultDto();
+        var existing = await _db.Employees
+            .Where(e => e.ClientId == dec.ClientId && !e.IsDeleted)
+            .ToListAsync();
+
+        var lineNo = 0;
+        foreach (var row in rows)
+        {
+            lineNo++;
+            if (string.IsNullOrWhiteSpace(row.CIN) || string.IsNullOrWhiteSpace(row.Nom) || string.IsNullOrWhiteSpace(row.Prenom))
+            {
+                result.Errors.Add($"Ligne {lineNo}: CIN, Nom et Prénom obligatoires.");
+                continue;
+            }
+
+            var cin = row.CIN.Trim();
+            var cnss = string.IsNullOrWhiteSpace(row.CNSS) ? null : row.CNSS.Trim();
+            Employee? match = null;
+            if (!string.IsNullOrWhiteSpace(cnss))
+                match = existing.FirstOrDefault(e => string.Equals(e.NumeroCNSS, cnss, StringComparison.OrdinalIgnoreCase));
+            match ??= existing.FirstOrDefault(e => string.Equals(e.CIN, cin, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                // Avoid CNSS collision with another employee when creating
+                if (!string.IsNullOrWhiteSpace(cnss)
+                    && existing.Any(e => string.Equals(e.NumeroCNSS, cnss, StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Errors.Add($"Ligne {lineNo}: N° CNSS {cnss} déjà utilisé pour un autre salarié.");
+                    continue;
+                }
+
+                match = new Employee
+                {
+                    ClientId = dec.ClientId,
+                    CabinetId = cabinetId,
+                    CreatedBy = userId,
+                    CIN = cin,
+                    Nom = row.Nom.Trim(),
+                    Prenom = row.Prenom.Trim(),
+                    NumeroCNSS = cnss,
+                    MatriculeEmployeur = string.IsNullOrWhiteSpace(row.Matricule) ? null : row.Matricule.Trim(),
+                    DateEmbauche = row.DateEmbauche ?? dec.DateDebut,
+                    DateSortie = row.DateSortie,
+                    MotifSortie = row.MotifSortie,
+                    SalaireBase = row.SalaireBrut ?? 0,
+                    Sexe = row.Sexe,
+                    Statut = row.DateSortie.HasValue ? RefCodes.StatutEmploye.Inactif : RefCodes.StatutEmploye.Actif
+                };
+                _db.Employees.Add(match);
+                existing.Add(match);
+                result.Created++;
+            }
+            else
+            {
+                match.Nom = row.Nom.Trim();
+                match.Prenom = row.Prenom.Trim();
+                match.CIN = cin;
+                if (!string.IsNullOrWhiteSpace(cnss)) match.NumeroCNSS = cnss;
+                if (!string.IsNullOrWhiteSpace(row.Matricule)) match.MatriculeEmployeur = row.Matricule.Trim();
+                if (row.DateEmbauche.HasValue) match.DateEmbauche = row.DateEmbauche.Value;
+                match.DateSortie = row.DateSortie;
+                match.MotifSortie = row.MotifSortie;
+                if (row.SalaireBrut.HasValue) match.SalaireBase = row.SalaireBrut.Value;
+                if (!string.IsNullOrWhiteSpace(row.Sexe)) match.Sexe = row.Sexe;
+                match.Statut = match.DateSortie.HasValue ? RefCodes.StatutEmploye.Inactif : RefCodes.StatutEmploye.Actif;
+                match.UpdatedBy = userId;
+                match.UpdatedAt = DateTime.UtcNow;
+                result.Updated++;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        result.Roster = await BuildCnssRosterAsync(dec);
+        var msg = $"Import terminé : {result.Created} créé(s), {result.Updated} mis à jour.";
+        if (result.Errors.Count > 0) msg += $" {result.Errors.Count} erreur(s).";
+        return ApiResponse<CnssEmployeeImportResultDto>.Ok(result, msg);
+    }
+
+    private async Task<CnssEmployeeRosterDto> BuildCnssRosterAsync(Declaration dec)
+    {
+        var employees = await _db.Employees
+            .Where(e => e.ClientId == dec.ClientId && !e.IsDeleted)
+            .OrderBy(e => e.Nom).ThenBy(e => e.Prenom)
+            .ToListAsync();
+
+        var debut = dec.DateDebut.Date;
+        var fin = dec.DateFin.Date;
+        var lines = new List<CnssEmployeeLineDto>();
+        foreach (var e in employees)
+        {
+            if (!IsPresentInPeriod(e, debut, fin)) continue;
+            var isEntrant = IsEntrantInPeriod(e, debut, fin);
+            var isSortant = IsSortantInPeriod(e, debut, fin);
+            lines.Add(MapCnssLine(e, isEntrant, isSortant, debut, fin));
+        }
+
+        return new CnssEmployeeRosterDto
+        {
+            DeclarationId = dec.Id,
+            ClientId = dec.ClientId,
+            ClientName = dec.Client?.RaisonSociale,
+            DateDebut = debut,
+            DateFin = fin,
+            PresentCount = lines.Count,
+            EntrantCount = lines.Count(l => l.IsEntrant),
+            SortantCount = lines.Count(l => l.IsSortant),
+            Employees = lines
+        };
+    }
+
+    private static CnssEmployeeLineDto MapCnssLine(Employee e, bool isEntrant, bool isSortant, DateTime debut, DateTime fin)
+    {
+        var salaire = e.SalaireBase + (e.PrimeAnciennete ?? 0) + (e.PrimeResponsabilite ?? 0) + (e.PrimePresence ?? 0);
+        return new CnssEmployeeLineDto
+        {
+            EmployeeId = e.Id,
+            CIN = e.CIN,
+            Nom = e.Nom,
+            Prenom = e.Prenom,
+            NumeroCNSS = e.NumeroCNSS,
+            MatriculeEmployeur = e.MatriculeEmployeur,
+            DateEmbauche = e.DateEmbauche,
+            DateSortie = e.DateSortie,
+            MotifSortie = e.MotifSortie,
+            IsEntrant = isEntrant,
+            IsSortant = isSortant,
+            JoursTravailles = DefaultJoursTravailles(e, debut, fin),
+            SalaireBrut = Math.Round(salaire, 2),
+            Sexe = e.Sexe
+        };
+    }
+
+    private static bool IsPresentInPeriod(Employee e, DateTime debut, DateTime fin)
+        => e.DateEmbauche.Date <= fin && (e.DateSortie == null || e.DateSortie.Value.Date >= debut);
+
+    private static bool IsEntrantInPeriod(Employee e, DateTime debut, DateTime fin)
+        => e.DateEmbauche.Date >= debut && e.DateEmbauche.Date <= fin;
+
+    private static bool IsSortantInPeriod(Employee e, DateTime debut, DateTime fin)
+        => e.DateSortie.HasValue && e.DateSortie.Value.Date >= debut && e.DateSortie.Value.Date <= fin;
+
+    private static int DefaultJoursTravailles(Employee e, DateTime debut, DateTime fin)
+    {
+        var start = e.DateEmbauche.Date > debut ? e.DateEmbauche.Date : debut;
+        var end = e.DateSortie.HasValue && e.DateSortie.Value.Date < fin ? e.DateSortie.Value.Date : fin;
+        if (end < start) return 0;
+        return Math.Min(26, (end - start).Days + 1);
+    }
+
+    /// <summary>Morocco métier calendar defaults by declaration type.</summary>
+    private static (DateTime debut, DateTime fin, DateTime limite, string periode) ResolvePeriod(string type, int? anneeFiscale, string? periodeOverride)
+    {
+        var now = DateTime.UtcNow;
+        var year = anneeFiscale ?? now.Year;
+
+        switch (type.ToUpperInvariant())
+        {
+            case "TVA":
+            case "CNSS":
+            case "IR_SAL":
+            {
+                var debut = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
+                var fin = debut.AddMonths(1).AddDays(-1);
+                var dayLimit = type.Equals("CNSS", StringComparison.OrdinalIgnoreCase) ? 10 : 20;
+                var limiteMonth = fin.AddMonths(1);
+                var limite = new DateTime(limiteMonth.Year, limiteMonth.Month, Math.Min(dayLimit, DateTime.DaysInMonth(limiteMonth.Year, limiteMonth.Month)));
+                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? debut.ToString("yyyy-MM") : periodeOverride!);
+            }
+            case "ACOMPTES":
+            {
+                var q = (now.Month - 1) / 3 + 1;
+                var debut = new DateTime(now.Year, (q - 1) * 3 + 1, 1);
+                var fin = debut.AddMonths(3).AddDays(-1);
+                var limiteDay = q switch { 1 => new DateTime(now.Year, 3, 31), 2 => new DateTime(now.Year, 6, 30), 3 => new DateTime(now.Year, 9, 30), _ => new DateTime(now.Year, 12, 31) };
+                return (debut, fin, limiteDay, string.IsNullOrWhiteSpace(periodeOverride) ? $"{now.Year}-Q{q}" : periodeOverride!);
+            }
+            case "REG_IS":
+            case "CM":
+            case "DRF":
+            case "IS":
+            case "IR":
+            case "DTS":
+            {
+                var debut = new DateTime(year, 1, 1);
+                var fin = new DateTime(year, 12, 31);
+                var limite = new DateTime(year + 1, 3, 31);
+                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? year.ToString() : periodeOverride!);
+            }
+            case "RAS_FONC":
+            case "RAS_DIV":
+            default:
+            {
+                var debut = new DateTime(now.Year, now.Month, 1);
+                var fin = debut.AddMonths(1).AddDays(-1);
+                var limite = fin.AddDays(30);
+                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? debut.ToString("yyyy-MM") : periodeOverride!);
+            }
+        }
     }
 
     // ─── DELETE ────────────────────────────────────────────────────
@@ -798,7 +1286,7 @@ public class DeclarationService : IDeclarationService
             Periode = periodeDebut.ToString("yyyy-MM"),
             DateDebut = periodeDebut,
             DateFin = periodeFin,
-            DateLimite = periodeFin.AddDays(10), // 10th of following month
+            DateLimite = new DateTime(periodeFin.AddMonths(1).Year, periodeFin.AddMonths(1).Month, Math.Min(10, DateTime.DaysInMonth(periodeFin.AddMonths(1).Year, periodeFin.AddMonths(1).Month))),
             Statut = RefCodes.StatutDeclaration.ACompleter,
             AssistantId = userId,
             CreatedBy = userId
@@ -832,14 +1320,19 @@ public class DeclarationService : IDeclarationService
         var tauxSalarial = await _refData.GetNumericValueAsync("CNSS", "TAUX_SALARIAL") / 100m;
         var tauxPatronal = await _refData.GetNumericValueAsync("CNSS", "TAUX_PATRONAL") / 100m;
 
-        // Get employees for this client in the declaration period
-        var employees = await _db.Employees.Where(e => e.ClientId == dec.ClientId && !e.IsDeleted).ToListAsync();
+        // Client employees only, filtered to declaration period (présents / entrants / sortants)
+        var roster = await BuildCnssRosterAsync(dec);
+        var employees = await _db.Employees
+            .Where(e => e.ClientId == dec.ClientId && !e.IsDeleted)
+            .ToListAsync();
+        var byId = employees.ToDictionary(e => e.Id);
 
         decimal totalBruts = 0, totalCotSal = 0, totalCotPat = 0;
         decimal totalAmoSal = 0, totalAmoPat = 0, totalFp = 0;
 
-        foreach (var emp in employees)
+        foreach (var line in roster.Employees)
         {
+            if (!byId.TryGetValue(line.EmployeeId, out var emp)) continue;
             var salaire = emp.SalaireBase + (emp.PrimeAnciennete ?? 0) + (emp.PrimeResponsabilite ?? 0) + (emp.PrimePresence ?? 0);
             var salairePlafonne = Math.Min(salaire, plafond);
             totalBruts += salaire;
@@ -859,7 +1352,8 @@ public class DeclarationService : IDeclarationService
             TotalAMOSalariale = Math.Round(totalAmoSal, 2),
             TotalAMOPatronale = Math.Round(totalAmoPat, 2),
             TotalFormationProfessionnelle = Math.Round(totalFp, 2),
-            NombreEmployes = employees.Count
+            NombreEmployes = roster.Employees.Count,
+            DetailEmployesJson = System.Text.Json.JsonSerializer.Serialize(roster.Employees)
         };
         dto.MontantTotal = dto.TotalCotisationSalariale + dto.TotalCotisationPatronale
                          + dto.TotalAMOSalariale + dto.TotalAMOPatronale + dto.TotalFormationProfessionnelle;

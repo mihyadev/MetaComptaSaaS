@@ -8264,7 +8264,8 @@ namespace MetaCompta.API.Migrations
                     b.HasIndex("CabinetId");
 
                     b.HasIndex("WorkflowTemplateId", "StepOrder")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("WorkflowStepTemplates");
                 });

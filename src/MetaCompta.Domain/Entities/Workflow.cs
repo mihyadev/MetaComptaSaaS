@@ -80,7 +80,15 @@ public enum WorkflowDeclarationType
     IR_SALAIRES = 5,
     Paie = 6,
     Juridique = 7,
-    Comptabilite = 8
+    Comptabilite = 8,
+    ACOMPTES = 9,
+    REG_IS = 10,
+    CM = 11,
+    DRF = 12,
+    IR_SAL = 13,
+    RAS_FONC = 14,
+    RAS_DIV = 15,
+    DTS = 16
 }
 
 /// <summary>

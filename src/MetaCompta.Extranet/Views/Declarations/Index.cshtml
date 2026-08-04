@@ -65,7 +65,7 @@
         "Archivee" or "Archivée" => "Archivée", "Rapprochee" or "Rapprochée" => "Rapprochée",
         "APayer" => "À payer", "Rejetee" or "Refusee" => "Rejetée", _ => d.Statut
     };
-    var typeIcon = d.Type switch { "TVA" => "bi-percent", "IS" => "bi-bank", "IR" => "bi-person-badge", "CNSS" => "bi-shield-check", _ => "bi-file-earmark-text" };
+    var typeIcon = d.Type switch { "TVA" => "bi-percent", "IS" => "bi-bank", "IR" => "bi-person-badge", "CNSS" => "bi-shield-check", "DTS" => "bi-file-earmark-person", _ => "bi-file-earmark-text" };
     var isOverdue = d.DaysUntilDeadline <= 0 && !isClosed;
     var isUrgent = d.DaysUntilDeadline <= 7 && !isOverdue && !isClosed;
     var filterGroup = isClosed ? "soumise" : "encours";

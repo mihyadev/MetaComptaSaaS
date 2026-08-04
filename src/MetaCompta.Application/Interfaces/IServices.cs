@@ -52,6 +52,20 @@ public interface IDeclarationService
     Task<ApiResponse<DeclarationDto>> GetByIdAsync(int id, int cabinetId);
     // Generic create for any type
     Task<ApiResponse<DeclarationDto>> CreateAsync(CreateDeclarationDto dto, int cabinetId, string userId);
+    /// <summary>Create a shell declaration for catalogue types (ACOMPTES, REG_IS, IR_SAL, …).</summary>
+    Task<ApiResponse<DeclarationDto>> CreateShellAsync(CreateDeclarationDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationDto>> SaveShellAsync(int declarationId, decimal? montantDu, decimal? montantCredit, string? notes, int cabinetId, string userId);
+    /// <summary>Suggest ACOMPTES amount = 25% of previous year IS dû.</summary>
+    Task<ApiResponse<DeclarationDto>> SuggestAcompteAsync(int declarationId, int cabinetId, string userId);
+    /// <summary>Suggest REG_IS = max(IS, CM) − acomptes for the fiscal year.</summary>
+    Task<ApiResponse<DeclarationDto>> SuggestRegIsAsync(int declarationId, int cabinetId, string userId);
+    /// <summary>Build a simple DNS/eBDS CSV export for CNSS (Damancom-ready stub).</summary>
+    Task<ApiResponse<byte[]>> ExportCnssDnsCsvAsync(int declarationId, int cabinetId);
+    /// <summary>Client employees for CNSS period (entrants / sortants / present) — never cabinet staff.</summary>
+    Task<ApiResponse<CnssEmployeeRosterDto>> GetCnssEmployeesAsync(int declarationId, int cabinetId);
+    Task<ApiResponse<CnssEmployeeRosterDto>> AddCnssEmployeeAsync(int declarationId, CnssEmployeeAddDto dto, int cabinetId, string userId);
+    Task<ApiResponse<CnssEmployeeRosterDto>> UpdateCnssEmployeeAsync(int declarationId, int employeeId, CnssEmployeeAddDto dto, int cabinetId, string userId);
+    Task<ApiResponse<CnssEmployeeImportResultDto>> ImportCnssEmployeesAsync(int declarationId, List<CnssEmployeeImportRowDto> rows, int cabinetId, string userId);
     // Delete
     Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId);
     // TVA
@@ -260,10 +274,16 @@ public interface IWorkflowService
     Task<ApiResponse<bool>> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto, int cabinetId, string userId);
     Task<ApiResponse<WorkflowStepInstanceDto>> GetCurrentStepAsync(int instanceId, int cabinetId);
     Task<ApiResponse<List<WorkflowStepInstanceDto>>> GetMyPendingStepsAsync(int cabinetId, string userId, int? clientId = null);
+    /// <summary>Create/link declarations for active typed workflows missing DeclarationId (Extranet Mes déclarations).</summary>
+    Task HealMissingDeclarationsForClientAsync(int cabinetId, int clientId, string userId);
 
     // ── Client Workflow Config ───────────────────────────────────
     Task<ApiResponse<List<ClientWorkflowConfigDto>>> GetClientConfigsAsync(int clientId, int cabinetId);
     Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto, int cabinetId, string userId);
+    /// <summary>Clone a cabinet template into a client-owned copy (or return existing). Used by Personnaliser.</summary>
+    Task<ApiResponse<WorkflowTemplateDto>> EnsureClientTemplateAsync(int clientId, int sourceTemplateId, string? declarationType, int cabinetId, string userId);
+    /// <summary>Save client config + update the client-owned template steps in one shot.</summary>
+    Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientWorkflowCustomizationAsync(ClientWorkflowCustomizeDto dto, int cabinetId, string userId);
 
     // ── Dashboard / Monitoring ───────────────────────────────────
     Task<ApiResponse<WorkflowDashboardDto>> GetDashboardAsync(int cabinetId, string userId);

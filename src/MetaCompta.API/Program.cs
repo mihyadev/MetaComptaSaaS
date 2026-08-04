@@ -84,6 +84,27 @@ builder.Services.AddScoped<IContractAccessService, ContractAccessService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IDeclarationService, DeclarationService>();
+builder.Services.AddScoped<IDeclarationTypeHandler, MetaCompta.Application.Services.Declarations.TvaDeclarationHandler>();
+builder.Services.AddScoped<IDeclarationTypeHandler, MetaCompta.Application.Services.Declarations.IsDeclarationHandler>();
+builder.Services.AddScoped<IDeclarationTypeHandler, MetaCompta.Application.Services.Declarations.IrDeclarationHandler>();
+builder.Services.AddScoped<IDeclarationTypeHandler, MetaCompta.Application.Services.Declarations.CnssDeclarationHandler>();
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "ACOMPTES", false));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "REG_IS", true));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "CM", true));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "DRF", true));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "IR_SAL", false));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "RAS_FONC", false));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "RAS_DIV", false));
+builder.Services.AddScoped<IDeclarationTypeHandler>(sp =>
+    new MetaCompta.Application.Services.Declarations.ShellDeclarationHandler(sp.GetRequiredService<IDeclarationService>(), "DTS", true));
+builder.Services.AddScoped<IDeclarationTypeHandlerRegistry, DeclarationTypeHandlerRegistry>();
 builder.Services.AddScoped<IPayrollService, PayrollService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
@@ -744,10 +765,19 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('WorkflowTemplates') AND name = 'IsSystem')
             ALTER TABLE [WorkflowTemplates] ADD [IsSystem] bit NOT NULL DEFAULT 0;
     ");
-    // Mark all seeded default templates as system (non-modifiable) ? separate batch so column is visible
+    // Mark only cabinet/global Plan Marocain defaults as system (never client-owned copies)
     await db.Database.ExecuteSqlRawAsync(@"
         IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('WorkflowTemplates') AND name = 'IsSystem')
-            UPDATE [WorkflowTemplates] SET [IsSystem] = 1 WHERE [IsDefault] = 1 AND [IsSystem] = 0;
+        BEGIN
+            UPDATE [WorkflowTemplates]
+            SET [IsSystem] = 1
+            WHERE [IsDefault] = 1 AND [ClientId] IS NULL AND [IsDeleted] = 0 AND [IsSystem] = 0;
+
+            -- Client copies must stay editable (fix previous overly broad patch)
+            UPDATE [WorkflowTemplates]
+            SET [IsSystem] = 0
+            WHERE [ClientId] IS NOT NULL AND [IsSystem] = 1;
+        END
     ");
 
     // ===== Patch: WorkflowStepTemplates columns added to model after AddRefColumnsAndWorkflow =====
