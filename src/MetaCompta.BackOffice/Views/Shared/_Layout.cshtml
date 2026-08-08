@@ -338,6 +338,7 @@
                         <ul class="nav flex-column">
                             @if (HasSvc("COMPTABILITE"))
                             {
+                                <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Comptabilite")"><i class="bi bi-kanban"></i> Tableau de bord</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Ecritures" ? "active" : "")" href="@Url.Action("Ecritures", "Comptabilite")"><i class="bi bi-pencil-square"></i> Tenue comptable</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "PlanComptable" ? "active" : "")" href="@Url.Action("PlanComptable", "Comptabilite")"><i class="bi bi-diagram-3"></i> Plan comptable</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Journaux" ? "active" : "")" href="@Url.Action("Journaux", "Comptabilite")"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
@@ -351,20 +352,21 @@
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie &amp; rapprochements</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
                             }
-                            @if (HasSvc("BILAN"))
+                            @if (HasAny("BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG", "COMPTABILITE"))
                             {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Bilan" ? "active" : "")" href="@Url.Action("Bilan", "EtatsFiscaux")"><i class="bi bi-clipboard-data"></i> Bilan</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "CPC" ? "active" : "")" href="@Url.Action("CPC", "EtatsFiscaux")"><i class="bi bi-bar-chart-line"></i> CPC</a></li>
+                                <li class="nav-item"><a class="nav-link @(currentController == "EtatsFiscaux" && (currentAction == "Synthese" || currentAction == "Bilan" || currentAction == "CPC" || currentAction == "EtatsSynthese") ? "active" : "")" href="@Url.Action("Synthese", "EtatsFiscaux")"><i class="bi bi-file-earmark-ruled"></i> États de Synthèse</a></li>
                             }
-                            @if (HasSvc("ETATSFISCAUX"))
+                            @if (HasSvc("ETATSFISCAUX") || HasSvc("BILAN"))
                             {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "EtatsSynthese" ? "active" : "")" href="@Url.Action("EtatsSynthese", "EtatsFiscaux")"><i class="bi bi-journal-text"></i> États fiscaux / synthèse</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Amortissements" ? "active" : "")" href="@Url.Action("Amortissements", "EtatsFiscaux")"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
+                                <li class="nav-item"><a class="nav-link @(currentAction == "Amortissements" || (currentAction == "Synthese" && Context.Request.Query["pane"] == "amort") ? "active" : "")" href="@Url.Action("Synthese", "EtatsFiscaux", new { pane = "amort" })"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
                             }
-                            @* LIASSEFISCALE unlocks IS (Déclaration fiscale — Liasse annuelle); avoid duplicate empty menu under Comptabilité *@
                             @if (HasSvc("EG"))
                             {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("EtatsSynthese", "EtatsFiscaux")"><i class="bi bi-fuel-pump"></i> E.G – Gasoil</a></li>
+                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Synthese", "EtatsFiscaux", new { pane = "detail-cpc" })"><i class="bi bi-fuel-pump"></i> E.G – Gasoil</a></li>
+                            }
+                            @if (HasAny("BILAN", "ETATSFISCAUX", "LIASSEFISCALE"))
+                            {
+                                <li class="nav-item"><a class="nav-link @(currentAction == "Index" && currentController == "EtatsFiscaux" ? "active" : "")" href="@Url.Action("Index", "EtatsFiscaux")"><i class="bi bi-clock-history"></i> Historique états</a></li>
                             }
                         </ul>
                     </div>
@@ -485,7 +487,7 @@
                 }
                 @if (isClientMenu || (showSidebar && hasClient))
                 {
-                <div class="client-selector-wrapper" id="clientSelectorWrapper">
+                <div class="client-selector-wrapper context-selector" id="clientSelectorWrapper">
                     <div class="client-selector-btn" id="clientSelectorBtn" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                         <i class="bi bi-building text-primary"></i>
                         @if (hasClient)
@@ -507,6 +509,33 @@
                         }
                     </div>
                 </div>
+                @if (hasClient)
+                {
+                    var selectedExercice = Context.Session.GetString("SelectedExercice");
+                    var selectedExerciceStatut = Context.Session.GetString("SelectedExerciceStatut") ?? "Ouvert";
+                    var selectedExerciceId = Context.Session.GetString("SelectedExerciceId");
+                <div class="client-selector-wrapper context-selector exercice-selector-wrapper" id="exerciceSelectorWrapper">
+                    <div class="client-selector-btn" id="exerciceSelectorBtn" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                        <i class="bi bi-calendar3 text-primary"></i>
+                        @if (!string.IsNullOrEmpty(selectedExercice))
+                        {
+                            <span class="selected-name" id="selectedExerciceDisplay">Exercice @selectedExercice</span>
+                            <span class="badge exo-statut-badge @(string.Equals(selectedExerciceStatut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")" id="selectedExerciceStatutBadge">@selectedExerciceStatut</span>
+                        }
+                        else
+                        {
+                            <span class="no-selection" id="selectedExerciceDisplay">Exercice...</span>
+                            <span class="badge exo-statut-badge d-none" id="selectedExerciceStatutBadge"></span>
+                        }
+                        <i class="bi bi-chevron-expand ms-auto text-muted" style="font-size:0.75rem;"></i>
+                    </div>
+                    <div class="client-selector-dropdown" id="exerciceDropdown" role="listbox">
+                        <div class="client-list" id="exerciceList"><div class="text-center text-muted py-3" style="font-size:0.82rem;">Chargement...</div></div>
+                        <div class="client-clear-btn text-primary" id="exerciceCreateBtn" role="button"><i class="bi bi-plus-circle"></i> Nouvel exercice</div>
+                    </div>
+                </div>
+                <input type="hidden" id="selectedExerciceIdValue" value="@(selectedExerciceId ?? "")" />
+                }
                 }
                 else
                 {
@@ -574,6 +603,40 @@
                 </div>
             }
             @RenderBody()
+        </div>
+    </div>
+
+    <!-- Modal Nouvel exercice -->
+    <div class="modal fade" id="createExerciceModal" tabindex="-1" aria-labelledby="createExerciceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="createExerciceModalLabel"><i class="bi bi-calendar-plus text-primary me-2"></i>Nouvel exercice comptable</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="exoAnneeInput">Ann&#233;e</label>
+                        <input type="number" class="form-control" id="exoAnneeInput" min="1990" max="2100" />
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="exoDebutInput">Date d&#233;but</label>
+                            <input type="date" class="form-control" id="exoDebutInput" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="exoFinInput">Date fin</label>
+                            <input type="date" class="form-control" id="exoFinInput" />
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Par d&#233;faut : 01/01 – 31/12. Vous pouvez d&#233;caler l&#8217;exercice (ex. 01/04 – 31/03).</p>
+                    <div class="text-danger small mt-2 d-none" id="exoCreateError"></div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                    <button type="button" class="btn btn-primary rounded-pill" id="exoCreateSubmitBtn">Cr&#233;er et s&#233;lectionner</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -683,6 +746,138 @@
                 });
             }
             searchInput.addEventListener('keydown', function(e) { if (e.key === 'Escape') { dropdown.classList.remove('show'); btn.focus(); } });
+        })();
+
+        // EXERCICE SELECTOR
+        (function() {
+            var wrapper = document.getElementById('exerciceSelectorWrapper');
+            if (!wrapper) return;
+            var btn = document.getElementById('exerciceSelectorBtn');
+            var dropdown = document.getElementById('exerciceDropdown');
+            var list = document.getElementById('exerciceList');
+            var createBtn = document.getElementById('exerciceCreateBtn');
+            var display = document.getElementById('selectedExerciceDisplay');
+            var badge = document.getElementById('selectedExerciceStatutBadge');
+            var modalEl = document.getElementById('createExerciceModal');
+            var modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+            function statutClass(st) {
+                return (st || '').toLowerCase().indexOf('ouvert') >= 0 ? 'exo-ouvert' : 'exo-cloture';
+            }
+
+            function renderExercices(data) {
+                if (!data || !data.length) {
+                    list.innerHTML = '<div class="text-center text-muted py-3" style="font-size:0.82rem;">Aucun exercice</div>';
+                    return;
+                }
+                var html = '';
+                var currentId = (document.getElementById('selectedExerciceIdValue') || {}).value || '';
+                data.forEach(function(e) {
+                    var sel = e.id.toString() === currentId || e.selected;
+                    html += '<div class="client-item ' + (sel ? 'selected' : '') + '" data-id="' + e.id + '" data-annee="' + e.annee + '" data-statut="' + (e.statut || '') + '">';
+                    html += '<div class="client-avatar" style="background:linear-gradient(135deg,#00c875,#037f4c);font-size:0.7rem;">' + e.annee + '</div>';
+                    html += '<div class="client-info"><div class="name">Exercice ' + e.annee + '</div>';
+                    html += '<div class="ice">' + (e.dateDebut || '') + ' → ' + (e.dateFin || '') + '</div></div>';
+                    html += '<span class="badge exo-statut-badge ' + statutClass(e.statut) + '">' + (e.statut || '') + '</span>';
+                    if (sel) html += '<i class="bi bi-check-circle-fill text-primary ms-1"></i>';
+                    html += '</div>';
+                });
+                list.innerHTML = html;
+                list.querySelectorAll('.client-item').forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        selectExercice(item.dataset.id, item.dataset.annee, item.dataset.statut);
+                    });
+                });
+            }
+
+            function loadExercices() {
+                list.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+                $.get('@Url.Action("ListExercices", "Home")', function(data) { renderExercices(data); });
+            }
+
+            function selectExercice(id, annee, statut) {
+                $.post('@Url.Action("SetExercice", "Home")', { exerciceId: id }, function(res) {
+                    if (res && res.success) {
+                        toastr.success('Exercice ' + (res.annee || annee) + ' sélectionné');
+                        window.location.reload();
+                    } else {
+                        toastr.error((res && res.message) || 'Sélection impossible');
+                    }
+                });
+            }
+
+            function syncDatesFromYear() {
+                var y = parseInt(document.getElementById('exoAnneeInput').value, 10);
+                if (!y) return;
+                document.getElementById('exoDebutInput').value = y + '-01-01';
+                document.getElementById('exoFinInput').value = y + '-12-31';
+            }
+
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var isOpen = dropdown.classList.contains('show');
+                dropdown.classList.toggle('show');
+                btn.setAttribute('aria-expanded', !isOpen);
+                if (!isOpen) loadExercices();
+            });
+            document.addEventListener('click', function(e) {
+                if (!wrapper.contains(e.target)) dropdown.classList.remove('show');
+            });
+
+            if (createBtn && modal) {
+                createBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    dropdown.classList.remove('show');
+                    var next = new Date().getFullYear() + 1;
+                    document.getElementById('exoAnneeInput').value = next;
+                    syncDatesFromYear();
+                    document.getElementById('exoCreateError').classList.add('d-none');
+                    modal.show();
+                });
+            }
+            var anneeInput = document.getElementById('exoAnneeInput');
+            if (anneeInput) anneeInput.addEventListener('change', syncDatesFromYear);
+
+            var submitBtn = document.getElementById('exoCreateSubmitBtn');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function() {
+                    var err = document.getElementById('exoCreateError');
+                    err.classList.add('d-none');
+                    var payload = {
+                        annee: parseInt(document.getElementById('exoAnneeInput').value, 10),
+                        dateDebut: document.getElementById('exoDebutInput').value || null,
+                        dateFin: document.getElementById('exoFinInput').value || null
+                    };
+                    if (!payload.annee) {
+                        err.textContent = 'Année obligatoire.';
+                        err.classList.remove('d-none');
+                        return;
+                    }
+                    submitBtn.disabled = true;
+                    $.ajax({
+                        url: '@Url.Action("CreateExercice", "Home")',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            submitBtn.disabled = false;
+                            if (res && res.success) {
+                                toastr.success(res.message || ('Exercice ' + res.annee + ' créé'));
+                                if (modal) modal.hide();
+                                window.location.reload();
+                            } else {
+                                err.textContent = (res && res.message) || 'Création impossible.';
+                                err.classList.remove('d-none');
+                            }
+                        },
+                        error: function(xhr) {
+                            submitBtn.disabled = false;
+                            err.textContent = (xhr.responseJSON && xhr.responseJSON.message) || 'Erreur serveur.';
+                            err.classList.remove('d-none');
+                        }
+                    });
+                });
+            }
         })();
     </script>
     @await RenderSectionAsync("Scripts", required: false)

@@ -1,3 +1,4 @@
+using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.Domain.Common;
@@ -6,23 +7,26 @@ using Microsoft.AspNetCore.Mvc;
 namespace MetaCompta.BackOffice.Controllers;
 
 /// <summary>
-/// Controller for États Fiscaux — État 9421, Liasse fiscale, Bilan, CPC, Amortissements, États de synthèse.
+/// Controller for États Fiscaux — catalog + interactive États de Synthèse workspace.
 /// </summary>
 [RequireSelectedClient]
 public class EtatsFiscauxController : BaseController
 {
     private readonly IEtatFiscalFacade _etats;
     private readonly IClientFacade _clients;
+    private readonly IComptabiliteFacade _compta;
 
     public EtatsFiscauxController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IEtatFiscalFacade etats,
-        IClientFacade clients)
+        IClientFacade clients,
+        IComptabiliteFacade compta)
         : base(referenceData, contextAccessor)
     {
         _etats = etats;
         _clients = clients;
+        _compta = compta;
     }
 
     [RequirePermission(ClaimDefinitions.ReportView)]
@@ -37,6 +41,50 @@ public class EtatsFiscauxController : BaseController
         ViewBag.Exercice = exercice;
         ViewBag.Search = search;
         return View(result);
+    }
+
+    /// <summary>Interactive États de Synthèse grid (Bilan, CPC, ESG…) under Tenue comptable.</summary>
+    [RequirePermission(ClaimDefinitions.ReportView)]
+    public async Task<IActionResult> Synthese(string? pane = null)
+    {
+        var clientId = SelectedClientId;
+        if (!clientId.HasValue)
+            return RedirectToAction("Workspace", "Home");
+
+        await _compta.EnsureLedgerAsync(clientId.Value);
+
+        if (!SelectedExerciceId.HasValue && SelectedExercice is null)
+        {
+            var exercices = await _compta.GetExercicesAsync(clientId.Value);
+            var pick = exercices
+                .Where(e => string.Equals(e.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(e => e.Annee)
+                .FirstOrDefault()
+                ?? exercices.OrderByDescending(e => e.Annee).FirstOrDefault();
+            if (pick != null)
+                SetExerciceSession(pick);
+        }
+
+        var exerciceAnnee = SelectedExercice ?? DateTime.Now.Year;
+        var balance = await _compta.GetBalanceAsync(clientId.Value, null, null, SelectedExerciceId);
+
+        ViewBag.Client = await _clients.GetByIdAsync(clientId.Value);
+        ViewBag.ClientId = clientId.Value;
+        ViewBag.ExerciceAnnee = exerciceAnnee;
+        ViewBag.ExerciceId = SelectedExerciceId;
+        ViewBag.ExerciceStatut = SelectedExerciceStatut ?? "Ouvert";
+        ViewBag.InitialPane = string.IsNullOrWhiteSpace(pane) ? "bilan" : pane.Trim().ToLowerInvariant();
+        ViewBag.BalanceJson = System.Text.Json.JsonSerializer.Serialize(
+            balance.Select(b => new
+            {
+                account = b.NumeroCompte,
+                name = b.LibelleCompte,
+                debit = b.TotalDebit,
+                credit = b.TotalCredit,
+                soldeD = b.SoldeDebiteur,
+                soldeC = b.SoldeCrediteur
+            }));
+        return View();
     }
 
     [RequirePermission(ClaimDefinitions.ReportView)]
@@ -77,56 +125,20 @@ public class EtatsFiscauxController : BaseController
     }
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> Etat9421(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("Etat9421", clientId, exercice, page);
-    }
+    public IActionResult Etat9421() => RedirectToAction(nameof(Synthese), new { pane = "9421" });
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> LiasseFiscale(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("LiasseFiscale", clientId, exercice, page);
-    }
+    public IActionResult LiasseFiscale() => RedirectToAction(nameof(Synthese), new { pane = "bilan" });
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> Bilan(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("Bilan", clientId, exercice, page);
-    }
+    public IActionResult Bilan() => RedirectToAction(nameof(Synthese), new { pane = "bilan" });
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> CPC(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("CPC", clientId, exercice, page);
-    }
+    public IActionResult CPC() => RedirectToAction(nameof(Synthese), new { pane = "cpc" });
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> Amortissements(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("Amortissements", clientId, exercice, page);
-    }
+    public IActionResult Amortissements() => RedirectToAction(nameof(Synthese), new { pane = "amort" });
 
     [RequirePermission(ClaimDefinitions.ReportView)]
-    public async Task<IActionResult> EtatsSynthese(int? clientId = null, int? exercice = null, int page = 1)
-    {
-        clientId ??= SelectedClientId;
-        return await TypedIndex("EtatsSynthese", clientId, exercice, page);
-    }
-
-    private async Task<IActionResult> TypedIndex(string type, int? clientId, int? exercice, int page)
-    {
-        clientId ??= SelectedClientId;
-        await LoadReferenceDataToViewBagAsync("TYPE_ETAT_FISCAL", "STATUT_ETAT");
-        var result = await _etats.GetAllAsync(clientId, type, exercice, page, null);
-        ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
-        ViewBag.ClientId = clientId;
-        ViewBag.TypeEtat = type;
-        ViewBag.Exercice = exercice;
-        return View("Index", result);
-    }
+    public IActionResult EtatsSynthese() => RedirectToAction(nameof(Synthese), new { pane = "bilan" });
 }

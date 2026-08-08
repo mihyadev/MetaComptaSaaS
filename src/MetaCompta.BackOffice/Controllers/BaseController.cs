@@ -173,6 +173,27 @@ public abstract class BaseController : Controller
     // ── Global Client Context (selected in topbar) ──────────────
     protected int? SelectedClientId => int.TryParse(_contextAccessor.HttpContext?.Session.GetString("SelectedClientId"), out var cid) ? cid : null;
     protected string? SelectedClientName => _contextAccessor.HttpContext?.Session.GetString("SelectedClientName");
+    protected int? SelectedExercice => int.TryParse(_contextAccessor.HttpContext?.Session.GetString("SelectedExercice"), out var y) ? y : null;
+    protected int? SelectedExerciceId => int.TryParse(_contextAccessor.HttpContext?.Session.GetString("SelectedExerciceId"), out var eid) ? eid : null;
+    protected string? SelectedExerciceStatut => _contextAccessor.HttpContext?.Session.GetString("SelectedExerciceStatut");
+
+    protected void SetExerciceSession(ExerciceComptableDto exo)
+    {
+        var session = _contextAccessor.HttpContext?.Session;
+        if (session == null) return;
+        session.SetString("SelectedExercice", exo.Annee.ToString());
+        session.SetString("SelectedExerciceId", exo.Id.ToString());
+        session.SetString("SelectedExerciceStatut", exo.Statut ?? "Ouvert");
+    }
+
+    protected void ClearExerciceSession()
+    {
+        var session = _contextAccessor.HttpContext?.Session;
+        if (session == null) return;
+        session.Remove("SelectedExercice");
+        session.Remove("SelectedExerciceId");
+        session.Remove("SelectedExerciceStatut");
+    }
 
     // ── Reference data helpers ──────────────────────────────────
 

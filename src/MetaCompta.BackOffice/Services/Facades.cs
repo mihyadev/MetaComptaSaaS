@@ -608,6 +608,28 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
     public async Task EnsureLedgerAsync(int clientId)
         => await _api.PostAsync<bool>($"api/comptabilite/ensure/{clientId}", new { });
 
+    public async Task<List<ExerciceComptableDto>> GetExercicesAsync(int clientId)
+    {
+        var result = await _api.GetAsync<List<ExerciceComptableDto>>($"api/comptabilite/exercices?clientId={clientId}");
+        return result?.Data ?? new List<ExerciceComptableDto>();
+    }
+
+    public async Task<ApiResponse<ExerciceComptableDto>?> CreateExerciceAsync(ExerciceCreateDto dto)
+        => await _api.PostAsync<ExerciceComptableDto>("api/comptabilite/exercices", dto);
+
+    public async Task<ExerciceComptableDto?> GetExerciceByIdAsync(int id)
+    {
+        var result = await _api.GetAsync<ExerciceComptableDto>($"api/comptabilite/exercices/{id}");
+        return result?.Data;
+    }
+
+    public async Task<ComptaDashboardDto?> GetDashboardAsync(int clientId, int? exerciceId = null)
+    {
+        var url = QueryBuilder.For("api/comptabilite/dashboard").Add("clientId", clientId).Add("exerciceId", exerciceId);
+        var result = await _api.GetAsync<ComptaDashboardDto>(url);
+        return result?.Data;
+    }
+
     public async Task<List<CompteComptableDto>> GetComptesAsync(int clientId, string? search = null)
     {
         var url = QueryBuilder.For("api/comptabilite/comptes").Add("clientId", clientId).Add("search", search);
@@ -618,16 +640,51 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
     public async Task<ApiResponse<CompteComptableDto>?> CreateCompteAsync(CompteComptableCreateDto dto)
         => await _api.PostAsync<CompteComptableDto>("api/comptabilite/comptes", dto);
 
-    public async Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null)
+    public async Task<ApiResponse<CompteComptableDto>?> UpdateCompteAsync(int id, CompteComptableUpdateDto dto)
+        => await _api.PutAsync<CompteComptableDto>($"api/comptabilite/comptes/{id}", dto);
+
+    public async Task<ApiResponse<CompteImportResultDto>?> ImportComptesAsync(int clientId, string csvContent)
+        => await _api.PostAsync<CompteImportResultDto>("api/comptabilite/comptes/import",
+            new CompteImportRequestDto { ClientId = clientId, CsvContent = csvContent });
+
+    public async Task<ApiResponse<CompteImportResultDto>?> ImportJournauxAsync(int clientId, string csvContent)
+        => await _api.PostAsync<CompteImportResultDto>("api/comptabilite/journaux/import",
+            new CsvImportRequestDto { ClientId = clientId, CsvContent = csvContent });
+
+    public async Task<ApiResponse<CompteImportResultDto>?> ImportEcrituresAsync(int clientId, string csvContent, int? exerciceId = null, bool valider = false)
+        => await _api.PostAsync<CompteImportResultDto>("api/comptabilite/ecritures/import",
+            new CsvImportRequestDto { ClientId = clientId, CsvContent = csvContent, ExerciceComptableId = exerciceId, Valider = valider });
+
+    public async Task<ApiResponse<CompteImportResultDto>?> ImportRapprochementsAsync(int clientId, string csvContent)
+        => await _api.PostAsync<CompteImportResultDto>("api/comptabilite/rapprochements/import",
+            new CsvImportRequestDto { ClientId = clientId, CsvContent = csvContent });
+
+    public async Task<ApiResponse<CompteImportResultDto>?> ImportSoldesOuvertureAsync(int clientId, string csvContent, int? exerciceId = null)
+        => await _api.PostAsync<CompteImportResultDto>("api/comptabilite/soldes-ouverture/import",
+            new CsvImportRequestDto { ClientId = clientId, CsvContent = csvContent, ExerciceComptableId = exerciceId });
+
+    public async Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null, string? statut = null, int? exerciceId = null)
     {
         var url = QueryBuilder.For("api/comptabilite/ecritures")
-            .Add("page", page).Add("clientId", clientId).Add("journal", journal).Add("search", search);
+            .Add("page", page).Add("clientId", clientId).Add("journal", journal).Add("search", search).Add("statut", statut).Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<PagedResult<EcritureComptableDto>>(url);
+        return result?.Data;
+    }
+
+    public async Task<EcritureDetailDto?> GetEcritureByIdAsync(int id)
+    {
+        var result = await _api.GetAsync<EcritureDetailDto>($"api/comptabilite/ecritures/{id}");
         return result?.Data;
     }
 
     public async Task<ApiResponse<EcritureComptableDto>?> CreateEcritureAsync(EcritureCreateDto dto)
         => await _api.PostAsync<EcritureComptableDto>("api/comptabilite/ecritures", dto);
+
+    public async Task<ApiResponse<EcritureComptableDto>?> UpdateEcritureAsync(int id, EcritureCreateDto dto)
+        => await _api.PutAsync<EcritureComptableDto>($"api/comptabilite/ecritures/{id}", dto);
+
+    public async Task<ApiResponse<bool>?> DeleteEcritureAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/comptabilite/ecritures/{id}");
 
     public async Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id)
         => await _api.PostAsync<EcritureComptableDto>($"api/comptabilite/ecritures/{id}/validate", new { });
@@ -640,22 +697,27 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
         return result?.Data ?? new List<JournalDto>();
     }
 
-    public async Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null)
+    public async Task<ApiResponse<JournalDto>?> UpdateJournalAsync(int id, JournalUpdateDto dto)
+        => await _api.PutAsync<JournalDto>($"api/comptabilite/journaux/{id}", dto);
+
+    public async Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null, int? exerciceId = null)
     {
         var url = QueryBuilder.For("api/comptabilite/grandlivre")
             .Add("clientId", clientId)
             .Add("dateDebut", dateDebut?.ToString("yyyy-MM-dd"))
-            .Add("dateFin", dateFin?.ToString("yyyy-MM-dd"));
+            .Add("dateFin", dateFin?.ToString("yyyy-MM-dd"))
+            .Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<List<GrandLivreDto>>(url);
         return result?.Data ?? new List<GrandLivreDto>();
     }
 
-    public async Task<List<BalanceDto>> GetBalanceAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null)
+    public async Task<List<BalanceDto>> GetBalanceAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null, int? exerciceId = null)
     {
         var url = QueryBuilder.For("api/comptabilite/balance")
             .Add("clientId", clientId)
             .Add("dateDebut", dateDebut?.ToString("yyyy-MM-dd"))
-            .Add("dateFin", dateFin?.ToString("yyyy-MM-dd"));
+            .Add("dateFin", dateFin?.ToString("yyyy-MM-dd"))
+            .Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<List<BalanceDto>>(url);
         return result?.Data ?? new List<BalanceDto>();
     }
@@ -676,6 +738,9 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
     public async Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode, decimal? soldeBanque = null)
         => await _api.PostAsync<RapprochementBancaireDto>("api/comptabilite/rapprochements",
             new RapprochementCreateDto { ClientId = clientId, CompteBancaire = compteBancaire, Periode = periode, SoldeBanque = soldeBanque });
+
+    public async Task<ApiResponse<RapprochementBancaireDto>?> UpdateRapprochementAsync(int id, RapprochementUpdateDto dto)
+        => await _api.PutAsync<RapprochementBancaireDto>($"api/comptabilite/rapprochements/{id}", dto);
 }
 
 public sealed class JuridiqueFacade : IJuridiqueFacade

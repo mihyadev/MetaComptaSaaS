@@ -2,116 +2,160 @@
 @{
     ViewData["Title"] = "Plan comptable PCGM";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var canCreate = ViewBag.CanComptabiliteCreate as bool? ?? false;
+    var canEdit = ViewBag.CanComptabiliteEdit as bool? ?? false;
+    var byClasse = (Model ?? new()).GroupBy(c => c.Classe).OrderBy(g => g.Key).ToList();
 }
 
-<div class="page-header">
-    <div>
-        <h2><i class="bi bi-diagram-3 me-2"></i>Plan comptable PCGM</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
-                <li class="breadcrumb-item">Comptabilité</li>
-                <li class="breadcrumb-item active">Plan comptable</li>
-            </ol>
-        </nav>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="bg-info text-white rounded-3 p-3 lh-1"><i class="bi bi-diagram-3 fs-4"></i></span>
+        <div>
+            <h1 class="h3 fw-bold mb-0">Plan comptable PCGM</h1>
+            <div class="text-body-secondary small">Board CRM · @(Model?.Count ?? 0) compte(s)</div>
+        </div>
     </div>
-    @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
-    {
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCompte">
-            <i class="bi bi-plus-circle me-1"></i> Ajouter un compte
-        </button>
-    }
+    <div class="d-flex flex-wrap gap-2">
+        <a href="@Url.Action("DownloadTemplatePlan")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-file-earmark-text me-1"></i> Modèle CSV</a>
+        <a href="@Url.Action("ExportPlan")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-download me-1"></i> Export</a>
+        @if (canCreate)
+        {
+            <button class="btn btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalImport"><i class="bi bi-upload me-1"></i> Import CSV</button>
+            <button class="btn btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCompte"><i class="bi bi-plus-lg me-1"></i> Compte</button>
+        }
+    </div>
 </div>
 
 @if (client != null)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
-        <i class="bi bi-building fs-5"></i>
-        <div><strong>@client.RaisonSociale</strong> — plan seedé / personnalisable</div>
+    <div class="alert border-0 shadow-sm rounded-4 bg-info-subtle text-info-emphasis mb-3 py-2 px-3">
+        <i class="bi bi-building me-1"></i><strong>@client.RaisonSociale</strong> — plan seedé / personnalisable
     </div>
 }
 
-<div class="mc-card mb-3">
+<div class="card border-0 shadow-sm rounded-4 mb-3">
     <div class="card-body p-3">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-6">
-                <label class="form-label">Recherche</label>
-                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Numéro ou libellé…" />
+                <input type="text" name="search" class="form-control rounded-3" value="@ViewBag.Search" placeholder="Numéro ou libellé…" />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100 rounded-pill">Filtrer</button>
             </div>
         </form>
     </div>
 </div>
 
-<div class="mc-card">
-    <div class="card-header"><i class="bi bi-table me-2"></i>Comptes (@(Model?.Count ?? 0))</div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table mc-table mb-0">
-                <thead>
-                    <tr>
-                        <th>Classe</th>
-                        <th>N°</th>
-                        <th>Libellé</th>
-                        <th>Nature</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model != null && Model.Any())
-                    {
-                        foreach (var c in Model)
+@if (!byClasse.Any())
+{
+    <div class="card border-0 shadow-sm rounded-4 text-center py-5 text-muted">Aucun compte.</div>
+}
+else
+{
+    foreach (var g in byClasse)
+    {
+        <div class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">Classe @g.Key</span>
+                <span class="small text-muted">@g.Count()</span>
+            </div>
+            <div class="card border-0 shadow-sm rounded-4 border-start border-4 border-info">
+                <div class="table-responsive">
+                    <table class="table mc-table mb-0 align-middle">
+                        <thead><tr><th>N°</th><th>Libellé</th><th>Nature</th><th>Actif</th>@if (canEdit){<th></th>}</tr></thead>
+                        <tbody>
+                        @foreach (var c in g.OrderBy(x => x.Numero))
                         {
                             <tr>
-                                <td><span class="badge bg-secondary">@c.Classe</span></td>
                                 <td><code>@c.Numero</code></td>
                                 <td>@c.Libelle</td>
                                 <td>@c.Nature</td>
+                                <td>@(c.EstActif ? "Oui" : "Non")</td>
+                                @if (canEdit)
+                                {
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
+                                                data-bs-toggle="modal" data-bs-target="#modalEditCompte"
+                                                data-id="@c.Id" data-libelle="@c.Libelle" data-nature="@c.Nature" data-actif="@(c.EstActif ? "1" : "0")">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </td>
+                                }
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="4" class="text-center py-4 text-muted">Aucun compte. Ouvrez cette page pour seed PCGM.</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
+    }
+}
 
 <div class="modal fade" id="modalCompte" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="post" asp-action="CreateCompte">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="ClientId" value="@(client?.Id ?? 0)" />
-                <div class="modal-header">
-                    <h5 class="modal-title">Nouveau compte</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Numéro</label>
-                        <input name="Numero" class="form-control" required maxlength="20" placeholder="Ex: 6118" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Libellé</label>
-                        <input name="Libelle" class="form-control" required maxlength="300" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Classe (optionnel)</label>
-                        <input name="Classe" class="form-control" maxlength="5" placeholder="Déduit du 1er chiffre si vide" />
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Créer</button>
-                </div>
-            </form>
-        </div>
+        <form method="post" asp-action="CreateCompte" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="ClientId" value="@(client?.Id ?? 0)" />
+            <div class="modal-header border-0"><h5 class="modal-title">Nouveau compte</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Numéro</label><input name="Numero" class="form-control rounded-3" required maxlength="20" /></div>
+                <div class="mb-3"><label class="form-label">Libellé</label><input name="Libelle" class="form-control rounded-3" required /></div>
+                <div class="mb-3"><label class="form-label">Classe</label><input name="Classe" class="form-control rounded-3" placeholder="Auto si vide" /></div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Créer</button>
+            </div>
+        </form>
     </div>
 </div>
+
+<div class="modal fade" id="modalEditCompte" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" asp-action="UpdateCompte" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="editCompteId" />
+            <div class="modal-header border-0"><h5 class="modal-title">Modifier compte</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Libellé</label><input name="libelle" id="editLibelle" class="form-control rounded-3" required /></div>
+                <div class="mb-3"><label class="form-label">Nature</label><input name="nature" id="editNature" class="form-control rounded-3" /></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="estActif" value="true" id="editActif" /><label class="form-check-label" for="editActif">Actif</label></div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalImport" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" asp-action="ImportPlan" enctype="multipart/form-data" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <div class="modal-header border-0"><h5 class="modal-title">Import CSV</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p class="small text-muted">Colonnes : <code>Numero;Libelle;Classe;Nature;Actif</code> (Nature/Actif optionnels)</p>
+                <a href="@Url.Action("DownloadTemplatePlan")" class="small d-inline-block mb-3"><i class="bi bi-download me-1"></i>Télécharger le modèle</a>
+                <input type="file" name="file" accept=".csv,text/csv" class="form-control rounded-3 mb-3" />
+                <label class="form-label">Ou coller le CSV</label>
+                <textarea name="csvText" class="form-control rounded-3" rows="5" placeholder="6118;Autres achats;6;General;1"></textarea>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Importer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('modalEditCompte')?.addEventListener('show.bs.modal', e => {
+    const btn = e.relatedTarget;
+    if (!btn) return;
+    document.getElementById('editCompteId').value = btn.dataset.id;
+    document.getElementById('editLibelle').value = btn.dataset.libelle || '';
+    document.getElementById('editNature').value = btn.dataset.nature || '';
+    document.getElementById('editActif').checked = btn.dataset.actif === '1';
+});
+</script>

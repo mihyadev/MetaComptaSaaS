@@ -338,6 +338,8 @@ body.gw-mode .sidebar-toggle-btn { display: none !important; }
 .mc-content { padding: 1.5rem 1.75rem 2.5rem; }
 
 .client-selector-wrapper { position: relative; min-width: 300px; }
+.client-selector-wrapper.exercice-selector-wrapper,
+.context-selector.exercice-selector-wrapper { min-width: 220px; max-width: 280px; }
 .client-selector-btn {
   display: flex; align-items: center; gap: 0.6rem;
   padding: 0.5rem 0.9rem; border-radius: 2rem;
@@ -352,6 +354,16 @@ body.gw-mode .sidebar-toggle-btn { display: none !important; }
 }
 .client-selector-btn .selected-name { font-weight: 700; }
 .client-selector-btn .no-selection { color: var(--monday-muted); font-style: italic; font-weight: 500; }
+.exo-statut-badge {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 0.2rem 0.5rem; border-radius: 999px; border: 1px solid transparent;
+}
+.exo-statut-badge.exo-ouvert {
+  background: #e3f8ef; color: #037f4c; border-color: #b4eed4;
+}
+.exo-statut-badge.exo-cloture {
+  background: #f5f6f8; color: #676879; border-color: var(--monday-border);
+}
 .client-selector-dropdown {
   position: absolute; top: calc(100% + 8px); left: 0; right: 0;
   background: var(--monday-surface);

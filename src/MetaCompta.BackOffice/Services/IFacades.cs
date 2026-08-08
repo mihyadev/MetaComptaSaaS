@@ -185,17 +185,32 @@ public interface ITaskFacade
 public interface IComptabiliteFacade
 {
     Task EnsureLedgerAsync(int clientId);
+    Task<List<ExerciceComptableDto>> GetExercicesAsync(int clientId);
+    Task<ApiResponse<ExerciceComptableDto>?> CreateExerciceAsync(ExerciceCreateDto dto);
+    Task<ExerciceComptableDto?> GetExerciceByIdAsync(int id);
+    Task<ComptaDashboardDto?> GetDashboardAsync(int clientId, int? exerciceId = null);
     Task<List<CompteComptableDto>> GetComptesAsync(int clientId, string? search = null);
     Task<ApiResponse<CompteComptableDto>?> CreateCompteAsync(CompteComptableCreateDto dto);
-    Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null);
+    Task<ApiResponse<CompteComptableDto>?> UpdateCompteAsync(int id, CompteComptableUpdateDto dto);
+    Task<ApiResponse<CompteImportResultDto>?> ImportComptesAsync(int clientId, string csvContent);
+    Task<ApiResponse<CompteImportResultDto>?> ImportJournauxAsync(int clientId, string csvContent);
+    Task<ApiResponse<CompteImportResultDto>?> ImportEcrituresAsync(int clientId, string csvContent, int? exerciceId = null, bool valider = false);
+    Task<ApiResponse<CompteImportResultDto>?> ImportRapprochementsAsync(int clientId, string csvContent);
+    Task<ApiResponse<CompteImportResultDto>?> ImportSoldesOuvertureAsync(int clientId, string csvContent, int? exerciceId = null);
+    Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null, string? statut = null, int? exerciceId = null);
+    Task<EcritureDetailDto?> GetEcritureByIdAsync(int id);
     Task<ApiResponse<EcritureComptableDto>?> CreateEcritureAsync(EcritureCreateDto dto);
+    Task<ApiResponse<EcritureComptableDto>?> UpdateEcritureAsync(int id, EcritureCreateDto dto);
+    Task<ApiResponse<bool>?> DeleteEcritureAsync(int id);
     Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id);
     Task<List<JournalDto>> GetJournauxAsync(int? clientId = null);
-    Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null);
-    Task<List<BalanceDto>> GetBalanceAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null);
+    Task<ApiResponse<JournalDto>?> UpdateJournalAsync(int id, JournalUpdateDto dto);
+    Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null, int? exerciceId = null);
+    Task<List<BalanceDto>> GetBalanceAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null, int? exerciceId = null);
     Task<List<BalanceAgeeDto>> GetBalanceAgeeAsync(int clientId);
     Task<List<RapprochementBancaireDto>> GetRapprochementsAsync(int? clientId = null);
     Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode, decimal? soldeBanque = null);
+    Task<ApiResponse<RapprochementBancaireDto>?> UpdateRapprochementAsync(int id, RapprochementUpdateDto dto);
 }
 
 /// <summary>Facade for Juridique (Legal) operations.</summary>

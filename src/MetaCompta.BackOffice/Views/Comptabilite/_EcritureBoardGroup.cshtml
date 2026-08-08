@@ -1,0 +1,73 @@
+@model List<MetaCompta.Application.DTOs.EcritureComptableDto>
+@{
+    var title = ViewData["GroupTitle"] as string ?? "";
+    var border = ViewData["Border"] as string ?? "border-secondary";
+    var canCreate = ViewBag.CanComptabiliteCreate as bool? ?? false;
+    var canEdit = ViewBag.CanComptabiliteEdit as bool? ?? false;
+    var group = Model ?? new();
+    if (!group.Any()) { return; }
+    string SoftBadge(string s) => s is "Validé" or "Validee"
+        ? "bg-success-subtle text-success-emphasis"
+        : "bg-warning-subtle text-warning-emphasis";
+}
+
+<div class="mb-4">
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge rounded-pill @SoftBadge(title == "Validées" ? "Validé" : "Brouillon")">@title</span>
+        <span class="text-muted small">@group.Count</span>
+    </div>
+    <div class="card border-0 shadow-sm rounded-4 border-start border-4 @border">
+        <div class="table-responsive">
+            <table class="table mc-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Pièce</th>
+                        <th>Date</th>
+                        <th>Journal</th>
+                        <th>Libellé</th>
+                        <th class="text-end">Débit</th>
+                        <th class="text-end">Crédit</th>
+                        <th>Lignes</th>
+                        <th>Statut</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var e in group)
+                {
+                    <tr>
+                        <td class="fw-semibold"><a href="@Url.Action("Details", "Comptabilite", new { id = e.Id })" class="text-decoration-none">@e.NumeroPiece</a></td>
+                        <td>@e.DateEcriture.ToString("dd/MM/yyyy")</td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis">@e.Journal</span></td>
+                        <td>@e.Libelle</td>
+                        <td class="text-end text-success fw-medium">@e.Debit.ToString("N2")</td>
+                        <td class="text-end text-danger fw-medium">@e.Credit.ToString("N2")</td>
+                        <td>@e.NombreLignes</td>
+                        <td><span class="badge rounded-pill @SoftBadge(e.Statut)">@e.Statut</span></td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary rounded-pill" href="@Url.Action("Details", "Comptabilite", new { id = e.Id })"><i class="bi bi-eye"></i></a>
+                            @if (e.Statut == "Brouillon" && canCreate)
+                            {
+                                <form method="post" asp-controller="Comptabilite" asp-action="ValidateEcriture" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@e.Id" />
+                                    <button type="submit" class="btn btn-sm btn-success rounded-pill" title="Valider"><i class="bi bi-check-lg"></i></button>
+                                </form>
+                            }
+                            @if (e.Statut == "Brouillon" && canEdit)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary rounded-pill" href="@Url.Action("EditEcriture", "Comptabilite", new { id = e.Id })"><i class="bi bi-pencil"></i></a>
+                                <form method="post" asp-controller="Comptabilite" asp-action="DeleteEcriture" class="d-inline" onsubmit="return confirm('Supprimer ce brouillon ?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@e.Id" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"><i class="bi bi-trash"></i></button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

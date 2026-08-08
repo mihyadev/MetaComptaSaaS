@@ -1752,6 +1752,23 @@ public class ComptabiliteApiController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Plan comptable et journaux prêts."));
     }
 
+    [HttpGet("exercices")]
+    public async Task<IActionResult> GetExercices([FromQuery] int clientId)
+        => Ok(await _service.GetExercicesAsync(clientId, CabinetId));
+
+    [HttpGet("exercices/{id:int}")]
+    public async Task<IActionResult> GetExercice(int id)
+        => Ok(await _service.GetExerciceByIdAsync(id, CabinetId));
+
+    [HttpPost("exercices")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> CreateExercice([FromBody] ExerciceCreateDto dto)
+        => Ok(await _service.CreateExerciceAsync(dto, CabinetId, UserId));
+
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetDashboard([FromQuery] int clientId, [FromQuery] int? exerciceId = null)
+        => Ok(await _service.GetDashboardAsync(clientId, CabinetId, exerciceId));
+
     [HttpGet("comptes")]
     public async Task<IActionResult> GetComptes([FromQuery] int clientId, [FromQuery] string? search = null)
         => Ok(await _service.GetComptesAsync(clientId, CabinetId, search));
@@ -1761,9 +1778,39 @@ public class ComptabiliteApiController : ControllerBase
     public async Task<IActionResult> CreateCompte([FromBody] CompteComptableCreateDto dto)
         => Ok(await _service.CreateCompteAsync(dto, CabinetId, UserId));
 
+    [HttpPut("comptes/{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> UpdateCompte(int id, [FromBody] CompteComptableUpdateDto dto)
+        => Ok(await _service.UpdateCompteAsync(id, dto, CabinetId, UserId));
+
+    [HttpPost("comptes/import")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ImportComptes([FromBody] CompteImportRequestDto dto)
+        => Ok(await _service.ImportComptesAsync(dto.ClientId, dto.CsvContent, CabinetId, UserId));
+
+    [HttpPost("journaux/import")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> ImportJournaux([FromBody] CsvImportRequestDto dto)
+        => Ok(await _service.ImportJournauxAsync(dto.ClientId, dto.CsvContent, CabinetId, UserId));
+
+    [HttpPost("ecritures/import")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ImportEcritures([FromBody] CsvImportRequestDto dto)
+        => Ok(await _service.ImportEcrituresAsync(dto.ClientId, dto.CsvContent, CabinetId, UserId, dto.ExerciceComptableId, dto.Valider));
+
+    [HttpPost("rapprochements/import")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ImportRapprochements([FromBody] CsvImportRequestDto dto)
+        => Ok(await _service.ImportRapprochementsAsync(dto.ClientId, dto.CsvContent, CabinetId, UserId));
+
+    [HttpPost("soldes-ouverture/import")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ImportSoldesOuverture([FromBody] CsvImportRequestDto dto)
+        => Ok(await _service.ImportSoldesOuvertureAsync(dto.ClientId, dto.CsvContent, CabinetId, UserId, dto.ExerciceComptableId));
+
     [HttpGet("ecritures")]
-    public async Task<IActionResult> GetEcritures([FromQuery] int? clientId, [FromQuery] string? journal, [FromQuery] int page = 1, [FromQuery] string? search = null)
-        => Ok(await _service.GetEcrituresAsync(CabinetId, clientId, journal, page, search));
+    public async Task<IActionResult> GetEcritures([FromQuery] int? clientId, [FromQuery] string? journal, [FromQuery] int page = 1, [FromQuery] string? search = null, [FromQuery] string? statut = null, [FromQuery] int? exerciceId = null)
+        => Ok(await _service.GetEcrituresAsync(CabinetId, clientId, journal, page, search, statut, exerciceId));
 
     [HttpGet("ecritures/{id:int}")]
     public async Task<IActionResult> GetEcriture(int id)
@@ -1774,6 +1821,16 @@ public class ComptabiliteApiController : ControllerBase
     public async Task<IActionResult> CreateEcriture([FromBody] EcritureCreateDto dto)
         => Ok(await _service.CreateEcritureAsync(dto, CabinetId, UserId));
 
+    [HttpPut("ecritures/{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> UpdateEcriture(int id, [FromBody] EcritureCreateDto dto)
+        => Ok(await _service.UpdateEcritureAsync(id, dto, CabinetId, UserId));
+
+    [HttpDelete("ecritures/{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> DeleteEcriture(int id)
+        => Ok(await _service.DeleteEcritureAsync(id, CabinetId, UserId));
+
     [HttpPost("ecritures/{id:int}/validate")]
     [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
     public async Task<IActionResult> ValidateEcriture(int id)
@@ -1783,13 +1840,18 @@ public class ComptabiliteApiController : ControllerBase
     public async Task<IActionResult> GetJournaux([FromQuery] int clientId)
         => Ok(await _service.GetJournauxAsync(clientId, CabinetId));
 
+    [HttpPut("journaux/{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> UpdateJournal(int id, [FromBody] JournalUpdateDto dto)
+        => Ok(await _service.UpdateJournalAsync(id, dto, CabinetId, UserId));
+
     [HttpGet("grandlivre")]
-    public async Task<IActionResult> GetGrandLivre([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin, [FromQuery] string? numCompte = null)
-        => Ok(await _service.GetGrandLivreAsync(clientId, CabinetId, dateDebut, dateFin, numCompte));
+    public async Task<IActionResult> GetGrandLivre([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin, [FromQuery] string? numCompte = null, [FromQuery] int? exerciceId = null)
+        => Ok(await _service.GetGrandLivreAsync(clientId, CabinetId, dateDebut, dateFin, numCompte, exerciceId));
 
     [HttpGet("balance")]
-    public async Task<IActionResult> GetBalance([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin)
-        => Ok(await _service.GetBalanceAsync(clientId, CabinetId, dateDebut, dateFin));
+    public async Task<IActionResult> GetBalance([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin, [FromQuery] int? exerciceId = null)
+        => Ok(await _service.GetBalanceAsync(clientId, CabinetId, dateDebut, dateFin, exerciceId));
 
     [HttpGet("balance-agee")]
     public async Task<IActionResult> GetBalanceAgee([FromQuery] int clientId)

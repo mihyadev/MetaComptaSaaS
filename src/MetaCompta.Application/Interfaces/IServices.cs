@@ -396,15 +396,28 @@ public interface IClientUserService
 public interface IComptabiliteService
 {
     Task EnsureClientLedgerAsync(int clientId, int cabinetId, string? userId = null);
+    Task<ApiResponse<List<ExerciceComptableDto>>> GetExercicesAsync(int clientId, int cabinetId);
+    Task<ApiResponse<ExerciceComptableDto>> CreateExerciceAsync(ExerciceCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<ExerciceComptableDto>> GetExerciceByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<ComptaDashboardDto>> GetDashboardAsync(int clientId, int cabinetId, int? exerciceId = null);
     Task<ApiResponse<List<CompteComptableDto>>> GetComptesAsync(int clientId, int cabinetId, string? search = null);
     Task<ApiResponse<CompteComptableDto>> CreateCompteAsync(CompteComptableCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<CompteComptableDto>> UpdateCompteAsync(int id, CompteComptableUpdateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<CompteImportResultDto>> ImportComptesAsync(int clientId, string csvContent, int cabinetId, string userId);
+    Task<ApiResponse<CompteImportResultDto>> ImportJournauxAsync(int clientId, string csvContent, int cabinetId, string userId);
+    Task<ApiResponse<CompteImportResultDto>> ImportEcrituresAsync(int clientId, string csvContent, int cabinetId, string userId, int? exerciceId = null, bool valider = false);
+    Task<ApiResponse<CompteImportResultDto>> ImportRapprochementsAsync(int clientId, string csvContent, int cabinetId, string userId);
+    Task<ApiResponse<CompteImportResultDto>> ImportSoldesOuvertureAsync(int clientId, string csvContent, int cabinetId, string userId, int? exerciceId = null);
     Task<ApiResponse<List<JournalDto>>> GetJournauxAsync(int clientId, int cabinetId);
-    Task<ApiResponse<PagedResult<EcritureComptableDto>>> GetEcrituresAsync(int cabinetId, int? clientId, string? journal, int page, string? search);
+    Task<ApiResponse<JournalDto>> UpdateJournalAsync(int id, JournalUpdateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<PagedResult<EcritureComptableDto>>> GetEcrituresAsync(int cabinetId, int? clientId, string? journal, int page, string? search, string? statut = null, int? exerciceId = null);
     Task<ApiResponse<EcritureDetailDto>> GetEcritureByIdAsync(int id, int cabinetId);
     Task<ApiResponse<EcritureComptableDto>> CreateEcritureAsync(EcritureCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<EcritureComptableDto>> UpdateEcritureAsync(int id, EcritureCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteEcritureAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<EcritureComptableDto>> ValidateEcritureAsync(int id, int cabinetId, string userId);
-    Task<ApiResponse<List<GrandLivreDto>>> GetGrandLivreAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, string? numCompte = null);
-    Task<ApiResponse<List<BalanceDto>>> GetBalanceAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin);
+    Task<ApiResponse<List<GrandLivreDto>>> GetGrandLivreAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, string? numCompte = null, int? exerciceId = null);
+    Task<ApiResponse<List<BalanceDto>>> GetBalanceAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, int? exerciceId = null);
     Task<ApiResponse<List<BalanceAgeeDto>>> GetBalanceAgeeAsync(int clientId, int cabinetId);
     Task<ApiResponse<List<RapprochementBancaireDto>>> GetRapprochementsAsync(int cabinetId, int? clientId);
     Task<ApiResponse<RapprochementBancaireDto>> CreateRapprochementAsync(RapprochementCreateDto dto, int cabinetId, string userId);

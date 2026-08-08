@@ -2,75 +2,124 @@
 @{
     ViewData["Title"] = "Journaux comptables";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var canEdit = ViewBag.CanComptabiliteEdit as bool? ?? false;
+    var list = Model?.ToList() ?? new();
 }
 
-<div class="page-header">
-    <div>
-        <h2><i class="bi bi-book me-2"></i>Journaux comptables</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
-                <li class="breadcrumb-item">Comptabilité</li>
-                <li class="breadcrumb-item active">Journaux</li>
-            </ol>
-        </nav>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="bg-success text-white rounded-3 p-3 lh-1"><i class="bi bi-journal-bookmark fs-4"></i></span>
+        <div>
+            <h1 class="h3 fw-bold mb-0">Journaux</h1>
+            <div class="text-body-secondary small">Board CRM · @list.Count journal(aux)</div>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="@Url.Action("DownloadTemplateJournaux")" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-file-earmark-text me-1"></i> Modèle CSV
+        </a>
+        @if (canEdit)
+        {
+            <button type="button" class="btn btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalImportJournaux">
+                <i class="bi bi-upload me-1"></i> Importer CSV
+            </button>
+        }
     </div>
 </div>
 
 @if (client != null)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
-        <i class="bi bi-building fs-5"></i>
-        <div><strong>@client.RaisonSociale</strong> <span class="text-muted ms-2">@client.FormeJuridique</span></div>
+    <div class="alert border-0 shadow-sm rounded-4 bg-success-subtle text-success-emphasis mb-3 py-2 px-3">
+        <i class="bi bi-building me-1"></i>@client.RaisonSociale
     </div>
 }
 
-<div class="row g-4">
-    @if (Model != null && Model.Any())
-    {
-        foreach (var journal in Model)
-        {
-            <div class="col-md-4">
-                <div class="mc-card p-4">
-                    <div class="d-flex align-items-center gap-3 mb-3">
-                        <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-book"></i></div>
-                        <div>
-                            <h5 class="mb-0">@journal.Nom</h5>
-                            <span class="badge bg-info text-dark">@journal.Code</span>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted small mb-2">
-                        <span>Prochain n°</span>
-                        <span class="fw-bold text-dark">@journal.ProchainNumero</span>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted small mb-2">
-                        <span>Nombre d'écritures</span>
-                        <span class="fw-bold text-dark">@journal.NombreEcritures</span>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted small mb-2">
-                        <span>Total Débit</span>
-                        <span class="fw-bold text-success">@(journal.TotalDebit.ToString("N2")) MAD</span>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted small">
-                        <span>Total Crédit</span>
-                        <span class="fw-bold text-danger">@(journal.TotalCredit.ToString("N2")) MAD</span>
-                    </div>
-                    <div class="mt-3">
-                        <a href="@Url.Action("Ecritures", "Comptabilite", new { journal = journal.Code })" class="btn btn-sm btn-outline-primary w-100">
-                            <i class="bi bi-eye me-1"></i> Voir les écritures
-                        </a>
+<div class="row g-3">
+@foreach (var j in list)
+{
+    <div class="col-md-6 col-xl-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100 border-start border-4 border-success">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill fs-6">@j.Code</span>
+                    <div>
+                        <div class="fw-bold">@j.Nom</div>
+                        <div class="small text-muted">@j.Type · n° suivant @j.ProchainNumero</div>
                     </div>
                 </div>
-            </div>
-        }
-    }
-    else
-    {
-        <div class="col-12">
-            <div class="mc-card p-4 text-center text-muted">
-                <i class="bi bi-book fs-1 d-block mb-2"></i>
-                Aucun journal trouvé.
+                <div class="d-flex justify-content-between small text-muted mb-1"><span>Écritures validées</span><span class="fw-semibold text-dark">@j.NombreEcritures</span></div>
+                <div class="d-flex justify-content-between small text-muted mb-1"><span>Débit</span><span class="text-success fw-semibold">@j.TotalDebit.ToString("N2")</span></div>
+                <div class="d-flex justify-content-between small text-muted mb-3"><span>Crédit</span><span class="text-danger fw-semibold">@j.TotalCredit.ToString("N2")</span></div>
+                <div class="d-flex gap-2">
+                    <a href="@Url.Action("Ecritures", new { journal = j.Code })" class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1">Voir écritures</a>
+                    @if (canEdit)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#modalJournal"
+                                data-id="@j.Id" data-libelle="@j.Nom" data-num="@j.ProchainNumero" data-actif="@(j.EstActif ? "1" : "0")">
+                            <i class="bi bi-gear"></i>
+                        </button>
+                    }
+                </div>
             </div>
         </div>
-    }
+    </div>
+}
+@if (!list.Any())
+{
+    <div class="col-12"><div class="card border-0 shadow-sm rounded-4 text-center py-5 text-muted">Aucun journal.</div></div>
+}
 </div>
+
+<div class="modal fade" id="modalJournal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" asp-action="UpdateJournal" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="jId" />
+            <div class="modal-header border-0"><h5 class="modal-title">Configurer journal</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Libellé</label><input name="libelle" id="jLib" class="form-control rounded-3" /></div>
+                <div class="mb-3"><label class="form-label">Prochain n°</label><input type="number" name="prochainNumero" id="jNum" class="form-control rounded-3" min="1" /></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="estActif" value="true" id="jActif" /><label class="form-check-label" for="jActif">Actif</label></div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+@if (canEdit)
+{
+<div class="modal fade" id="modalImportJournaux" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" asp-action="ImportJournaux" enctype="multipart/form-data" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Importer journaux CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Colonnes : <code>Code;Libelle;Type;ProchainNumero;Actif</code> — upsert par Code.</p>
+                <a href="@Url.Action("DownloadTemplateJournaux")" class="small d-inline-block mb-3"><i class="bi bi-download me-1"></i>Télécharger le modèle</a>
+                <input type="file" name="file" accept=".csv,text/csv" class="form-control rounded-3 mb-3" />
+                <label class="form-label">Ou coller le CSV</label>
+                <textarea name="csvText" class="form-control rounded-3 font-monospace" rows="4" placeholder="OD;Opérations diverses;OD;1;1"></textarea>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Importer</button>
+            </div>
+        </form>
+    </div>
+</div>
+}
+
+<script>
+document.getElementById('modalJournal')?.addEventListener('show.bs.modal', e => {
+    const b = e.relatedTarget; if (!b) return;
+    document.getElementById('jId').value = b.dataset.id;
+    document.getElementById('jLib').value = b.dataset.libelle || '';
+    document.getElementById('jNum').value = b.dataset.num || '1';
+    document.getElementById('jActif').checked = b.dataset.actif === '1';
+});
+</script>

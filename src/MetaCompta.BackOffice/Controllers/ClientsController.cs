@@ -12,6 +12,7 @@ public class ClientsController : BaseController
     private readonly ICommercialFacade _commercial;
     private readonly IWorkflowFacade _workflow;
     private readonly ICabinetFacade _cabinet;
+    private readonly IComptabiliteFacade _compta;
 
     private static readonly string[] ClientRefCategories = new[]
     {
@@ -24,13 +25,15 @@ public class ClientsController : BaseController
         IClientFacade clients,
         ICommercialFacade commercial,
         IWorkflowFacade workflow,
-        ICabinetFacade cabinet)
+        ICabinetFacade cabinet,
+        IComptabiliteFacade compta)
         : base(referenceData, contextAccessor)
     {
         _clients = clients;
         _commercial = commercial;
         _workflow = workflow;
         _cabinet = cabinet;
+        _compta = compta;
     }
 
     [RequirePermission(ClaimDefinitions.ClientList)]
@@ -329,6 +332,30 @@ public class ClientsController : BaseController
                 HttpContext.Session.SetString("ContractAccessReason", access.Reason);
                 HttpContext.Session.SetString("ContractAccessReasonLabel", access.ReasonLabel ?? "");
 
+                // Auto-pick exercice: latest Ouvert, else current year (ensure creates it)
+                object? exercicePayload = null;
+                try
+                {
+                    await _compta.EnsureLedgerAsync(client.Id);
+                    var exercices = await _compta.GetExercicesAsync(client.Id);
+                    var pick = exercices
+                        .Where(e => string.Equals(e.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase))
+                        .OrderByDescending(e => e.Annee)
+                        .FirstOrDefault()
+                        ?? exercices.OrderByDescending(e => e.Annee).FirstOrDefault();
+                    if (pick != null)
+                    {
+                        SetExerciceSession(pick);
+                        exercicePayload = new { pick.Id, pick.Annee, pick.Statut, label = pick.Label };
+                    }
+                    else
+                        ClearExerciceSession();
+                }
+                catch
+                {
+                    ClearExerciceSession();
+                }
+
                 return Json(new
                 {
                     success = true,
@@ -337,7 +364,8 @@ public class ClientsController : BaseController
                     activeServices = access.ActiveServices,
                     hasActiveContract = access.AllowsManage,
                     contractAccessMode = access.Mode,
-                    contractAccessReason = access.Reason
+                    contractAccessReason = access.Reason,
+                    exercice = exercicePayload
                 });
             }
         }
@@ -350,6 +378,7 @@ public class ClientsController : BaseController
         HttpContext.Session.Remove("ContractAccessReason");
         HttpContext.Session.Remove("ContractAccessReasonLabel");
         HttpContext.Session.Remove("WorkspaceMode");
+        ClearExerciceSession();
         return Json(new { success = true, clientName = (string?)null, clientId = (int?)null, activeServices = new List<string>(), hasActiveContract = false, redirectToWorkspace = true });
     }
 

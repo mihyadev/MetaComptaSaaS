@@ -2,111 +2,105 @@
 @{
     ViewData["Title"] = "Écritures comptables";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var journaux = ViewBag.Journaux as List<MetaCompta.Application.DTOs.JournalDto> ?? new();
+    var canCreate = ViewBag.CanComptabiliteCreate as bool? ?? false;
+    var canEdit = ViewBag.CanComptabiliteEdit as bool? ?? false;
+    var items = Model?.Items?.ToList() ?? new();
+    var brouillons = items.Where(e => e.Statut == "Brouillon").ToList();
+    var valides = items.Where(e => e.Statut == "Validé" || e.Statut == "Validee").ToList();
+    var others = items.Except(brouillons).Except(valides).ToList();
 }
 
-<div class="page-header">
-    <div>
-        <h2><i class="bi bi-journal-text me-2"></i>Écritures comptables</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
-                <li class="breadcrumb-item">Comptabilité</li>
-                <li class="breadcrumb-item active">Écritures</li>
-            </ol>
-        </nav>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="bg-primary text-white rounded-3 p-3 lh-1"><i class="bi bi-pencil-square fs-4"></i></span>
+        <div>
+            <h1 class="h3 fw-bold mb-0">Écritures</h1>
+            <div class="text-body-secondary small">Board CRM · @(Model?.TotalCount ?? 0) pièce(s)</div>
+        </div>
     </div>
-    @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
-    {
-        <a href="@Url.Action("CreateEcriture", "Comptabilite")" class="btn btn-primary">
-            <i class="bi bi-plus-circle me-1"></i> Nouvelle écriture
+    <div class="d-flex flex-wrap gap-2">
+        <a href="@Url.Action("DownloadTemplateEcritures")" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-file-earmark-text me-1"></i> Modèle CSV
         </a>
-    }
+        <a href="@Url.Action("ExportEcritures", new { journal = ViewBag.Journal, statut = ViewBag.Statut })" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-download me-1"></i> Export CSV
+        </a>
+        @if (canCreate)
+        {
+            <button type="button" class="btn btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalImportEcritures">
+                <i class="bi bi-upload me-1"></i> Importer CSV
+            </button>
+            <a href="@Url.Action("CreateEcriture")" class="btn btn-primary rounded-pill px-3">
+                <i class="bi bi-plus-lg me-1"></i> Nouvelle écriture
+            </a>
+        }
+    </div>
 </div>
 
 @if (client != null)
 {
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
-        <i class="bi bi-building fs-5"></i>
-        <div><strong>@client.RaisonSociale</strong> <span class="text-muted ms-2">@client.FormeJuridique</span></div>
+    <div class="alert border-0 shadow-sm rounded-4 bg-primary-subtle text-primary-emphasis mb-3 py-2 px-3">
+        <i class="bi bi-building me-1"></i><strong>@client.RaisonSociale</strong>
     </div>
 }
 
-<!-- Filters -->
-<div class="mc-card mb-4">
+<div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-3">
-        <form method="get" class="row g-3 align-items-end">
+        <form method="get" class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label">Journal</label>
-                <select name="journal" class="form-select">
+                <label class="form-label small text-muted mb-1">Journal</label>
+                <select name="journal" class="form-select rounded-3">
                     <option value="">Tous</option>
-                    <option value="AC" @(ViewBag.Journal?.ToString() == "AC" ? "selected" : "")>Achats (AC)</option>
-                    <option value="VE" @(ViewBag.Journal?.ToString() == "VE" ? "selected" : "")>Ventes (VE)</option>
-                    <option value="BQ" @(ViewBag.Journal?.ToString() == "BQ" ? "selected" : "")>Banque (BQ)</option>
-                    <option value="CA" @(ViewBag.Journal?.ToString() == "CA" ? "selected" : "")>Caisse (CA)</option>
-                    <option value="OD" @(ViewBag.Journal?.ToString() == "OD" ? "selected" : "")>OD</option>
-                    <option value="SA" @(ViewBag.Journal?.ToString() == "SA" ? "selected" : "")>Salaires (SA)</option>
+                    @foreach (var j in journaux)
+                    {
+                        if (ViewBag.Journal?.ToString() == j.Code)
+                        {
+                            <option value="@j.Code" selected>@j.Code — @j.Nom</option>
+                        }
+                        else
+                        {
+                            <option value="@j.Code">@j.Code — @j.Nom</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Statut</label>
+                <select name="statut" class="form-select rounded-3">
+                    <option value="">Tous</option>
+                    <option value="Brouillon" selected="@(ViewBag.Statut?.ToString() == "Brouillon")">Brouillon</option>
+                    <option value="Validee" selected="@(ViewBag.Statut?.ToString() == "Validee")">Validé</option>
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Recherche</label>
-                <input type="text" name="search" class="form-control" value="@ViewBag.Search" placeholder="Libellé, numéro pièce, compte..." />
+                <label class="form-label small text-muted mb-1">Recherche</label>
+                <input type="text" name="search" class="form-control rounded-3" value="@ViewBag.Search" placeholder="Pièce, libellé, compte…" />
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search me-1"></i> Filtrer</button>
+                <button type="submit" class="btn btn-primary w-100 rounded-pill"><i class="bi bi-search me-1"></i> Filtrer</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Écritures Table -->
-<div class="mc-card">
-    <div class="card-header"><i class="bi bi-table me-2"></i>Écritures (@(Model?.TotalCount ?? 0))</div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table mc-table mb-0">
-                <thead>
-                    <tr>
-                        <th>N° Pièce</th>
-                        <th>Date</th>
-                        <th>Journal</th>
-                        <th>Compte</th>
-                        <th>Libellé</th>
-                        <th class="text-end">Débit</th>
-                        <th class="text-end">Crédit</th>
-                        <th>Statut</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model?.Items != null && Model.Items.Any())
-                    {
-                        foreach (var e in Model.Items)
-                        {
-                            <tr>
-                                <td class="fw-medium">@e.NumeroPiece</td>
-                                <td>@(e.DateEcriture.ToString("dd/MM/yyyy"))</td>
-                                <td><span class="badge bg-info text-dark">@e.Journal</span></td>
-                                <td><code>@e.NumCompte</code> <small class="text-muted">@e.LibelleCompte</small></td>
-                                <td>@e.Libelle</td>
-                                <td class="text-end @(e.TotalDebit > 0 ? "text-success fw-medium" : "")">@(e.TotalDebit > 0 ? e.TotalDebit.ToString("N2") : "")</td>
-                                <td class="text-end @(e.TotalCredit > 0 ? "text-danger fw-medium" : "")">@(e.TotalCredit > 0 ? e.TotalCredit.ToString("N2") : "")</td>
-                                <td><span class="badge @(e.Statut == "Validé" ? "bg-success" : "bg-warning text-dark")">@e.Statut</span></td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">
-                                <i class="bi bi-journal fs-1 d-block mb-2"></i>
-                                Aucune écriture trouvée.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+@if (!items.Any())
+{
+    <div class="card border-0 shadow-sm rounded-4 text-center py-5">
+        <i class="bi bi-journal-x display-4 text-muted"></i>
+        <p class="text-muted mt-2 mb-3">Aucune écriture. Créez une OD équilibrée pour démarrer.</p>
+        @if (canCreate)
+        {
+            <a href="@Url.Action("CreateEcriture")" class="btn btn-primary rounded-pill px-4">Nouvelle écriture</a>
+        }
     </div>
-</div>
+}
+else
+{
+    @await Html.PartialAsync("_EcritureBoardGroup", brouillons, new ViewDataDictionary(ViewData) { { "GroupTitle", "Brouillons" }, { "Border", "border-warning" } })
+    @await Html.PartialAsync("_EcritureBoardGroup", valides, new ViewDataDictionary(ViewData) { { "GroupTitle", "Validées" }, { "Border", "border-success" } })
+    @await Html.PartialAsync("_EcritureBoardGroup", others, new ViewDataDictionary(ViewData) { { "GroupTitle", "Autres" }, { "Border", "border-secondary" } })
+}
 
 @if (Model != null && Model.TotalPages > 1)
 {
@@ -115,9 +109,42 @@
             @for (var p = 1; p <= Model.TotalPages; p++)
             {
                 <li class="page-item @(p == Model.Page ? "active" : "")">
-                    <a class="page-link" href="@Url.Action("Ecritures", new { page = p, journal = ViewBag.Journal, search = ViewBag.Search })">@p</a>
+                    <a class="page-link" href="@Url.Action("Ecritures", new { page = p, journal = ViewBag.Journal, search = ViewBag.Search, statut = ViewBag.Statut })">@p</a>
                 </li>
             }
         </ul>
     </nav>
+}
+
+@if (canCreate)
+{
+<div class="modal fade" id="modalImportEcritures" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" asp-action="ImportEcritures" enctype="multipart/form-data" class="modal-content rounded-4">
+            @Html.AntiForgeryToken()
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Importer écritures CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">
+                    Colonnes : <code>Piece;Date;Journal;Libelle;Reference;NumCompte;LibelleCompte;Debit;Credit;Valider</code><br />
+                    Une pièce = plusieurs lignes (même <code>Piece</code>), débit = crédit, ≥ 2 lignes. Exercice session requis.
+                </p>
+                <a href="@Url.Action("DownloadTemplateEcritures")" class="small d-inline-block mb-3"><i class="bi bi-download me-1"></i>Télécharger le modèle</a>
+                <input type="file" name="file" accept=".csv,text/csv" class="form-control rounded-3 mb-3" />
+                <label class="form-label">Ou coller le CSV</label>
+                <textarea name="csvText" class="form-control rounded-3 font-monospace" rows="6" placeholder="OD-2026-0001;2026-06-15;OD;Achat;;6111;Achats;1200;0;0"></textarea>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" name="valider" value="true" id="importValider" />
+                    <label class="form-check-label" for="importValider">Valider à l’import</label>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-primary rounded-pill">Importer</button>
+            </div>
+        </form>
+    </div>
+</div>
 }

@@ -2,63 +2,34 @@
 @{
     ViewData["Title"] = "Balance âgée";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var list = Model?.ToList() ?? new();
 }
 
-<div class="page-header">
-    <div>
-        <h2><i class="bi bi-clock-history me-2"></i>Balance âgée</h2>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="@Url.Action("Index", "Home")">Accueil</a></li>
-                <li class="breadcrumb-item">Comptabilité</li>
-                <li class="breadcrumb-item active">Balance âgée</li>
-            </ol>
-        </nav>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="bg-dark text-white rounded-3 p-3 lh-1"><i class="bi bi-hourglass-split fs-4"></i></span>
+        <div>
+            <h1 class="h3 fw-bold mb-0">Balance âgée</h1>
+            <div class="text-body-secondary small">Auxiliaires clients / fournisseurs</div>
+        </div>
     </div>
-    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1"></i> Imprimer</button>
 </div>
 
 @if (client != null)
 {
-    <div class="alert alert-info">
-        <i class="bi bi-building me-1"></i> Client : <strong>@client.RaisonSociale</strong>
+    <div class="alert border-0 shadow-sm rounded-4 bg-dark-subtle text-dark-emphasis mb-3 py-2 px-3">
+        <i class="bi bi-building me-1"></i>@client.RaisonSociale
     </div>
 }
 
-<div class="mc-card">
-    <div class="card-header"><i class="bi bi-table me-2"></i>Balance âgée des créances</div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table mc-table mb-0">
-                <thead>
-                    <tr>
-                        <th>Compte</th>
-                        <th>Tiers</th>
-                        <th class="text-end">0–30 jours</th>
-                        <th class="text-end">30–60 jours</th>
-                        <th class="text-end">60–90 jours</th>
-                        <th class="text-end">+90 jours</th>
-                        <th class="text-end">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model != null)
-                    {
-                        foreach (var b in Model)
-                        {
-                            <tr>
-                                <td class="fw-medium">@b.NumeroCompte</td>
-                                <td>@b.NomTiers</td>
-                                <td class="text-end">@(b.Tranche0_30.ToString("N2"))</td>
-                                <td class="text-end">@(b.Tranche30_60.ToString("N2"))</td>
-                                <td class="text-end text-warning">@(b.Tranche60_90.ToString("N2"))</td>
-                                <td class="text-end text-danger fw-bold">@(b.TrancheSuperieur90.ToString("N2"))</td>
-                                <td class="text-end fw-bold">@(b.Total.ToString("N2")) MAD</td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
+<div class="card border-0 shadow-sm rounded-4 text-center py-5 px-4">
+    <i class="bi bi-hourglass display-4 text-muted"></i>
+    <h5 class="mt-3">Bientôt disponible</h5>
+    <p class="text-muted mb-0 col-md-8 mx-auto">
+        La balance âgée réelle (lettrage auxiliaires) arrive en Phase 2.
+        En Phase 1, utilisez le grand livre et la balance générale.
+    </p>
+    <div class="mt-3">
+        <a href="@Url.Action("Balance")" class="btn btn-outline-primary rounded-pill">Ouvrir la balance</a>
     </div>
 </div>

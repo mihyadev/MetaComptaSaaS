@@ -617,6 +617,36 @@ public class ReferenceDataDto
 }
 
 // ===== Comptabilité (Accounting) =====
+public class ExerciceComptableDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public int Annee { get; set; }
+    public DateTime DateDebut { get; set; }
+    public DateTime DateFin { get; set; }
+    public string Statut { get; set; } = "Ouvert";
+    public string Label => $"Exercice {Annee}";
+}
+
+public class ExerciceCreateDto
+{
+    public int ClientId { get; set; }
+    public int Annee { get; set; }
+    public DateTime? DateDebut { get; set; }
+    public DateTime? DateFin { get; set; }
+}
+
+public class ComptaDashboardDto
+{
+    public int ComptesCount { get; set; }
+    public int JournauxCount { get; set; }
+    public int EcrituresBrouillon { get; set; }
+    public int EcrituresValidees { get; set; }
+    public int RapprochementsEnCours { get; set; }
+    public int? ExerciceId { get; set; }
+    public int? ExerciceAnnee { get; set; }
+}
+
 public class CompteComptableDto
 {
     public int Id { get; set; }
@@ -637,6 +667,35 @@ public class CompteComptableCreateDto
     public string Nature { get; set; } = "General";
 }
 
+public class CompteComptableUpdateDto
+{
+    public string? Libelle { get; set; }
+    public string? Nature { get; set; }
+    public bool? EstActif { get; set; }
+}
+
+public class CompteImportResultDto
+{
+    public int Created { get; set; }
+    public int Skipped { get; set; }
+    public int Errors { get; set; }
+    public List<string> Messages { get; set; } = new();
+}
+
+public class CompteImportRequestDto
+{
+    public int ClientId { get; set; }
+    public string CsvContent { get; set; } = string.Empty;
+}
+
+public class CsvImportRequestDto
+{
+    public int ClientId { get; set; }
+    public int? ExerciceComptableId { get; set; }
+    public string CsvContent { get; set; } = string.Empty;
+    public bool Valider { get; set; }
+}
+
 public class EcritureComptableDto
 {
     public int Id { get; set; }
@@ -654,6 +713,7 @@ public class EcritureComptableDto
     public decimal Credit { get; set; }
     public decimal TotalDebit { get => Debit; set => Debit = value; }
     public decimal TotalCredit { get => Credit; set => Credit = value; }
+    public int NombreLignes { get; set; }
     public string? Reference { get; set; }
     public string Statut { get; set; } = "Brouillon";
     public DateTime CreatedAt { get; set; }
@@ -678,6 +738,7 @@ public class EcritureDetailDto
 public class EcritureCreateDto
 {
     public int ClientId { get; set; }
+    public int? ExerciceComptableId { get; set; }
     public string Journal { get; set; } = string.Empty;
     public DateTime DateEcriture { get; set; } = DateTime.Today;
     public string? Libelle { get; set; }
@@ -703,9 +764,17 @@ public class JournalDto
     public string Libelle { get => Nom; set => Nom = value; }
     public string Type { get; set; } = string.Empty;
     public int ProchainNumero { get; set; }
+    public bool EstActif { get; set; } = true;
     public int NombreEcritures { get; set; }
     public decimal TotalDebit { get; set; }
     public decimal TotalCredit { get; set; }
+}
+
+public class JournalUpdateDto
+{
+    public string? Libelle { get; set; }
+    public int? ProchainNumero { get; set; }
+    public bool? EstActif { get; set; }
 }
 
 public class GrandLivreDto

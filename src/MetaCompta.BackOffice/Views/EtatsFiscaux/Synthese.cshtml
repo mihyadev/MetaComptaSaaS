@@ -1,0 +1,142 @@
+@{
+    ViewData["Title"] = "États de Synthèse";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var clientId = (int)(ViewBag.ClientId ?? 0);
+    var exercice = (int)(ViewBag.ExerciceAnnee ?? DateTime.Now.Year);
+    var exerciceStatut = ViewBag.ExerciceStatut as string ?? "Ouvert";
+    var initialPane = ViewBag.InitialPane as string ?? "bilan";
+    var balanceJson = ViewBag.BalanceJson as string ?? "[]";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-0"><i class="bi bi-file-earmark-ruled text-primary me-2"></i>États de Synthèse</h1>
+        <div class="text-body-secondary small">
+            @(client?.RaisonSociale ?? "Dossier client")
+            <span class="mx-1">·</span>
+            Exercice @exercice
+            <span class="badge rounded-pill text-bg-light border ms-1">@exerciceStatut</span>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("Balance", "Comptabilite")" class="btn btn-outline-secondary btn-sm rounded-pill">Balance</a>
+        <button type="button" class="btn btn-outline-success btn-sm rounded-pill" onclick="LiasseFiscale.UI.exportData()"><i class="bi bi-download me-1"></i>Exporter</button>
+        <a href="@Url.Action("Index", "EtatsFiscaux")" class="btn btn-outline-secondary btn-sm rounded-pill">Historique</a>
+    </div>
+</div>
+
+<div id="lf-demo-banner" class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 d-none mb-3">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Balance vide pour cet exercice — affichage en <strong>données de démo</strong>. Saisissez des écritures validées pour alimenter les états.
+</div>
+
+<!-- Excel-style formula bar -->
+<div class="lf-fx-bar" id="lf-fx-bar">
+    <input type="text" class="lf-fx-name" id="lf-fx-name" readonly placeholder="Cellule" title="Code cellule" />
+    <span class="lf-fx-label">fx</span>
+    <input type="text" class="lf-fx-input" id="lf-fx-input" placeholder="Sélectionnez une cellule…" autocomplete="off" spellcheck="false" />
+    <span class="lf-fx-value" id="lf-fx-value" title="Valeur calculée">—</span>
+    <div class="lf-fx-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="lf-fx-apply" title="Appliquer (Entrée)"><i class="bi bi-check-lg"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="lf-fx-cancel" title="Annuler (Échap)"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="lf-fx-reset" title="Réinitialiser formule"><i class="bi bi-arrow-counterclockwise"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="lf-fx-toggle-accts" title="Comptes balance"><i class="bi bi-list-check"></i></button>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-2 col-md-3">
+        <div class="card border-0 shadow-sm rounded-4 position-sticky" style="top:80px;">
+            <div class="card-body p-2">
+                <div class="lf-nav-section">
+                    <div class="lf-nav-group-title"><i class="bi bi-file-earmark-ruled me-1"></i>États</div>
+                    <button type="button" class="lf-nav-btn" data-target="bilan"><i class="bi bi-columns-gap"></i>Bilan</button>
+                    <button type="button" class="lf-nav-btn" data-target="cpc"><i class="bi bi-graph-up-arrow"></i>CPC</button>
+                    <button type="button" class="lf-nav-btn" data-target="esg"><i class="bi bi-bar-chart-line"></i>ESG</button>
+                    <button type="button" class="lf-nav-btn" data-target="tf"><i class="bi bi-cash-stack"></i>Tableau Financement</button>
+                    <button type="button" class="lf-nav-btn" data-target="etic"><i class="bi bi-file-earmark-text"></i>ETIC</button>
+                    <button type="button" class="lf-nav-btn" data-target="detail-cpc"><i class="bi bi-list-columns"></i>Détail CPC</button>
+                    <button type="button" class="lf-nav-btn" data-target="passage"><i class="bi bi-arrow-left-right"></i>Passage RF</button>
+                    <button type="button" class="lf-nav-btn" data-target="affectation"><i class="bi bi-pie-chart"></i>Affectation Résultat</button>
+                    <button type="button" class="lf-nav-btn" data-target="tva"><i class="bi bi-receipt"></i>Détail TVA</button>
+                    <button type="button" class="lf-nav-btn" data-target="immob"><i class="bi bi-building-gear"></i>Immobilisations</button>
+                    <button type="button" class="lf-nav-btn" data-target="amort"><i class="bi bi-graph-down-arrow"></i>Amortissements</button>
+                    <button type="button" class="lf-nav-btn" data-target="provisions"><i class="bi bi-shield-exclamation"></i>Provisions</button>
+                    <button type="button" class="lf-nav-btn" data-target="creances"><i class="bi bi-people"></i>Créances / Dettes</button>
+                    <button type="button" class="lf-nav-btn" data-target="9421"><i class="bi bi-file-text"></i>État 9421</button>
+                    <button type="button" class="lf-nav-btn" data-target="controles"><i class="bi bi-shield-check"></i>Contrôles balance</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-10 col-md-9">
+        <div class="lf-workspace d-flex gap-2">
+            <div class="lf-main flex-grow-1 min-w-0">
+                <div id="lf-content-area">
+                    <div class="lf-pane" id="pane-bilan" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-cpc" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-esg" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-tf" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-etic" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-detail-cpc" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-passage" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-affectation" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-tva" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-immob" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-amort" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-provisions" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-creances" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-9421" style="display:none;"></div>
+                    <div class="lf-pane" id="pane-controles" style="display:none;"></div>
+                </div>
+            </div>
+            <aside class="lf-acct-panel d-none" id="lf-acct-panel">
+                <div class="lf-acct-panel-head">
+                    <strong>Comptes</strong>
+                    <button type="button" class="btn-close btn-sm" id="lf-acct-panel-close"></button>
+                </div>
+                <div class="lf-acct-panel-body" id="lf-cfg-accounts"></div>
+            </aside>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<link rel="stylesheet" href="~/css/liasse-fiscale.css" asp-append-version="true" />
+<script src="~/js/liasse-fiscale.js" asp-append-version="true"></script>
+<script>
+(function(){
+    var initialPane = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(initialPane));
+    var balanceRows = @Html.Raw(balanceJson);
+
+    function showPane(target){
+        document.querySelectorAll('.lf-nav-btn').forEach(function(b){
+            b.classList.toggle('active', b.getAttribute('data-target') === target);
+        });
+        document.querySelectorAll('.lf-pane').forEach(function(p){ p.style.display = 'none'; });
+        var pane = document.getElementById('pane-' + target);
+        if (pane) pane.style.display = 'block';
+        LiasseFiscale.UI.onPaneShown(target);
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.set('pane', target);
+            history.replaceState(null, '', url.toString());
+        } catch(e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        LiasseFiscale.UI.init(@clientId, @exercice, null, balanceRows);
+        if (LiasseFiscale.UI.isUsingDemo && LiasseFiscale.UI.isUsingDemo()) {
+            var ban = document.getElementById('lf-demo-banner');
+            if (ban) ban.classList.remove('d-none');
+        }
+        LiasseFiscale.UI.bindFormulaBar();
+        document.querySelectorAll('.lf-nav-btn').forEach(function(btn){
+            btn.addEventListener('click', function(){ showPane(btn.getAttribute('data-target')); });
+        });
+        showPane(initialPane || 'bilan');
+    });
+})();
+</script>
+}
