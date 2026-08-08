@@ -2,6 +2,10 @@
 @{
     ViewData["Title"] = "Nouvelle écriture comptable";
     var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var journaux = ViewBag.Journaux as List<MetaCompta.Application.DTOs.JournalDto> ?? new();
+    var comptes = ViewBag.Comptes as List<MetaCompta.Application.DTOs.CompteComptableDto> ?? new();
+    if (Model.Lignes == null || Model.Lignes.Count < 2)
+        Model.Lignes = new List<MetaCompta.Application.DTOs.LigneEcritureDto> { new(), new() };
 }
 
 <div class="page-header">
@@ -31,56 +35,191 @@
 <div class="mc-card">
     <div class="card-header"><i class="bi bi-pencil me-2"></i>Informations de l'écriture</div>
     <div class="card-body">
-        <form method="post" asp-action="CreateEcriture">
+        <form method="post" asp-action="CreateEcriture" id="formEcriture">
             @Html.AntiForgeryToken()
-            @if (client != null)
-            {
-                <input type="hidden" name="ClientId" value="@client.Id" />
-            }
+            <input type="hidden" name="ClientId" value="@(client?.Id ?? Model.ClientId)" />
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">Journal <span class="text-danger">*</span></label>
-                    <select asp-for="Journal" class="form-select">
+                    <select asp-for="Journal" class="form-select" required>
                         <option value="">— Sélectionner —</option>
-                        <option value="AC">Achats (AC)</option>
-                        <option value="VT">Ventes (VT)</option>
-                        <option value="BQ">Banque (BQ)</option>
-                        <option value="CS">Caisse (CS)</option>
-                        <option value="OD">Opérations Diverses (OD)</option>
+                        @foreach (var j in journaux)
+                        {
+                            <option value="@j.Code" selected="@(Model.Journal == j.Code)">@j.Code — @j.Nom</option>
+                        }
+                        @if (!journaux.Any())
+                        {
+                            <option value="OD">OD — Opérations Diverses</option>
+                            <option value="AC">AC — Achats</option>
+                            <option value="VE">VE — Ventes</option>
+                            <option value="BQ">BQ — Banque</option>
+                            <option value="CA">CA — Caisse</option>
+                        }
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">Date <span class="text-danger">*</span></label>
-                    <input asp-for="DateEcriture" type="date" class="form-control" />
+                    <input asp-for="DateEcriture" type="date" class="form-control" required />
                 </div>
-                <div class="col-12">
-                    <label class="form-label">Libellé <span class="text-danger">*</span></label>
-                    <input asp-for="Libelle" class="form-control" placeholder="Libellé de l'écriture" />
-                </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">N° Pièce</label>
-                    <input asp-for="NumeroPiece" class="form-control" placeholder="Numéro de la pièce" />
+                    <input asp-for="NumeroPiece" class="form-control" placeholder="Auto si vide" />
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-8">
+                    <label class="form-label">Libellé <span class="text-danger">*</span></label>
+                    <input asp-for="Libelle" class="form-control" placeholder="Libellé de l'écriture" required />
+                </div>
+                <div class="col-md-4">
                     <label class="form-label">Référence</label>
                     <input asp-for="Reference" class="form-control" placeholder="Référence externe" />
                 </div>
             </div>
 
             <hr class="my-4" />
-            <h6><i class="bi bi-list-ol me-1"></i>Lignes de l'écriture</h6>
-            <div class="alert alert-info small">
-                <i class="bi bi-info-circle me-1"></i>
-                Les lignes d'écriture seront ajoutées après la création. Le total Débit doit être égal au total Crédit.
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0"><i class="bi bi-list-ol me-1"></i>Lignes de l'écriture</h6>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddLigne"><i class="bi bi-plus"></i> Ligne</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle" id="tableLignes">
+                    <thead>
+                        <tr>
+                            <th style="width:28%">Compte</th>
+                            <th>Libellé compte</th>
+                            <th style="width:15%" class="text-end">Débit</th>
+                            <th style="width:15%" class="text-end">Crédit</th>
+                            <th style="width:40px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < Model.Lignes.Count; i++)
+                        {
+                            <tr class="ligne-row">
+                                <td>
+                                    <input list="datalistComptes" name="Lignes[@i].NumCompte" value="@Model.Lignes[i].NumCompte" class="form-control form-control-sm num-compte" required />
+                                </td>
+                                <td>
+                                    <input name="Lignes[@i].LibelleCompte" value="@Model.Lignes[i].LibelleCompte" class="form-control form-control-sm lib-compte" />
+                                </td>
+                                <td>
+                                    <input name="Lignes[@i].Debit" type="number" step="0.01" min="0" value="@(Model.Lignes[i].Debit > 0 ? Model.Lignes[i].Debit.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")" class="form-control form-control-sm text-end debit" />
+                                </td>
+                                <td>
+                                    <input name="Lignes[@i].Credit" type="number" step="0.01" min="0" value="@(Model.Lignes[i].Credit > 0 ? Model.Lignes[i].Credit.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")" class="form-control form-control-sm text-end credit" />
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-ligne" title="Supprimer"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-semibold">
+                            <td colspan="2" class="text-end">Totaux</td>
+                            <td class="text-end" id="totalDebit">0,00</td>
+                            <td class="text-end" id="totalCredit">0,00</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td colspan="5">
+                                <div id="balanceMsg" class="small text-muted"></div>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <datalist id="datalistComptes">
+                @foreach (var c in comptes)
+                {
+                    <option value="@c.Numero" label="@c.Libelle">@c.Numero — @c.Libelle</option>
+                }
+            </datalist>
+
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" name="Valider" value="true" id="chkValider" @(Model.Valider ? "checked" : "") />
+                <label class="form-check-label" for="chkValider">Valider immédiatement (sinon brouillon)</label>
             </div>
 
             <div class="mt-4">
                 @if (ViewBag.CanComptabiliteCreate as bool? ?? false)
                 {
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Créer l'écriture</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmit"><i class="bi bi-check-circle me-1"></i> Enregistrer</button>
                 }
                 <a href="@Url.Action("Ecritures", "Comptabilite")" class="btn btn-outline-secondary ms-2">Annuler</a>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    const comptes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(comptes.Select(c => new { c.Numero, c.Libelle })));
+    const tbody = document.querySelector('#tableLignes tbody');
+    const map = {};
+    comptes.forEach(c => map[c.Numero] = c.Libelle);
+
+    function reindex() {
+        [...tbody.querySelectorAll('tr.ligne-row')].forEach((tr, i) => {
+            tr.querySelectorAll('input').forEach(inp => {
+                const n = inp.getAttribute('name');
+                if (!n) return;
+                inp.setAttribute('name', n.replace(/Lignes\[\d+\]/, 'Lignes[' + i + ']'));
+            });
+        });
+    }
+
+    function recalc() {
+        let d = 0, c = 0;
+        tbody.querySelectorAll('.debit').forEach(i => d += parseFloat(i.value || '0') || 0);
+        tbody.querySelectorAll('.credit').forEach(i => c += parseFloat(i.value || '0') || 0);
+        document.getElementById('totalDebit').textContent = d.toLocaleString('fr-MA', { minimumFractionDigits: 2 });
+        document.getElementById('totalCredit').textContent = c.toLocaleString('fr-MA', { minimumFractionDigits: 2 });
+        const msg = document.getElementById('balanceMsg');
+        const ok = Math.abs(d - c) < 0.005 && d > 0;
+        msg.className = 'small ' + (ok ? 'text-success' : 'text-danger');
+        msg.textContent = ok ? 'Écriture équilibrée.' : 'Le total débit doit égaler le total crédit (min. 2 lignes).';
+        return ok;
+    }
+
+    function bindRow(tr) {
+        const num = tr.querySelector('.num-compte');
+        const lib = tr.querySelector('.lib-compte');
+        num.addEventListener('change', () => {
+            if (map[num.value]) lib.value = map[num.value];
+        });
+        tr.querySelectorAll('.debit,.credit').forEach(i => i.addEventListener('input', recalc));
+        tr.querySelector('.btn-remove-ligne')?.addEventListener('click', () => {
+            if (tbody.querySelectorAll('tr.ligne-row').length <= 2) return;
+            tr.remove();
+            reindex();
+            recalc();
+        });
+    }
+
+    tbody.querySelectorAll('tr.ligne-row').forEach(bindRow);
+
+    document.getElementById('btnAddLigne').addEventListener('click', () => {
+        const i = tbody.querySelectorAll('tr.ligne-row').length;
+        const tr = document.createElement('tr');
+        tr.className = 'ligne-row';
+        tr.innerHTML = `<td><input list="datalistComptes" name="Lignes[${i}].NumCompte" class="form-control form-control-sm num-compte" required /></td>
+            <td><input name="Lignes[${i}].LibelleCompte" class="form-control form-control-sm lib-compte" /></td>
+            <td><input name="Lignes[${i}].Debit" type="number" step="0.01" min="0" class="form-control form-control-sm text-end debit" /></td>
+            <td><input name="Lignes[${i}].Credit" type="number" step="0.01" min="0" class="form-control form-control-sm text-end credit" /></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-ligne"><i class="bi bi-trash"></i></button></td>`;
+        tbody.appendChild(tr);
+        bindRow(tr);
+        recalc();
+    });
+
+    document.getElementById('formEcriture').addEventListener('submit', e => {
+        if (!recalc()) {
+            e.preventDefault();
+            alert('Écriture non équilibrée : vérifiez les totaux débit/crédit.');
+        }
+    });
+
+    recalc();
+})();
+</script>

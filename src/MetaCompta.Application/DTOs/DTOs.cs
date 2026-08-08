@@ -617,6 +617,26 @@ public class ReferenceDataDto
 }
 
 // ===== Comptabilité (Accounting) =====
+public class CompteComptableDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string Numero { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public string Classe { get; set; } = string.Empty;
+    public string Nature { get; set; } = "General";
+    public bool EstActif { get; set; } = true;
+}
+
+public class CompteComptableCreateDto
+{
+    public int ClientId { get; set; }
+    public string Numero { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public string? Classe { get; set; }
+    public string Nature { get; set; } = "General";
+}
+
 public class EcritureComptableDto
 {
     public int Id { get; set; }
@@ -635,18 +655,35 @@ public class EcritureComptableDto
     public decimal TotalDebit { get => Debit; set => Debit = value; }
     public decimal TotalCredit { get => Credit; set => Credit = value; }
     public string? Reference { get; set; }
-    public string Statut { get; set; } = RefCodes.StatutDeclaration.Brouillon;
+    public string Statut { get; set; } = "Brouillon";
     public DateTime CreatedAt { get; set; }
+}
+
+public class EcritureDetailDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientNom { get; set; }
+    public string Journal { get; set; } = string.Empty;
+    public string NumeroPiece { get; set; } = string.Empty;
+    public DateTime DateEcriture { get; set; }
+    public string? Libelle { get; set; }
+    public string? Reference { get; set; }
+    public string Statut { get; set; } = "Brouillon";
+    public decimal TotalDebit { get; set; }
+    public decimal TotalCredit { get; set; }
+    public List<LigneEcritureDto> Lignes { get; set; } = new();
 }
 
 public class EcritureCreateDto
 {
     public int ClientId { get; set; }
     public string Journal { get; set; } = string.Empty;
-    public DateTime DateEcriture { get; set; }
+    public DateTime DateEcriture { get; set; } = DateTime.Today;
     public string? Libelle { get; set; }
     public string? NumeroPiece { get; set; }
     public string? Reference { get; set; }
+    public bool Valider { get; set; }
     public List<LigneEcritureDto> Lignes { get; set; } = new();
 }
 
@@ -660,10 +697,12 @@ public class LigneEcritureDto
 
 public class JournalDto
 {
+    public int Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Nom { get; set; } = string.Empty;
     public string Libelle { get => Nom; set => Nom = value; }
     public string Type { get; set; } = string.Empty;
+    public int ProchainNumero { get; set; }
     public int NombreEcritures { get; set; }
     public decimal TotalDebit { get; set; }
     public decimal TotalCredit { get; set; }
@@ -725,6 +764,22 @@ public class RapprochementBancaireDto
     public string Statut { get; set; } = "EnCours";
     public int NombreLignesNonRapprochees { get; set; }
     public DateTime DateRapprochement { get; set; }
+}
+
+public class RapprochementCreateDto
+{
+    public int ClientId { get; set; }
+    public string CompteBancaire { get; set; } = string.Empty;
+    public string Periode { get; set; } = string.Empty;
+    public decimal? SoldeBanque { get; set; }
+}
+
+public class RapprochementUpdateDto
+{
+    public decimal? SoldeBanque { get; set; }
+    public decimal? SoldeCompta { get; set; }
+    public bool? EstRapproche { get; set; }
+    public string? Notes { get; set; }
 }
 
 // ===== Juridique (Legal) =====
@@ -1081,9 +1136,35 @@ public class DeclarationISDto
     public decimal Acompte2 { get; set; }
     public decimal Acompte3 { get; set; }
     public decimal Acompte4 { get; set; }
-    // Computed helpers
     public decimal CotisationMinimale { get; set; }
+    public string? RetraitementsJson { get; set; }
+    public string? LiassePanesJson { get; set; }
+    public List<ISRetraitementLineDto> Retraitements { get; set; } = new();
     public decimal ISAPayer => Math.Max(0, ISNet);
+}
+
+public class ISRetraitementLineDto
+{
+    public string Type { get; set; } = "Reintegration"; // Reintegration | Deduction
+    public string Libelle { get; set; } = string.Empty;
+    public decimal Montant { get; set; }
+    public string? Compte { get; set; }
+    public string? Commentaire { get; set; }
+}
+
+public class DeclarationChecklistItemDto
+{
+    public int Id { get; set; }
+    public int DeclarationId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Categorie { get; set; } = "Comptable";
+    public int SortOrder { get; set; }
+    public bool IsRequired { get; set; }
+    public bool IsReceived { get; set; }
+    public int? DocumentId { get; set; }
+    public DateTime? ReceivedAt { get; set; }
+    public string? Notes { get; set; }
 }
 
 public class DeclarationIRDto
@@ -1503,6 +1584,15 @@ public class AdvanceStepDto
     public string? Notes { get; set; }
     public string? Comment { get; set; }
     public bool ForceSkip { get; set; } = false;    // Skip non-required step
+}
+
+/// <summary>Refuse current step and send the workflow back to the previous actionable step.</summary>
+public class RejectStepDto
+{
+    public string? Reason { get; set; }
+    public string? Comment { get; set; }
+    /// <summary>Optional declaration status override (default: previous step entry status or ACorriger).</summary>
+    public string? DeclarationStatusOnReject { get; set; }
 }
 
 public class ReassignStepDto

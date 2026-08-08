@@ -85,6 +85,9 @@ public interface IDeclarationFacade
     Task<ApiResponse<DeclarationDto>?> CreateISAsync(int clientId, int anneeFiscale);
     Task<DeclarationISDto?> GetISDataAsync(int declarationId);
     Task<ApiResponse<DeclarationISDto>?> SaveISDataAsync(int declarationId, DeclarationISDto dto);
+    Task<List<DeclarationChecklistItemDto>> GetChecklistAsync(int declarationId);
+    Task<ApiResponse<List<DeclarationChecklistItemDto>>?> EnsureChecklistAsync(int declarationId);
+    Task<ApiResponse<DeclarationChecklistItemDto>?> MarkChecklistReceivedAsync(int declarationId, int itemId, int? documentId = null);
     // IR
     Task<ApiResponse<DeclarationDto>?> CreateIRAsync(int clientId, int anneeFiscale);
     Task<DeclarationIRDto?> GetIRDataAsync(int declarationId);
@@ -181,14 +184,18 @@ public interface ITaskFacade
 /// <summary>Facade for Comptabilité (Accounting) operations.</summary>
 public interface IComptabiliteFacade
 {
+    Task EnsureLedgerAsync(int clientId);
+    Task<List<CompteComptableDto>> GetComptesAsync(int clientId, string? search = null);
+    Task<ApiResponse<CompteComptableDto>?> CreateCompteAsync(CompteComptableCreateDto dto);
     Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null);
     Task<ApiResponse<EcritureComptableDto>?> CreateEcritureAsync(EcritureCreateDto dto);
+    Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id);
     Task<List<JournalDto>> GetJournauxAsync(int? clientId = null);
     Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null);
     Task<List<BalanceDto>> GetBalanceAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null);
     Task<List<BalanceAgeeDto>> GetBalanceAgeeAsync(int clientId);
     Task<List<RapprochementBancaireDto>> GetRapprochementsAsync(int? clientId = null);
-    Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode);
+    Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode, decimal? soldeBanque = null);
 }
 
 /// <summary>Facade for Juridique (Legal) operations.</summary>
@@ -304,6 +311,7 @@ public interface IWorkflowFacade
 
     // Steps
     Task<ApiResponse<WorkflowStepInstanceDto>?> AdvanceStepAsync(int instanceId, AdvanceStepDto dto);
+    Task<ApiResponse<WorkflowStepInstanceDto>?> RejectStepAsync(int instanceId, RejectStepDto dto);
     Task<ApiResponse<WorkflowStepInstanceDto>?> ClaimStepAsync(int instanceId, bool forceOverride = false, string? reason = null);
     Task<ApiResponse<bool>?> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto);
     Task<WorkflowStepInstanceDto?> GetCurrentStepAsync(int instanceId);

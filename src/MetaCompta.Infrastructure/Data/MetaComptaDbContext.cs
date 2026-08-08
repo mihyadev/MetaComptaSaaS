@@ -27,6 +27,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<DeclarationTVA> DeclarationsTVA => Set<DeclarationTVA>();
     public DbSet<TVALigneFacture> TVALignesFactures => Set<TVALigneFacture>();
     public DbSet<DeclarationIS> DeclarationsIS => Set<DeclarationIS>();
+    public DbSet<DeclarationChecklistItem> DeclarationChecklistItems => Set<DeclarationChecklistItem>();
     public DbSet<DeclarationCNSS> DeclarationsCNSS => Set<DeclarationCNSS>();
     public DbSet<DeclarationHistory> DeclarationHistories => Set<DeclarationHistory>();
     public DbSet<PayrollPeriod> PayrollPeriods => Set<PayrollPeriod>();
@@ -43,6 +44,17 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<Message> Messages => Set<Message>();
+
+    // Accounting (tenue comptable PCGM)
+    public DbSet<ExerciceComptable> ExercicesComptables => Set<ExerciceComptable>();
+    public DbSet<PeriodeComptable> PeriodesComptables => Set<PeriodeComptable>();
+    public DbSet<CompteComptable> ComptesComptables => Set<CompteComptable>();
+    public DbSet<JournalComptable> JournauxComptables => Set<JournalComptable>();
+    public DbSet<EcritureComptable> EcrituresComptables => Set<EcritureComptable>();
+    public DbSet<LigneEcriture> LignesEcritures => Set<LigneEcriture>();
+    public DbSet<CompteBancaire> ComptesBancaires => Set<CompteBancaire>();
+    public DbSet<RapprochementBancaire> RapprochementsBancaires => Set<RapprochementBancaire>();
+    public DbSet<RapprochementLigne> RapprochementLignes => Set<RapprochementLigne>();
 
     // Workflow Engine
     public DbSet<Department> Departments => Set<Department>();
@@ -237,10 +249,24 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(d => d.ISDu).HasPrecision(18, 2);
             e.Property(d => d.AcomptesVerses).HasPrecision(18, 2);
             e.Property(d => d.ISNet).HasPrecision(18, 2);
+            e.Property(d => d.CotisationMinimale).HasPrecision(18, 2);
             e.Property(d => d.Acompte1).HasPrecision(18, 2);
             e.Property(d => d.Acompte2).HasPrecision(18, 2);
             e.Property(d => d.Acompte3).HasPrecision(18, 2);
             e.Property(d => d.Acompte4).HasPrecision(18, 2);
+            e.Property(d => d.RetraitementsJson).HasColumnType("nvarchar(max)");
+            e.Property(d => d.LiassePanesJson).HasColumnType("nvarchar(max)");
+        });
+
+        builder.Entity<DeclarationChecklistItem>(e =>
+        {
+            e.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Label).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Categorie).HasMaxLength(50);
+            e.Property(x => x.Notes).HasMaxLength(500);
+            e.HasIndex(x => new { x.DeclarationId, x.Code });
+            e.HasOne(x => x.Declaration).WithMany().HasForeignKey(x => x.DeclarationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => !x.IsDeleted);
         });
 
         // ===== Declaration CNSS =====
@@ -349,6 +375,110 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
         {
             e.HasQueryFilter(d => !d.IsDeleted);
             e.HasOne(d => d.Client).WithMany(c => c.Documents).HasForeignKey(d => d.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ===== Accounting PCGM =====
+        builder.Entity<ExerciceComptable>(e =>
+        {
+            e.ToTable("ExercicesComptables");
+            e.HasIndex(x => new { x.ClientId, x.Annee }).IsUnique();
+            e.Property(x => x.Statut).HasMaxLength(30);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PeriodeComptable>(e =>
+        {
+            e.ToTable("PeriodesComptables");
+            e.HasIndex(x => new { x.ExerciceComptableId, x.Mois }).IsUnique();
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Exercice).WithMany(ex => ex.Periodes).HasForeignKey(x => x.ExerciceComptableId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<CompteComptable>(e =>
+        {
+            e.ToTable("ComptesComptables");
+            e.HasIndex(x => new { x.ClientId, x.Numero }).IsUnique();
+            e.Property(x => x.Numero).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Libelle).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Classe).HasMaxLength(5);
+            e.Property(x => x.Nature).HasMaxLength(30);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<JournalComptable>(e =>
+        {
+            e.ToTable("JournauxComptables");
+            e.HasIndex(x => new { x.ClientId, x.Code }).IsUnique();
+            e.Property(x => x.Code).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Libelle).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Type).HasMaxLength(30);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EcritureComptable>(e =>
+        {
+            e.ToTable("EcrituresComptables");
+            e.HasIndex(x => new { x.ClientId, x.JournalCode, x.NumeroPiece });
+            e.Property(x => x.JournalCode).HasMaxLength(10);
+            e.Property(x => x.NumeroPiece).HasMaxLength(50);
+            e.Property(x => x.Libelle).HasMaxLength(500);
+            e.Property(x => x.Reference).HasMaxLength(100);
+            e.Property(x => x.Statut).HasMaxLength(30);
+            e.Property(x => x.TotalDebit).HasPrecision(18, 2);
+            e.Property(x => x.TotalCredit).HasPrecision(18, 2);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Journal).WithMany().HasForeignKey(x => x.JournalComptableId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Exercice).WithMany().HasForeignKey(x => x.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<LigneEcriture>(e =>
+        {
+            e.ToTable("LignesEcritures");
+            e.Property(x => x.NumCompte).HasMaxLength(20);
+            e.Property(x => x.LibelleCompte).HasMaxLength(300);
+            e.Property(x => x.CompteAuxiliaire).HasMaxLength(50);
+            e.Property(x => x.LibelleLigne).HasMaxLength(500);
+            e.Property(x => x.CodeTva).HasMaxLength(20);
+            e.Property(x => x.Debit).HasPrecision(18, 2);
+            e.Property(x => x.Credit).HasPrecision(18, 2);
+            e.Property(x => x.MontantTva).HasPrecision(18, 2);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Ecriture).WithMany(ec => ec.Lignes).HasForeignKey(x => x.EcritureComptableId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Compte).WithMany().HasForeignKey(x => x.CompteComptableId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<CompteBancaire>(e =>
+        {
+            e.ToTable("ComptesBancaires");
+            e.HasIndex(x => new { x.ClientId, x.Code }).IsUnique();
+            e.Property(x => x.Code).HasMaxLength(30);
+            e.Property(x => x.Libelle).HasMaxLength(200);
+            e.Property(x => x.CompteComptableNumero).HasMaxLength(20);
+            e.Property(x => x.Iban).HasMaxLength(50);
+            e.Property(x => x.BanqueNom).HasMaxLength(200);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<RapprochementBancaire>(e =>
+        {
+            e.ToTable("RapprochementsBancaires");
+            e.Property(x => x.CompteBancaire).HasMaxLength(100);
+            e.Property(x => x.Periode).HasMaxLength(20);
+            e.Property(x => x.Statut).HasMaxLength(30);
+            e.Property(x => x.Notes).HasMaxLength(1000);
+            e.Property(x => x.SoldeCompta).HasPrecision(18, 2);
+            e.Property(x => x.SoldeBanque).HasPrecision(18, 2);
+            e.Property(x => x.Ecart).HasPrecision(18, 2);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CompteBancaireNav).WithMany().HasForeignKey(x => x.CompteBancaireId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<RapprochementLigne>(e =>
+        {
+            e.ToTable("RapprochementLignes");
+            e.Property(x => x.Libelle).HasMaxLength(500);
+            e.Property(x => x.Montant).HasPrecision(18, 2);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Rapprochement).WithMany(r => r.Lignes).HasForeignKey(x => x.RapprochementBancaireId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.LigneEcriture).WithMany().HasForeignKey(x => x.LigneEcritureId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ===== ReferenceData =====

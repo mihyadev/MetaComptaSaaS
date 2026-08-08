@@ -83,6 +83,10 @@ public interface IDeclarationService
     Task<ApiResponse<DeclarationISDto>> SaveISDataAsync(int declarationId, DeclarationISDto dto, int cabinetId, string userId);
     Task<ApiResponse<DeclarationISDto>> CalculateISAsync(DeclarationISDto dto);
     Task<ApiResponse<DeclarationISDto>> GetISDataAsync(int declarationId, int cabinetId);
+    Task<ApiResponse<List<DeclarationChecklistItemDto>>> GetChecklistAsync(int declarationId, int cabinetId);
+    Task<ApiResponse<List<DeclarationChecklistItemDto>>> EnsureAnnualChecklistAsync(int declarationId, int cabinetId, string userId);
+    Task<ApiResponse<DeclarationChecklistItemDto>> MarkChecklistItemReceivedAsync(int declarationId, int itemId, int? documentId, int cabinetId, string userId);
+    Task<ApiResponse<bool>> IsChecklistCompleteAsync(int declarationId, int cabinetId);
     // IR
     Task<ApiResponse<DeclarationDto>> CreateIRAsync(int clientId, int anneeFiscale, int cabinetId, string userId);
     Task<ApiResponse<DeclarationIRDto>> SaveIRDataAsync(int declarationId, DeclarationIRDto dto, int cabinetId, string userId);
@@ -144,7 +148,7 @@ public interface IDocumentService
     Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? categorie = null, int page = 1, int pageSize = 20, string? search = null);
     Task<ApiResponse<List<DocumentDto>>> GetByDeclarationIdAsync(int declarationId, int cabinetId);
     Task<ApiResponse<DocumentDto>> GetByIdAsync(int id, int cabinetId);
-    Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId, int? declarationId = null);
+    Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId, int? declarationId = null, int? checklistItemId = null);
     Task<ApiResponse<bool>> ChangeStatusAsync(int id, string newStatut, int cabinetId, string userId, string? motif = null);
     Task<ApiResponse<bool>> ToggleShareAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<Stream>> DownloadAsync(int id, int cabinetId);
@@ -258,6 +262,7 @@ public interface IWorkflowService
     Task<ApiResponse<WorkflowTemplateDto>> CreateDefaultTemplateAsync(int cabinetId, string userId);
     Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId);
     Task<ApiResponse<WorkflowTemplateDto>> RefreshTvaDefaultTemplateAsync(int cabinetId, string userId);
+    Task<ApiResponse<WorkflowTemplateDto>> RefreshIsDefaultTemplateAsync(int cabinetId, string userId);
     Task<int> ProcessDueRelancesAsync();
 
     // ── Instances (Workflow Execution) ───────────────────────────
@@ -270,6 +275,8 @@ public interface IWorkflowService
 
     // ── Step Operations ──────────────────────────────────────────
     Task<ApiResponse<WorkflowStepInstanceDto>> AdvanceStepAsync(int instanceId, AdvanceStepDto dto, int cabinetId, string userId);
+    /// <summary>Refuse current step and reopen the previous actionable step (Contrôle → Saisie, etc.).</summary>
+    Task<ApiResponse<WorkflowStepInstanceDto>> RejectStepAsync(int instanceId, RejectStepDto dto, int cabinetId, string userId);
     Task<ApiResponse<WorkflowStepInstanceDto>> ClaimStepAsync(int instanceId, int cabinetId, string userId, bool forceOverride = false, string? reason = null);
     Task<ApiResponse<bool>> ReassignStepAsync(int stepInstanceId, ReassignStepDto dto, int cabinetId, string userId);
     Task<ApiResponse<WorkflowStepInstanceDto>> GetCurrentStepAsync(int instanceId, int cabinetId);
@@ -383,4 +390,23 @@ public interface IClientUserService
     Task<ApiResponse<ClientUserDto>> CreateClientUserAsync(ClientUserCreateDto dto, int clientId, int cabinetId, string createdBy);
     Task<ApiResponse<ClientUserDto>> UpdateClientUserAsync(string userId, ClientUserUpdateDto dto, int clientId, int cabinetId, string updatedBy);
     Task<ApiResponse<bool>> ToggleClientUserActiveAsync(string userId, int clientId, int cabinetId, string updatedBy);
+}
+
+// ===== Comptabilité PCGM =====
+public interface IComptabiliteService
+{
+    Task EnsureClientLedgerAsync(int clientId, int cabinetId, string? userId = null);
+    Task<ApiResponse<List<CompteComptableDto>>> GetComptesAsync(int clientId, int cabinetId, string? search = null);
+    Task<ApiResponse<CompteComptableDto>> CreateCompteAsync(CompteComptableCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<List<JournalDto>>> GetJournauxAsync(int clientId, int cabinetId);
+    Task<ApiResponse<PagedResult<EcritureComptableDto>>> GetEcrituresAsync(int cabinetId, int? clientId, string? journal, int page, string? search);
+    Task<ApiResponse<EcritureDetailDto>> GetEcritureByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<EcritureComptableDto>> CreateEcritureAsync(EcritureCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<EcritureComptableDto>> ValidateEcritureAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<List<GrandLivreDto>>> GetGrandLivreAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, string? numCompte = null);
+    Task<ApiResponse<List<BalanceDto>>> GetBalanceAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin);
+    Task<ApiResponse<List<BalanceAgeeDto>>> GetBalanceAgeeAsync(int clientId, int cabinetId);
+    Task<ApiResponse<List<RapprochementBancaireDto>>> GetRapprochementsAsync(int cabinetId, int? clientId);
+    Task<ApiResponse<RapprochementBancaireDto>> CreateRapprochementAsync(RapprochementCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<RapprochementBancaireDto>> UpdateRapprochementAsync(int id, RapprochementUpdateDto dto, int cabinetId, string userId);
 }

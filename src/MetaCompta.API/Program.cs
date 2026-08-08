@@ -119,6 +119,7 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IClientUserService, ClientUserService>();
+builder.Services.AddScoped<IComptabiliteService, ComptabiliteService>();
 
 // ===== Hangfire (Background Jobs) =====
 builder.Services.AddHangfire(config => config
@@ -265,6 +266,278 @@ using (var scope = app.Services.CreateScope())
         END
     ");
     Console.WriteLine("[Startup] TVALignesFactures table check/create complete.");
+
+    // ===== Patch: Accounting PCGM tables (tenue comptable) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ExercicesComptables')
+        BEGIN
+            CREATE TABLE [ExercicesComptables] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [Annee] int NOT NULL,
+                [DateDebut] datetime2 NOT NULL,
+                [DateFin] datetime2 NOT NULL,
+                [Statut] nvarchar(30) NOT NULL DEFAULT N'Ouvert',
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE UNIQUE INDEX [IX_ExercicesComptables_ClientId_Annee] ON [ExercicesComptables]([ClientId],[Annee]) WHERE [IsDeleted]=0;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'PeriodesComptables')
+        BEGIN
+            CREATE TABLE [PeriodesComptables] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ExerciceComptableId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [Annee] int NOT NULL,
+                [Mois] int NOT NULL,
+                [DateDebut] datetime2 NOT NULL,
+                [DateFin] datetime2 NOT NULL,
+                [EstVerrouillee] bit NOT NULL DEFAULT 0,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                CONSTRAINT [FK_PeriodesComptables_Exercices] FOREIGN KEY ([ExerciceComptableId]) REFERENCES [ExercicesComptables]([Id]) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX [IX_PeriodesComptables_Exercice_Mois] ON [PeriodesComptables]([ExerciceComptableId],[Mois]) WHERE [IsDeleted]=0;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ComptesComptables')
+        BEGIN
+            CREATE TABLE [ComptesComptables] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [Numero] nvarchar(20) NOT NULL,
+                [Libelle] nvarchar(300) NOT NULL,
+                [Classe] nvarchar(5) NOT NULL DEFAULT N'',
+                [CompteParentNumero] nvarchar(20) NULL,
+                [Nature] nvarchar(30) NOT NULL DEFAULT N'General',
+                [EstActif] bit NOT NULL DEFAULT 1,
+                [EstCollectif] bit NOT NULL DEFAULT 0,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE UNIQUE INDEX [IX_ComptesComptables_ClientId_Numero] ON [ComptesComptables]([ClientId],[Numero]) WHERE [IsDeleted]=0;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JournauxComptables')
+        BEGIN
+            CREATE TABLE [JournauxComptables] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [Code] nvarchar(10) NOT NULL,
+                [Libelle] nvarchar(200) NOT NULL,
+                [Type] nvarchar(30) NOT NULL DEFAULT N'OD',
+                [ProchainNumero] int NOT NULL DEFAULT 1,
+                [EstActif] bit NOT NULL DEFAULT 1,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE UNIQUE INDEX [IX_JournauxComptables_ClientId_Code] ON [JournauxComptables]([ClientId],[Code]) WHERE [IsDeleted]=0;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'EcrituresComptables')
+        BEGIN
+            CREATE TABLE [EcrituresComptables] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [ExerciceComptableId] int NULL,
+                [JournalComptableId] int NOT NULL,
+                [JournalCode] nvarchar(10) NOT NULL,
+                [NumeroPiece] nvarchar(50) NOT NULL,
+                [DateEcriture] datetime2 NOT NULL,
+                [DatePiece] datetime2 NULL,
+                [Libelle] nvarchar(500) NULL,
+                [Reference] nvarchar(100) NULL,
+                [Statut] nvarchar(30) NOT NULL DEFAULT N'Brouillon',
+                [DateValidation] datetime2 NULL,
+                [ValideeParUserId] nvarchar(450) NULL,
+                [TotalDebit] decimal(18,2) NOT NULL DEFAULT 0,
+                [TotalCredit] decimal(18,2) NOT NULL DEFAULT 0,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                CONSTRAINT [FK_Ecritures_Journaux] FOREIGN KEY ([JournalComptableId]) REFERENCES [JournauxComptables]([Id]),
+                CONSTRAINT [FK_Ecritures_Exercices] FOREIGN KEY ([ExerciceComptableId]) REFERENCES [ExercicesComptables]([Id])
+            );
+            CREATE INDEX [IX_EcrituresComptables_Client_Journal_Piece] ON [EcrituresComptables]([ClientId],[JournalCode],[NumeroPiece]);
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'LignesEcritures')
+        BEGIN
+            CREATE TABLE [LignesEcritures] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [EcritureComptableId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [CompteComptableId] int NULL,
+                [NumCompte] nvarchar(20) NOT NULL,
+                [LibelleCompte] nvarchar(300) NOT NULL DEFAULT N'',
+                [CompteAuxiliaire] nvarchar(50) NULL,
+                [LibelleLigne] nvarchar(500) NULL,
+                [Debit] decimal(18,2) NOT NULL DEFAULT 0,
+                [Credit] decimal(18,2) NOT NULL DEFAULT 0,
+                [CodeTva] nvarchar(20) NULL,
+                [MontantTva] decimal(18,2) NULL,
+                [SortOrder] int NOT NULL DEFAULT 0,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                CONSTRAINT [FK_LignesEcritures_Ecritures] FOREIGN KEY ([EcritureComptableId]) REFERENCES [EcrituresComptables]([Id]) ON DELETE CASCADE
+            );
+            CREATE INDEX [IX_LignesEcritures_Ecriture] ON [LignesEcritures]([EcritureComptableId]);
+            CREATE INDEX [IX_LignesEcritures_Compte] ON [LignesEcritures]([ClientId],[NumCompte]);
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ComptesBancaires')
+        BEGIN
+            CREATE TABLE [ComptesBancaires] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [Code] nvarchar(30) NOT NULL,
+                [Libelle] nvarchar(200) NOT NULL,
+                [CompteComptableNumero] nvarchar(20) NOT NULL DEFAULT N'5141',
+                [Iban] nvarchar(50) NULL,
+                [BanqueNom] nvarchar(200) NULL,
+                [EstActif] bit NOT NULL DEFAULT 1,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE UNIQUE INDEX [IX_ComptesBancaires_ClientId_Code] ON [ComptesBancaires]([ClientId],[Code]) WHERE [IsDeleted]=0;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'RapprochementsBancaires')
+        BEGIN
+            CREATE TABLE [RapprochementsBancaires] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [CompteBancaireId] int NULL,
+                [CompteBancaire] nvarchar(100) NOT NULL DEFAULT N'',
+                [Periode] nvarchar(20) NOT NULL,
+                [SoldeCompta] decimal(18,2) NOT NULL DEFAULT 0,
+                [SoldeBanque] decimal(18,2) NOT NULL DEFAULT 0,
+                [Ecart] decimal(18,2) NOT NULL DEFAULT 0,
+                [EstRapproche] bit NOT NULL DEFAULT 0,
+                [Statut] nvarchar(30) NOT NULL DEFAULT N'EnCours',
+                [NombreLignesNonRapprochees] int NOT NULL DEFAULT 0,
+                [DateRapprochement] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [Notes] nvarchar(1000) NULL,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE INDEX [IX_RapprochementsBancaires_ClientId] ON [RapprochementsBancaires]([ClientId]);
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'RapprochementLignes')
+        BEGIN
+            CREATE TABLE [RapprochementLignes] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [RapprochementBancaireId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [LigneEcritureId] int NULL,
+                [DateOperation] datetime2 NULL,
+                [Libelle] nvarchar(500) NULL,
+                [Montant] decimal(18,2) NOT NULL DEFAULT 0,
+                [EstRapprochee] bit NOT NULL DEFAULT 0,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL,
+                CONSTRAINT [FK_RapprochementLignes_Rapprochements] FOREIGN KEY ([RapprochementBancaireId]) REFERENCES [RapprochementsBancaires]([Id]) ON DELETE CASCADE
+            );
+        END
+    ");
+    Console.WriteLine("[Startup] Accounting PCGM tables check/create complete.");
+
+    // ===== Patch: IS liasse columns + annual checklist =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('DeclarationsIS', 'CotisationMinimale') IS NULL
+            ALTER TABLE [DeclarationsIS] ADD [CotisationMinimale] decimal(18,2) NOT NULL CONSTRAINT [DF_DeclarationsIS_CM] DEFAULT 0;
+        IF COL_LENGTH('DeclarationsIS', 'RetraitementsJson') IS NULL
+            ALTER TABLE [DeclarationsIS] ADD [RetraitementsJson] nvarchar(max) NULL;
+        IF COL_LENGTH('DeclarationsIS', 'LiassePanesJson') IS NULL
+            ALTER TABLE [DeclarationsIS] ADD [LiassePanesJson] nvarchar(max) NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DeclarationChecklistItems')
+        BEGIN
+            CREATE TABLE [DeclarationChecklistItems] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [DeclarationId] int NOT NULL,
+                [Code] nvarchar(50) NOT NULL,
+                [Label] nvarchar(300) NOT NULL,
+                [Categorie] nvarchar(50) NULL,
+                [SortOrder] int NOT NULL CONSTRAINT [DF_DeclChecklist_Sort] DEFAULT 0,
+                [IsRequired] bit NOT NULL CONSTRAINT [DF_DeclChecklist_Req] DEFAULT 1,
+                [IsReceived] bit NOT NULL CONSTRAINT [DF_DeclChecklist_Recv] DEFAULT 0,
+                [DocumentId] int NULL,
+                [ReceivedAt] datetime2 NULL,
+                [Notes] nvarchar(500) NULL,
+                [IsDeleted] bit NOT NULL CONSTRAINT [DF_DeclChecklist_Del] DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL CONSTRAINT [DF_DeclChecklist_Created] DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE INDEX [IX_DeclarationChecklistItems_CabinetId] ON [DeclarationChecklistItems]([CabinetId]);
+            CREATE INDEX [IX_DeclarationChecklistItems_DeclarationId_Code] ON [DeclarationChecklistItems]([DeclarationId],[Code]);
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Declarations')
+                ALTER TABLE [DeclarationChecklistItems] ADD CONSTRAINT [FK_DeclarationChecklistItems_Declarations_DeclarationId]
+                    FOREIGN KEY ([DeclarationId]) REFERENCES [Declarations]([Id]) ON DELETE CASCADE;
+        END
+    ");
+    Console.WriteLine("[Startup] IS liasse columns + DeclarationChecklistItems check/create complete.");
 
     // ===== Patch: UnitTypes / UnitTakes (generic exclusive claim lock) =====
     await db.Database.ExecuteSqlRawAsync(@"
@@ -586,6 +859,10 @@ using (var scope = app.Services.CreateScope())
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(353,'STATUT_DECLARATION','Archivee',N'Archivée',33,1,0,'2026-01-01',GETUTCDATE(),'#475569','badge-brouillon','bi-archive');
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=354)
         INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(354,'STATUT_DECLARATION','Cloturee',N'Clôturée',34,1,0,'2026-01-01',GETUTCDATE(),'#334155','badge-soumise','bi-lock');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=355)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(355,'STATUT_DECLARATION','CalculIS',N'Calcul IS / CM',35,1,0,'2026-01-01',GETUTCDATE(),'#0891b2','badge-completee','bi-calculator');
+        IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=356)
+        INSERT INTO [ReferenceData](Id,Category,Code,Label,SortOrder,IsActive,IsDeleted,EffectiveFrom,CreatedAt,Couleur,CssClass,Icone) VALUES(356,'STATUT_DECLARATION','EnvoyeeSimplIs',N'Envoyée à SIMPL-IS',36,1,0,'2026-01-01',GETUTCDATE(),'#166534','badge-soumise','bi-cloud-upload');
 
         -- TYPE_TVA (61-63)
         IF NOT EXISTS (SELECT 1 FROM [ReferenceData] WHERE Id=61)
@@ -1097,9 +1374,11 @@ using (var scope = app.Services.CreateScope())
                 Console.WriteLine($"[Startup] Seeded default workflow templates for cabinet {cab.Id} ({cab.Name}).");
             }
 
-            // Refresh TVA default to end-to-end sequence (does not break in-flight WFs)
+            // Refresh TVA / IS defaults to end-to-end sequences (does not break in-flight WFs)
             var refresh = await workflowService.RefreshTvaDefaultTemplateAsync(cab.Id, cabAdmin.Id);
             Console.WriteLine($"[Startup] TVA template refresh cabinet {cab.Id}: {refresh.Message}");
+            var refreshIs = await workflowService.RefreshIsDefaultTemplateAsync(cab.Id, cabAdmin.Id);
+            Console.WriteLine($"[Startup] IS template refresh cabinet {cab.Id}: {refreshIs.Message}");
         }
     }
     catch (Exception ex)

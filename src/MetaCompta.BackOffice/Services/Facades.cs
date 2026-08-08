@@ -282,6 +282,21 @@ public sealed class DeclarationFacade : IDeclarationFacade
     public async Task<ApiResponse<DeclarationISDto>?> SaveISDataAsync(int declarationId, DeclarationISDto dto)
         => await _api.PostAsync<DeclarationISDto>($"api/declarations/is/{declarationId}/data", dto);
 
+    public async Task<List<DeclarationChecklistItemDto>> GetChecklistAsync(int declarationId)
+    {
+        var result = await _api.GetAsync<List<DeclarationChecklistItemDto>>($"api/declarations/is/{declarationId}/checklist");
+        return result?.Data ?? new List<DeclarationChecklistItemDto>();
+    }
+
+    public async Task<ApiResponse<List<DeclarationChecklistItemDto>>?> EnsureChecklistAsync(int declarationId)
+        => await _api.PostAsync<List<DeclarationChecklistItemDto>>($"api/declarations/is/{declarationId}/checklist/ensure", new { });
+
+    public async Task<ApiResponse<DeclarationChecklistItemDto>?> MarkChecklistReceivedAsync(int declarationId, int itemId, int? documentId = null)
+    {
+        var qs = documentId.HasValue ? $"?documentId={documentId}" : "";
+        return await _api.PostAsync<DeclarationChecklistItemDto>($"api/declarations/is/{declarationId}/checklist/{itemId}/received{qs}", new { });
+    }
+
     // IR
     public async Task<ApiResponse<DeclarationDto>?> CreateIRAsync(int clientId, int anneeFiscale)
         => await _api.PostAsync<DeclarationDto>($"api/declarations/ir/{clientId}/{anneeFiscale}", new { });
@@ -590,6 +605,19 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
     private readonly IApiClient _api;
     public ComptabiliteFacade(IApiClient api) => _api = api;
 
+    public async Task EnsureLedgerAsync(int clientId)
+        => await _api.PostAsync<bool>($"api/comptabilite/ensure/{clientId}", new { });
+
+    public async Task<List<CompteComptableDto>> GetComptesAsync(int clientId, string? search = null)
+    {
+        var url = QueryBuilder.For("api/comptabilite/comptes").Add("clientId", clientId).Add("search", search);
+        var result = await _api.GetAsync<List<CompteComptableDto>>(url);
+        return result?.Data ?? new List<CompteComptableDto>();
+    }
+
+    public async Task<ApiResponse<CompteComptableDto>?> CreateCompteAsync(CompteComptableCreateDto dto)
+        => await _api.PostAsync<CompteComptableDto>("api/comptabilite/comptes", dto);
+
     public async Task<PagedResult<EcritureComptableDto>?> GetEcrituresAsync(int? clientId = null, string? journal = null, int page = 1, string? search = null)
     {
         var url = QueryBuilder.For("api/comptabilite/ecritures")
@@ -601,8 +629,12 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
     public async Task<ApiResponse<EcritureComptableDto>?> CreateEcritureAsync(EcritureCreateDto dto)
         => await _api.PostAsync<EcritureComptableDto>("api/comptabilite/ecritures", dto);
 
+    public async Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id)
+        => await _api.PostAsync<EcritureComptableDto>($"api/comptabilite/ecritures/{id}/validate", new { });
+
     public async Task<List<JournalDto>> GetJournauxAsync(int? clientId = null)
     {
+        if (clientId is null or <= 0) return new List<JournalDto>();
         var url = QueryBuilder.For("api/comptabilite/journaux").Add("clientId", clientId);
         var result = await _api.GetAsync<List<JournalDto>>(url);
         return result?.Data ?? new List<JournalDto>();
@@ -641,9 +673,9 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
         return result?.Data ?? new List<RapprochementBancaireDto>();
     }
 
-    public async Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode)
+    public async Task<ApiResponse<RapprochementBancaireDto>?> CreateRapprochementAsync(int clientId, string compteBancaire, string periode, decimal? soldeBanque = null)
         => await _api.PostAsync<RapprochementBancaireDto>("api/comptabilite/rapprochements",
-            new { ClientId = clientId, CompteBancaire = compteBancaire, Periode = periode });
+            new RapprochementCreateDto { ClientId = clientId, CompteBancaire = compteBancaire, Periode = periode, SoldeBanque = soldeBanque });
 }
 
 public sealed class JuridiqueFacade : IJuridiqueFacade
@@ -994,6 +1026,9 @@ public sealed class WorkflowFacade : IWorkflowFacade
 
     public async Task<ApiResponse<WorkflowStepInstanceDto>?> AdvanceStepAsync(int instanceId, AdvanceStepDto dto)
         => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/advance", dto);
+
+    public async Task<ApiResponse<WorkflowStepInstanceDto>?> RejectStepAsync(int instanceId, RejectStepDto dto)
+        => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/reject", dto);
 
     public async Task<ApiResponse<WorkflowStepInstanceDto>?> ClaimStepAsync(int instanceId, bool forceOverride = false, string? reason = null)
         => await _api.PostAsync<WorkflowStepInstanceDto>($"api/workflow/instances/{instanceId}/claim", new { ForceOverride = forceOverride, Reason = reason });

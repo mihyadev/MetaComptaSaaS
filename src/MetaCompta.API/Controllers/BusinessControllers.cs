@@ -442,7 +442,30 @@ public class DeclarationsController : ControllerBase
         return Ok(result);
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ IR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    [HttpGet("is/{declarationId}/checklist")]
+    public async Task<IActionResult> GetISChecklist(int declarationId)
+    {
+        var result = await _service.GetChecklistAsync(declarationId, CabinetId);
+        return result.Success ? Ok(result) : NotFound(result);
+    }
+
+    [HttpPost("is/{declarationId}/checklist/ensure")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> EnsureISChecklist(int declarationId)
+    {
+        var result = await _service.EnsureAnnualChecklistAsync(declarationId, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("is/{declarationId}/checklist/{itemId}/received")]
+    [Authorize(Policy = "declaration.edit")]
+    public async Task<IActionResult> MarkChecklistReceived(int declarationId, int itemId, [FromQuery] int? documentId = null)
+    {
+        var result = await _service.MarkChecklistItemReceivedAsync(declarationId, itemId, documentId, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    // Ã¢â€â‚¬Ã¢â€â‚¬ IR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     [HttpPost("ir/{clientId}/{anneeFiscale}")]
     [Authorize(Policy = "declaration.create")]
     public async Task<IActionResult> CreateIR(int clientId, int anneeFiscale)
@@ -1708,302 +1731,83 @@ public class RejetRequest
 }
 
 
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-// Ã¢â€¢â€˜         COMPTABILITE (Accounting) Ã¢â‚¬â€ Demo data Ã¢â‚¬â€ Moroccan PCM          Ã¢â€¢â€˜
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPTABILITÉ (Accounting) — Persistent Moroccan PCGM ledger
+// ═══════════════════════════════════════════════════════════════════════════
 [ApiController]
 [Route("api/comptabilite")]
 [Authorize(Policy = "BackOfficeAccess")]
 public class ComptabiliteApiController : ControllerBase
 {
-    private readonly MetaComptaDbContext _db;
-    public ComptabiliteApiController(MetaComptaDbContext db) => _db = db;
+    private readonly IComptabiliteService _service;
+    public ComptabiliteApiController(IComptabiliteService service) => _service = service;
 
     private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
-    private async Task<string> GetClientName(int? clientId)
+    [HttpPost("ensure/{clientId:int}")]
+    public async Task<IActionResult> EnsureLedger(int clientId)
     {
-        if (!clientId.HasValue || clientId.Value <= 0) return "Client";
-        var client = await _db.Clients.FindAsync(clientId.Value);
-        return client?.RaisonSociale ?? "Client #" + clientId.Value;
+        await _service.EnsureClientLedgerAsync(clientId, CabinetId, UserId);
+        return Ok(ApiResponse<bool>.Ok(true, "Plan comptable et journaux prêts."));
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Helper: Moroccan PCM chart of accounts (demo) Ã¢â€â‚¬Ã¢â€â‚¬
-    private static readonly (string Num, string Lib, string Cls)[] _pcm = new[]
-    {
-        ("1111","Capital social","1"), ("1140","RÃƒÂ©serve lÃƒÂ©gale","1"), ("1181","RÃƒÂ©sultat net de l''exercice","1"),
-        ("1481","Emprunts auprÃƒÂ¨s des ÃƒÂ©ts de crÃƒÂ©dit","1"), ("1486","Fournisseurs d''immobilisations","1"),
-        ("2110","Frais de constitution","2"), ("2230","Fonds commercial","2"),
-        ("2311","Terrains nus","2"), ("2321","BÃƒÂ¢timents","2"), ("2332","MatÃƒÂ©riel et outillage","2"),
-        ("2340","MatÃƒÂ©riel de transport","2"), ("2351","Mobilier de bureau","2"), ("2355","MatÃƒÂ©riel informatique","2"),
-        ("2810","Amort. frais prÃƒÂ©liminaires","2"), ("2832","Amort. matÃƒÂ©riel et outillage","2"),
-        ("2834","Amort. matÃƒÂ©riel de transport","2"), ("2835","Amort. MMB & amÃƒÂ©nagements","2"),
-        ("3111","Marchandises","3"), ("3121","MatiÃƒÂ¨res premiÃƒÂ¨res","3"), ("3151","Produits finis","3"),
-        ("3421","Clients","3"), ("3424","Clients douteux ou litigieux","3"),
-        ("3425","Clients - effets ÃƒÂ  recevoir","3"), ("3451","Subventions ÃƒÂ  recevoir","3"),
-        ("3455","Ãƒâ€°tat - TVA rÃƒÂ©cupÃƒÂ©rable","3"), ("3458","Ãƒâ€°tat - crÃƒÂ©dit de TVA","3"),
-        ("4411","Fournisseurs","4"), ("4415","Fournisseurs - effets ÃƒÂ  payer","4"),
-        ("4432","RÃƒÂ©munÃƒÂ©rations dues au personnel","4"), ("4441","CNSS","4"), ("4443","Caisses de retraite","4"),
-        ("4452","Ãƒâ€°tat - TVA facturÃƒÂ©e","4"), ("4453","Ãƒâ€°tat - TVA due","4"),
-        ("4455","Ãƒâ€°tat - IS","4"), ("4456","Ãƒâ€°tat - Taxes sur CA","4"),
-        ("5141","Banque (BMCE)","5"), ("5143","TrÃƒÂ©sorerie GÃƒÂ©nÃƒÂ©rale","5"), ("5161","Caisse centrale","5"),
-        ("5520","CrÃƒÂ©dits d''escompte","5"),
-        ("6111","Achats de marchandises","6"), ("6121","Achats de mat. premiÃƒÂ¨res","6"),
-        ("6125","Achats non stockÃƒÂ©s","6"), ("6131","Locations et charges locatives","6"),
-        ("6133","Entretien et rÃƒÂ©parations","6"), ("6134","Primes d''assurances","6"),
-        ("6141","Transport du personnel","6"), ("6142","DÃƒÂ©placements et missions","6"),
-        ("6143","Frais postaux","6"), ("6144","PublicitÃƒÂ©","6"),
-        ("6147","Services bancaires","6"), ("6161","ImpÃƒÂ´ts et taxes","6"),
-        ("6171","RÃƒÂ©munÃƒÂ©rations du personnel","6"), ("6174","Charges sociales","6"),
-        ("6176","Charges sociales diverses","6"), ("6182","Pertes sur crÃƒÂ©ances irrÃƒÂ©couvrables","6"),
-        ("6191","DEA des immob. en non-valeur","6"), ("6193","DEA des immob. corporelles","6"),
-        ("6311","IntÃƒÂ©rÃƒÂªts des emprunts","6"), ("6386","Escomptes accordÃƒÂ©s","6"),
-        ("6585","CrÃƒÂ©ances devenues irrÃƒÂ©couvrables","6"),
-        ("7111","Ventes de marchandises","7"), ("7121","Ventes de biens produits","7"),
-        ("7124","Ventes de services","7"), ("7127","Ventes et produits accessoires","7"),
-        ("7129","RRR accordÃƒÂ©s par l''entreprise","7"), ("7141","Subventions d''exploitation","7"),
-        ("7197","Transferts de charges d''exploitation","7"),
-        ("7381","IntÃƒÂ©rÃƒÂªts et produits assimilÃƒÂ©s","7"), ("7386","Escomptes obtenus","7"),
-        ("7585","RentrÃƒÂ©es sur crÃƒÂ©ances soldÃƒÂ©es","7"), ("7111","Ventes de marchandises","7")
-    };
+    [HttpGet("comptes")]
+    public async Task<IActionResult> GetComptes([FromQuery] int clientId, [FromQuery] string? search = null)
+        => Ok(await _service.GetComptesAsync(clientId, CabinetId, search));
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Ãƒâ€°critures Ã¢â€â‚¬Ã¢â€â‚¬
+    [HttpPost("comptes")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> CreateCompte([FromBody] CompteComptableCreateDto dto)
+        => Ok(await _service.CreateCompteAsync(dto, CabinetId, UserId));
+
     [HttpGet("ecritures")]
     public async Task<IActionResult> GetEcritures([FromQuery] int? clientId, [FromQuery] string? journal, [FromQuery] int page = 1, [FromQuery] string? search = null)
-    {
-        var clientName = await GetClientName(clientId);
-        var rng = new Random(42 + (clientId ?? 1));
-        var jcodes = new[] { "AC", "VE", "BQ", "CA", "OD" };
-        var jnoms = new[] { "Achats", "Ventes", "Banque", "Caisse", "OpÃƒÂ©rations Diverses" };
-        var all = new List<EcritureComptableDto>();
-        for (int i = 1; i <= 120; i++)
-        {
-            var jIdx = rng.Next(jcodes.Length);
-            var pcmD = _pcm[rng.Next(_pcm.Length)];
-            var pcmC = _pcm[rng.Next(_pcm.Length)];
-            var montant = Math.Round((decimal)(rng.NextDouble() * 50000 + 500), 2);
-            all.Add(new EcritureComptableDto
-            {
-                Id = i,
-                ClientId = clientId ?? 1,
-                ClientNom = clientName,
-                Journal = jcodes[jIdx],
-                NumeroPiece = $"{jcodes[jIdx]}-2026-{i:D4}",
-                DateEcriture = new DateTime(2026, rng.Next(1, 13), rng.Next(1, 29)),
-                NumCompte = pcmD.Num,
-                LibelleCompte = pcmD.Lib,
-                Libelle = $"Ãƒâ€°criture {jnoms[jIdx]} #{i}",
-                Debit = montant,
-                Credit = 0,
-                Reference = $"REF-{i:D4}",
-                Statut = i % 5 == 0 ? "ValidÃƒÂ©" : "Brouillon",
-                CreatedAt = DateTime.UtcNow.AddDays(-rng.Next(1, 180))
-            });
-            all.Add(new EcritureComptableDto
-            {
-                Id = 1000 + i,
-                ClientId = clientId ?? 1,
-                ClientNom = clientName,
-                Journal = jcodes[jIdx],
-                NumeroPiece = $"{jcodes[jIdx]}-2026-{i:D4}",
-                DateEcriture = all.Last().DateEcriture,
-                NumCompte = pcmC.Num,
-                LibelleCompte = pcmC.Lib,
-                Libelle = $"Ãƒâ€°criture {jnoms[jIdx]} #{i}",
-                Debit = 0,
-                Credit = montant,
-                Reference = $"REF-{i:D4}",
-                Statut = all.Last().Statut,
-                CreatedAt = all.Last().CreatedAt
-            });
-        }
-        if (!string.IsNullOrEmpty(journal)) all = all.Where(e => e.Journal == journal).ToList();
-        if (!string.IsNullOrEmpty(search)) all = all.Where(e => e.Libelle!.Contains(search, StringComparison.OrdinalIgnoreCase) || e.NumCompte.Contains(search)).ToList();
-        var paged = new PagedResult<EcritureComptableDto>
-        {
-            Items = all.OrderByDescending(e => e.DateEcriture).Skip((page - 1) * 20).Take(20).ToList(),
-            TotalCount = all.Count,
-            Page = page,
-            PageSize = 20
-        };
-        return Ok(ApiResponse<PagedResult<EcritureComptableDto>>.Ok(paged));
-    }
+        => Ok(await _service.GetEcrituresAsync(CabinetId, clientId, journal, page, search));
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Journaux Ã¢â€â‚¬Ã¢â€â‚¬
-    [HttpGet("journaux")]
-    public IActionResult GetJournaux([FromQuery] int? clientId)
-    {
-        var rng = new Random(100 + (clientId ?? 1));
-        var journaux = new List<JournalDto>
-        {
-            new() { Code = "AC", Nom = "Journal des Achats", Type = "Achats", NombreEcritures = 45 + rng.Next(20), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 500000 + 100000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 500000 + 100000), 2) },
-            new() { Code = "VE", Nom = "Journal des Ventes", Type = "Ventes", NombreEcritures = 62 + rng.Next(30), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 800000 + 200000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 800000 + 200000), 2) },
-            new() { Code = "BQ", Nom = "Journal de Banque (BMCE)", Type = "Banque", NombreEcritures = 85 + rng.Next(40), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 1200000 + 300000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 1200000 + 300000), 2) },
-            new() { Code = "CA", Nom = "Journal de Caisse", Type = "Caisse", NombreEcritures = 30 + rng.Next(15), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 150000 + 30000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 150000 + 30000), 2) },
-            new() { Code = "OD", Nom = "OpÃƒÂ©rations Diverses", Type = "OD", NombreEcritures = 18 + rng.Next(10), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 200000 + 50000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 200000 + 50000), 2) },
-            new() { Code = "AN", Nom = "Ãƒâ‚¬ Nouveau", Type = "AN", NombreEcritures = 12, TotalDebit = Math.Round((decimal)(rng.NextDouble() * 600000 + 100000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 600000 + 100000), 2) },
-            new() { Code = "SA", Nom = "Journal des Salaires", Type = "Paie", NombreEcritures = 24 + rng.Next(6), TotalDebit = Math.Round((decimal)(rng.NextDouble() * 350000 + 80000), 2), TotalCredit = Math.Round((decimal)(rng.NextDouble() * 350000 + 80000), 2) }
-        };
-        return Ok(ApiResponse<List<JournalDto>>.Ok(journaux));
-    }
+    [HttpGet("ecritures/{id:int}")]
+    public async Task<IActionResult> GetEcriture(int id)
+        => Ok(await _service.GetEcritureByIdAsync(id, CabinetId));
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Grand Livre Ã¢â€â‚¬Ã¢â€â‚¬
-    [HttpGet("grandlivre")]
-    public IActionResult GetGrandLivre([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin)
-    {
-        var rng = new Random(200 + clientId);
-        var gl = _pcm.DistinctBy(p => p.Num).Select(p =>
-        {
-            var d = Math.Round((decimal)(rng.NextDouble() * 200000), 2);
-            var c = Math.Round((decimal)(rng.NextDouble() * 200000), 2);
-            return new GrandLivreDto
-            {
-                NumeroCompte = p.Num,
-                LibelleCompte = p.Lib,
-                TotalDebit = d,
-                TotalCredit = c,
-                SoldeDebiteur = d > c ? d - c : 0,
-                SoldeCrediteur = c > d ? c - d : 0
-            };
-        }).OrderBy(g => g.NumeroCompte).ToList();
-        return Ok(ApiResponse<List<GrandLivreDto>>.Ok(gl));
-    }
-
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Balance Ã¢â€â‚¬Ã¢â€â‚¬
-    [HttpGet("balance")]
-    public IActionResult GetBalance([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin)
-    {
-        var rng = new Random(300 + clientId);
-        var balance = _pcm.DistinctBy(p => p.Num).Select(p =>
-        {
-            var d = Math.Round((decimal)(rng.NextDouble() * 150000), 2);
-            var c = Math.Round((decimal)(rng.NextDouble() * 150000), 2);
-            return new BalanceDto
-            {
-                NumeroCompte = p.Num,
-                LibelleCompte = p.Lib,
-                TotalDebit = d,
-                TotalCredit = c,
-                SoldeDebiteur = d > c ? d - c : 0,
-                SoldeCrediteur = c > d ? c - d : 0
-            };
-        }).OrderBy(b => b.NumeroCompte).ToList();
-        return Ok(ApiResponse<List<BalanceDto>>.Ok(balance));
-    }
-
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Balance Ãƒâ€šgÃƒÂ©e Ã¢â€â‚¬Ã¢â€â‚¬
-    [HttpGet("balance-agee")]
-    public IActionResult GetBalanceAgee([FromQuery] int clientId)
-    {
-        var rng = new Random(400 + clientId);
-        var tiers = new[] {
-            ("3421","Alpha Distribution SARL"), ("3421","Beta Import-Export SA"), ("3421","Gamma Services Conseil"),
-            ("3424","Delta Fournitures"), ("3424","Epsilon NÃƒÂ©goce"), ("4411","Fournisseur Atlas"),
-            ("4411","Fournisseur Marrakech MatÃƒÂ©riaux"), ("4411","Fournisseur Casa Parts"), ("4411","Fournisseur Rabat Industrie")
-        };
-        var aged = tiers.Select((t, i) =>
-        {
-            var total = Math.Round((decimal)(rng.NextDouble() * 80000 + 5000), 2);
-            var t1 = Math.Round(total * (decimal)(0.3 + rng.NextDouble() * 0.3), 2);
-            var t2 = Math.Round((total - t1) * (decimal)(0.3 + rng.NextDouble() * 0.2), 2);
-            var t3 = Math.Round((total - t1 - t2) * (decimal)(0.4 + rng.NextDouble() * 0.3), 2);
-            var t4 = total - t1 - t2 - t3;
-            return new BalanceAgeeDto
-            {
-                NumeroCompte = t.Item1,
-                NomTiers = t.Item2,
-                Total = total,
-                Tranche0_30 = t1,
-                Tranche30_60 = t2,
-                Tranche60_90 = t3,
-                TrancheSuperieur90 = Math.Max(0, t4)
-            };
-        }).ToList();
-        return Ok(ApiResponse<List<BalanceAgeeDto>>.Ok(aged));
-    }
-
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Rapprochements Bancaires Ã¢â€â‚¬Ã¢â€â‚¬
-    [HttpGet("rapprochements")]
-    public async Task<IActionResult> GetRapprochements([FromQuery] int? clientId)
-    {
-        var clientName = await GetClientName(clientId);
-        var rng = new Random(500 + (clientId ?? 1));
-        var rapprochements = new List<RapprochementBancaireDto>();
-        var periodes = new[] { "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06" };
-        foreach (var p in periodes)
-        {
-            var soldeC = Math.Round((decimal)(rng.NextDouble() * 500000 + 50000), 2);
-            var ecart = Math.Round((decimal)(rng.NextDouble() * 5000 - 2500), 2);
-            rapprochements.Add(new RapprochementBancaireDto
-            {
-                Id = rapprochements.Count + 1,
-                ClientId = clientId ?? 1,
-                ClientNom = clientName,
-                CompteBancaire = "5141 - BMCE",
-                Periode = p,
-                SoldeCompta = soldeC,
-                SoldeBanque = soldeC + ecart,
-                Ecart = ecart,
-                EstRapproche = Math.Abs(ecart) < 100,
-                Statut = Math.Abs(ecart) < 100 ? "RapprochÃƒÂ©" : "En Cours",
-                NombreLignesNonRapprochees = Math.Abs(ecart) < 100 ? 0 : rng.Next(1, 8),
-                DateRapprochement = DateTime.Parse(p + "-28")
-            });
-        }
-        return Ok(ApiResponse<List<RapprochementBancaireDto>>.Ok(rapprochements));
-    }
-
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Create Ãƒâ€°criture Ã¢â€â‚¬Ã¢â€â‚¬
     [HttpPost("ecritures")]
     [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
-    public IActionResult CreateEcriture([FromBody] EcritureCreateDto dto)
-    {
-        var result = new EcritureComptableDto
-        {
-            Id = new Random().Next(2000, 9999),
-            ClientId = dto.ClientId,
-            Journal = dto.Journal,
-            NumeroPiece = $"{dto.Journal}-2026-{new Random().Next(1000, 9999)}",
-            DateEcriture = dto.DateEcriture,
-            Libelle = dto.Libelle,
-            NumCompte = dto.Lignes.FirstOrDefault()?.NumCompte ?? "",
-            LibelleCompte = dto.Lignes.FirstOrDefault()?.LibelleCompte ?? "",
-            Debit = dto.Lignes.Sum(l => l.Debit),
-            Credit = dto.Lignes.Sum(l => l.Credit),
-            Reference = dto.Reference,
-            Statut = "Brouillon",
-            CreatedAt = DateTime.UtcNow
-        };
-        return Ok(ApiResponse<EcritureComptableDto>.Ok(result, "Ãƒâ€°criture crÃƒÂ©ÃƒÂ©e avec succÃƒÂ¨s."));
-    }
+    public async Task<IActionResult> CreateEcriture([FromBody] EcritureCreateDto dto)
+        => Ok(await _service.CreateEcritureAsync(dto, CabinetId, UserId));
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Create Rapprochement Ã¢â€â‚¬Ã¢â€â‚¬
+    [HttpPost("ecritures/{id:int}/validate")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ValidateEcriture(int id)
+        => Ok(await _service.ValidateEcritureAsync(id, CabinetId, UserId));
+
+    [HttpGet("journaux")]
+    public async Task<IActionResult> GetJournaux([FromQuery] int clientId)
+        => Ok(await _service.GetJournauxAsync(clientId, CabinetId));
+
+    [HttpGet("grandlivre")]
+    public async Task<IActionResult> GetGrandLivre([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin, [FromQuery] string? numCompte = null)
+        => Ok(await _service.GetGrandLivreAsync(clientId, CabinetId, dateDebut, dateFin, numCompte));
+
+    [HttpGet("balance")]
+    public async Task<IActionResult> GetBalance([FromQuery] int clientId, [FromQuery] DateTime? dateDebut, [FromQuery] DateTime? dateFin)
+        => Ok(await _service.GetBalanceAsync(clientId, CabinetId, dateDebut, dateFin));
+
+    [HttpGet("balance-agee")]
+    public async Task<IActionResult> GetBalanceAgee([FromQuery] int clientId)
+        => Ok(await _service.GetBalanceAgeeAsync(clientId, CabinetId));
+
+    [HttpGet("rapprochements")]
+    public async Task<IActionResult> GetRapprochements([FromQuery] int? clientId)
+        => Ok(await _service.GetRapprochementsAsync(CabinetId, clientId));
+
     [HttpPost("rapprochements")]
     [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
-    public IActionResult CreateRapprochement([FromBody] RapprochementCreateRequest req)
-    {
-        var result = new RapprochementBancaireDto
-        {
-            Id = new Random().Next(100, 999),
-            ClientId = req.ClientId,
-            CompteBancaire = req.CompteBancaire,
-            Periode = req.Periode,
-            SoldeCompta = 0,
-            SoldeBanque = 0,
-            Ecart = 0,
-            EstRapproche = false,
-            Statut = "En Cours",
-            DateRapprochement = DateTime.UtcNow
-        };
-        return Ok(ApiResponse<RapprochementBancaireDto>.Ok(result, "Rapprochement crÃƒÂ©ÃƒÂ© avec succÃƒÂ¨s."));
-    }
-}
+    public async Task<IActionResult> CreateRapprochement([FromBody] RapprochementCreateDto dto)
+        => Ok(await _service.CreateRapprochementAsync(dto, CabinetId, UserId));
 
-public class RapprochementCreateRequest
-{
-    public int ClientId { get; set; }
-    public string CompteBancaire { get; set; } = string.Empty;
-    public string Periode { get; set; } = string.Empty;
+    [HttpPut("rapprochements/{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> UpdateRapprochement(int id, [FromBody] RapprochementUpdateDto dto)
+        => Ok(await _service.UpdateRapprochementAsync(id, dto, CabinetId, UserId));
 }
 
 // ===== Tasks Controller =====
@@ -2122,7 +1926,7 @@ public class DocumentsController : ControllerBase
     [HttpPost("upload")]
     [RequestSizeLimit(20 * 1024 * 1024)]
     public async Task<IActionResult> Upload(IFormFile file, [FromForm] string titre, [FromForm] string categorie,
-        [FromForm] int? clientId, [FromForm] int? declarationId)
+        [FromForm] int? clientId, [FromForm] int? declarationId, [FromForm] int? checklistItemId = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest(ApiResponse<DocumentDto>.Fail("Aucun fichier fourni."));
@@ -2143,7 +1947,7 @@ public class DocumentsController : ControllerBase
         using var stream = file.OpenReadStream();
         var result = await _documentService.UploadAsync(
             stream, file.FileName, file.ContentType, file.Length,
-            titre, categorie, clientId, CabinetId, UserId, declarationId);
+            titre, categorie, clientId, CabinetId, UserId, declarationId, checklistItemId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 

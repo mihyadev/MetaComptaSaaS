@@ -300,7 +300,7 @@
                             }
                             @if (CanDeclMenu("IS"))
                             {
-                                <li class="nav-item"><a class="nav-link @(DeclActive("IS") ? "active" : "")" href="@Url.Action("IS", "Declarations")"><i class="bi bi-building"></i> IS — Liasse</a></li>
+                                <li class="nav-item"><a class="nav-link @(DeclActive("IS") ? "active" : "")" href="@Url.Action("IS", "Declarations")"><i class="bi bi-building"></i> Déclaration fiscale — Liasse</a></li>
                             }
                             @if (CanDeclMenu("DRF"))
                             {
@@ -339,11 +339,14 @@
                             @if (HasSvc("COMPTABILITE"))
                             {
                                 <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Ecritures" ? "active" : "")" href="@Url.Action("Ecritures", "Comptabilite")"><i class="bi bi-pencil-square"></i> Tenue comptable</a></li>
+                                <li class="nav-item"><a class="nav-link @(currentAction == "PlanComptable" ? "active" : "")" href="@Url.Action("PlanComptable", "Comptabilite")"><i class="bi bi-diagram-3"></i> Plan comptable</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Journaux" ? "active" : "")" href="@Url.Action("Journaux", "Comptabilite")"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "GrandLivre" ? "active" : "")" href="@Url.Action("GrandLivre", "Comptabilite")"><i class="bi bi-book"></i> Grand livre</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Balance" ? "active" : "")" href="@Url.Action("Balance", "Comptabilite")"><i class="bi bi-symmetry-horizontal"></i> Balance</a></li>
+                                <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie &amp; rapprochements</a></li>
+                                <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
                             }
-                            @if (HasSvc("TRESORERIE"))
+                            else if (HasSvc("TRESORERIE"))
                             {
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie &amp; rapprochements</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
@@ -358,10 +361,7 @@
                                 <li class="nav-item"><a class="nav-link @(currentAction == "EtatsSynthese" ? "active" : "")" href="@Url.Action("EtatsSynthese", "EtatsFiscaux")"><i class="bi bi-journal-text"></i> États fiscaux / synthèse</a></li>
                                 <li class="nav-item"><a class="nav-link @(currentAction == "Amortissements" ? "active" : "")" href="@Url.Action("Amortissements", "EtatsFiscaux")"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
                             }
-                            @if (HasSvc("LIASSEFISCALE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "LiasseFiscale" ? "active" : "")" href="@Url.Action("LiasseFiscale", "EtatsFiscaux")"><i class="bi bi-files"></i> Liasse fiscale</a></li>
-                            }
+                            @* LIASSEFISCALE unlocks IS (Déclaration fiscale — Liasse annuelle); avoid duplicate empty menu under Comptabilité *@
                             @if (HasSvc("EG"))
                             {
                                 <li class="nav-item"><a class="nav-link" href="@Url.Action("EtatsSynthese", "EtatsFiscaux")"><i class="bi bi-fuel-pump"></i> E.G – Gasoil</a></li>
