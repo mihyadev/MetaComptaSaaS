@@ -39,7 +39,8 @@ public class WorkflowService : IWorkflowService
     // ╚══════════════════════════════════════════════════════════════════════╝
 
     public async Task<ApiResponse<PagedResult<WorkflowTemplateDto>>> GetTemplatesAsync(
-        int cabinetId, string? declarationType = null, int? clientId = null, int page = 1, int pageSize = 20)
+        int cabinetId, string? declarationType = null, int? clientId = null, int page = 1, int pageSize = 20,
+        bool cabinetOnly = false, bool activeOnly = false, bool excludeAncien = false)
     {
         var query = _db.WorkflowTemplates
             .Where(wt => wt.CabinetId == cabinetId)
@@ -50,13 +51,21 @@ public class WorkflowService : IWorkflowService
         if (!string.IsNullOrEmpty(declarationType) && Enum.TryParse<WorkflowDeclarationType>(declarationType, true, out var dt))
             query = query.Where(wt => wt.DeclarationType == dt);
 
-        if (clientId.HasValue)
+        if (cabinetOnly)
+            query = query.Where(wt => wt.ClientId == null);
+        else if (clientId.HasValue)
             query = query.Where(wt => wt.ClientId == clientId.Value || wt.ClientId == null);
+
+        if (activeOnly)
+            query = query.Where(wt => wt.IsActive);
+
+        if (excludeAncien)
+            query = query.Where(wt => !wt.Name.Contains("(ancien)"));
 
         var total = await query.CountAsync();
         var items = await query
-            .OrderByDescending(wt => wt.IsDefault).ThenBy(wt => wt.Name)
-            .Skip((page - 1) * pageSize).Take(pageSize)
+            .OrderByDescending(wt => wt.IsDefault).ThenBy(wt => wt.DeclarationType).ThenBy(wt => wt.Name)
+            .Skip((page - 1) * Math.Max(1, pageSize)).Take(Math.Clamp(pageSize, 1, 500))
             .Select(wt => MapTemplateDto(wt))
             .ToListAsync();
 
@@ -91,13 +100,28 @@ public class WorkflowService : IWorkflowService
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
             declType = WorkflowDeclarationType.All;
 
+        // Cabinet base: exactly one active template per declaration type
+        if (!dto.ClientId.HasValue)
+        {
+            dto.IsDefault = true;
+            var existingCabinet = await _db.WorkflowTemplates
+                .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                    && wt.ClientId == null
+                    && wt.DeclarationType == declType
+                    && wt.IsActive
+                    && !wt.Name.Contains("(ancien)"));
+            if (existingCabinet)
+                return ApiResponse<WorkflowTemplateDto>.Fail(
+                    "Un modèle cabinet existe déjà pour ce type de déclaration. Ouvrez-le dans le Builder pour le modifier (personnalisation client = fiche client → Workflow).");
+        }
+
         var template = new WorkflowTemplate
         {
             Name = dto.Name,
             Description = dto.Description,
             DeclarationType = declType,
             ClientId = dto.ClientId,
-            IsDefault = dto.IsDefault,
+            IsDefault = dto.ClientId == null || dto.IsDefault,
             IsSystem = false, // client / cabinet custom copies are never Plan Marocain system templates
             IsActive = true,
             Version = 1,
@@ -106,7 +130,7 @@ public class WorkflowService : IWorkflowService
         };
 
         // If setting as default, unset other defaults for same scope
-        if (dto.IsDefault)
+        if (template.IsDefault)
         {
             var existingDefaults = await _db.WorkflowTemplates
                 .Where(wt => wt.CabinetId == cabinetId && wt.DeclarationType == declType && wt.ClientId == dto.ClientId && wt.IsDefault)
@@ -146,6 +170,22 @@ public class WorkflowService : IWorkflowService
                 IsClientStep = stepDto.IsClientStep || assignType == AssignmentType.Client,
                 RequiredPermission = stepDto.RequiredPermission,
                 SLAHours = stepDto.SLAHours,
+                DeadlineAnchor = stepType == WorkflowStepType.ClotureArchivage ? "None"
+                    : (string.IsNullOrWhiteSpace(stepDto.DeadlineAnchor) ? "CalendrierMaroc" : stepDto.DeadlineAnchor.Trim()),
+                DeadlineOffsetDays = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineOffsetDays,
+                DeadlineDay = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineDay,
+                DeadlineMonth = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineMonth,
+                DeadlineMonthOffset = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineMonthOffset,
+                DeadlineYearOffset = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineYearOffset,
+                ApplyDeadlineToDeclaration = stepType == WorkflowStepType.Initialisation
+                    || (stepType != WorkflowStepType.ClotureArchivage && stepDto.ApplyDeadlineToDeclaration),
+                LifecycleEndMode = stepType == WorkflowStepType.Initialisation
+                    ? "PeriodEnd"
+                    : null,
+                LifecycleEndDays = stepType == WorkflowStepType.Initialisation ? stepDto.LifecycleEndDays : null,
+                ActionOnLifecycleEnd = stepType == WorkflowStepType.Initialisation
+                    ? (string.IsNullOrWhiteSpace(stepDto.ActionOnLifecycleEnd) ? "ClotureDeclaration" : stepDto.ActionOnLifecycleEnd.Trim())
+                    : null,
                 IsRequired = stepDto.IsRequired,
                 IsBlocking = stepDto.IsBlocking,
                 AutoCreateTask = stepDto.AutoCreateTask,
@@ -211,11 +251,41 @@ public class WorkflowService : IWorkflowService
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
             declType = WorkflowDeclarationType.All;
 
+        // Cabinet templates stay cabinet-scoped (client copies are edited via client customize)
+        if (!template.ClientId.HasValue)
+        {
+            dto.ClientId = null;
+            dto.IsDefault = true;
+
+            if (declType != template.DeclarationType)
+            {
+                var clash = await _db.WorkflowTemplates
+                    .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                        && wt.ClientId == null
+                        && wt.DeclarationType == declType
+                        && wt.IsActive
+                        && !wt.Name.Contains("(ancien)")
+                        && wt.Id != id);
+                if (clash)
+                    return ApiResponse<WorkflowTemplateDto>.Fail(
+                        "Un modèle cabinet existe déjà pour ce type de déclaration. Un seul workflow de base par type.");
+            }
+        }
+
         template.Name = dto.Name;
         template.Description = dto.Description;
         template.DeclarationType = declType;
-        template.ClientId = dto.ClientId;
-        template.IsDefault = dto.IsDefault;
+        if (!template.ClientId.HasValue)
+        {
+            template.ClientId = null;
+            template.IsDefault = true;
+        }
+        else
+        {
+            if (dto.ClientId.HasValue)
+                template.ClientId = dto.ClientId;
+            template.IsDefault = dto.IsDefault;
+        }
         template.Version++;
         template.UpdatedBy = userId;
 
@@ -269,6 +339,22 @@ public class WorkflowService : IWorkflowService
                 IsClientStep = stepDto.IsClientStep || assignType == AssignmentType.Client,
                 RequiredPermission = stepDto.RequiredPermission,
                 SLAHours = stepDto.SLAHours,
+                DeadlineAnchor = stepType == WorkflowStepType.ClotureArchivage ? "None"
+                    : (string.IsNullOrWhiteSpace(stepDto.DeadlineAnchor) ? "CalendrierMaroc" : stepDto.DeadlineAnchor.Trim()),
+                DeadlineOffsetDays = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineOffsetDays,
+                DeadlineDay = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineDay,
+                DeadlineMonth = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineMonth,
+                DeadlineMonthOffset = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineMonthOffset,
+                DeadlineYearOffset = stepType == WorkflowStepType.ClotureArchivage ? null : stepDto.DeadlineYearOffset,
+                ApplyDeadlineToDeclaration = stepType == WorkflowStepType.Initialisation
+                    || (stepType != WorkflowStepType.ClotureArchivage && stepDto.ApplyDeadlineToDeclaration),
+                LifecycleEndMode = stepType == WorkflowStepType.Initialisation
+                    ? "PeriodEnd"
+                    : null,
+                LifecycleEndDays = stepType == WorkflowStepType.Initialisation ? stepDto.LifecycleEndDays : null,
+                ActionOnLifecycleEnd = stepType == WorkflowStepType.Initialisation
+                    ? (string.IsNullOrWhiteSpace(stepDto.ActionOnLifecycleEnd) ? "ClotureDeclaration" : stepDto.ActionOnLifecycleEnd.Trim())
+                    : null,
                 IsRequired = stepDto.IsRequired,
                 IsBlocking = stepDto.IsBlocking,
                 AutoCreateTask = stepDto.AutoCreateTask,
@@ -362,27 +448,125 @@ public class WorkflowService : IWorkflowService
     /// TVA, IS, IR, CNSS, DTS, Paie, Juridique, Comptabilite, IR_SALAIRES
     /// Each template has optimized steps, SLAs, and assignments for its domain.
     /// </summary>
-    public async Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId)
+    /// <summary>
+    /// Ensures one active cabinet base template per declaration type.
+    /// When <paramref name="forceReset"/> is true: retire ALL cabinet bases for seeded types, then recreate fresh defaults.
+    /// </summary>
+    public async Task<ApiResponse<List<WorkflowTemplateDto>>> SeedAllDefaultTemplatesAsync(int cabinetId, string userId, bool forceReset = false)
     {
         var createdTemplates = new List<WorkflowTemplateDto>();
         var templateDefinitions = GetAllDefaultTemplateDefinitions();
 
         foreach (var def in templateDefinitions)
         {
-            // Skip if a default template already exists for this type
-            var exists = await _db.WorkflowTemplates.AnyAsync(t =>
-                t.CabinetId == cabinetId && !t.IsDeleted && t.IsDefault && t.DeclarationType.ToString() == def.DeclarationType);
-            if (exists) continue;
+            if (!Enum.TryParse<WorkflowDeclarationType>(def.DeclarationType, true, out var declType))
+                continue;
+
+            // All cabinet-scoped templates for this type (duplicates, anciens, non-defaults)
+            var cabinetForType = await _db.WorkflowTemplates
+                .Include(t => t.Steps)
+                .Where(t => t.CabinetId == cabinetId && !t.IsDeleted
+                    && t.ClientId == null
+                    && t.DeclarationType == declType)
+                .ToListAsync();
+
+            foreach (var old in cabinetForType.Where(t => t.Name.Contains("(ancien)")))
+            {
+                old.IsDefault = false;
+                old.IsActive = false;
+                old.UpdatedBy = userId;
+            }
+
+            var activeBases = cabinetForType
+                .Where(t => !t.Name.Contains("(ancien)") && t.IsActive)
+                .OrderByDescending(t => t.IsDefault)
+                .ThenBy(t => t.Id)
+                .ToList();
+
+            var current = activeBases.FirstOrDefault();
+
+            if (!forceReset && current != null && !TemplateNeedsRefresh(current, def))
+            {
+                // Keep exactly one active base; retire extras
+                foreach (var dup in activeBases.Skip(1))
+                {
+                    dup.IsDefault = false;
+                    dup.IsActive = false;
+                    if (!dup.Name.Contains("(ancien)"))
+                        dup.Name = $"{dup.Name} (ancien)";
+                    dup.UpdatedBy = userId;
+                }
+                if (!current.IsDefault)
+                {
+                    current.IsDefault = true;
+                    current.UpdatedBy = userId;
+                }
+                continue;
+            }
+
+            // Retire every cabinet base for this type (force reset or needs refresh)
+            foreach (var old in cabinetForType.Where(t => !t.Name.Contains("(ancien)")))
+            {
+                old.IsDefault = false;
+                old.IsActive = false;
+                old.Name = $"{old.Name} (ancien)";
+                old.UpdatedBy = userId;
+            }
+
+            await _db.SaveChangesAsync();
 
             var result = await CreateTemplateAsync(def, cabinetId, userId);
             if (result.Success && result.Data != null)
                 createdTemplates.Add(result.Data);
         }
 
-        if (!createdTemplates.Any())
-            return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, "Tous les modèles par défaut existent déjà.");
+        await _db.SaveChangesAsync();
 
-        return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, $"{createdTemplates.Count} modèle(s) par défaut créé(s) avec succès.");
+        // Retire orphan cabinet bases not in the official seed list (e.g. DeclarationType=All leftovers)
+        var seededTypes = templateDefinitions
+            .Select(d => Enum.TryParse<WorkflowDeclarationType>(d.DeclarationType, true, out var t) ? t : (WorkflowDeclarationType?)null)
+            .Where(t => t.HasValue)
+            .Select(t => t!.Value)
+            .ToHashSet();
+
+        var orphans = await _db.WorkflowTemplates
+            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted && t.ClientId == null
+                && !seededTypes.Contains(t.DeclarationType)
+                && t.IsActive)
+            .ToListAsync();
+        foreach (var old in orphans)
+        {
+            old.IsDefault = false;
+            old.IsActive = false;
+            if (!old.Name.Contains("(ancien)"))
+                old.Name = $"{old.Name} (ancien)";
+            old.UpdatedBy = userId;
+        }
+
+        await _db.SaveChangesAsync();
+
+        if (forceReset)
+            return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates,
+                $"Réinitialisation terminée : {createdTemplates.Count} workflow(s) cabinet recréé(s) (1 par type de déclaration).");
+
+        if (!createdTemplates.Any())
+            return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, "Tous les modèles par défaut sont à jour (TVA, IS, IR, CNSS…).");
+
+        return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, $"{createdTemplates.Count} modèle(s) cabinet créé(s)/rafraîchi(s).");
+    }
+
+    private static bool TemplateNeedsRefresh(WorkflowTemplate template, WorkflowTemplateCreateDto def)
+    {
+        var steps = template.Steps?.Where(s => !s.IsDeleted).ToList() ?? new List<WorkflowStepTemplate>();
+        if (steps.Count < def.Steps.Count) return true;
+        if (steps.Any(s => s.StepType == WorkflowStepType.Relance)) return true;
+        // TVA / IS should embed relance on Collecte
+        if (def.DeclarationType is "TVA" or "IS")
+        {
+            var collecte = steps.FirstOrDefault(s => s.StepType == WorkflowStepType.Collecte);
+            if (collecte == null || collecte.MaxRetries <= 0) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -401,7 +585,8 @@ public class WorkflowService : IWorkflowService
 
         var expectedSteps = tvaDef.Steps.Count;
         var alreadyAligned = oldDefaults.Any(t => t.Steps.Count(s => !s.IsDeleted) >= expectedSteps
-            && t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Relance));
+            && t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Collecte && s.MaxRetries > 0)
+            && !t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Relance));
 
         if (alreadyAligned)
             return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(oldDefaults.First(t => t.IsDefault)), "Modèle TVA déjà aligné.");
@@ -430,6 +615,51 @@ public class WorkflowService : IWorkflowService
     }
 
     /// <summary>
+    /// Refresh IS (liasse fiscale) default template: TVA-pattern + métier steps. Keeps in-flight instances on old templates.
+    /// </summary>
+    public async Task<ApiResponse<WorkflowTemplateDto>> RefreshIsDefaultTemplateAsync(int cabinetId, string userId)
+    {
+        var isDef = GetAllDefaultTemplateDefinitions()
+            .First(d => d.DeclarationType == "IS");
+
+        var oldDefaults = await _db.WorkflowTemplates
+            .Include(t => t.Steps)
+            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted
+                && t.DeclarationType == WorkflowDeclarationType.IS && t.IsDefault)
+            .ToListAsync();
+
+        var expectedSteps = isDef.Steps.Count;
+        var alreadyAligned = oldDefaults.Any(t => t.Steps.Count(s => !s.IsDeleted) >= expectedSteps
+            && t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Collecte && s.MaxRetries > 0)
+            && !t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Relance)
+            && t.Steps.Any(s => !s.IsDeleted && s.ActionOnEntry == WorkflowActionType.CreateDeclaration));
+
+        if (alreadyAligned)
+            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(oldDefaults.First(t => t.IsDefault)), "Modèle IS (liasse) déjà aligné.");
+
+        foreach (var old in oldDefaults)
+        {
+            old.IsDefault = false;
+            var hasActive = await _db.WorkflowInstances.AnyAsync(wi =>
+                wi.WorkflowTemplateId == old.Id && wi.Status == WorkflowInstanceStatus.Active);
+            if (!hasActive)
+                old.IsActive = false;
+            old.Name = old.Name.Contains("(ancien)") ? old.Name : $"{old.Name} (ancien)";
+            old.UpdatedBy = userId;
+        }
+
+        await _db.SaveChangesAsync();
+
+        isDef.Name = "IS — Déclaration fiscale (Liasse annuelle)";
+        var created = await CreateTemplateAsync(isDef, cabinetId, userId);
+        if (!created.Success || created.Data == null)
+            return ApiResponse<WorkflowTemplateDto>.Fail(created.Message ?? "Échec refresh modèle IS.");
+
+        _logger.LogInformation("IS template refreshed for cabinet {CabinetId}: new template {Id}", cabinetId, created.Data.Id);
+        return ApiResponse<WorkflowTemplateDto>.Ok(created.Data, $"Modèle IS rafraîchi (cabinet {cabinetId}). Anciens modèles désactivés comme défaut.");
+    }
+
+    /// <summary>
     /// Returns all per-type default template definitions.
     /// </summary>
     private static List<WorkflowTemplateCreateDto> GetAllDefaultTemplateDefinitions()
@@ -444,39 +674,45 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "TVA", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture / création dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier TVA pour la période", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", TaskType = "Standard" },
+                    new() { Name = "Ouverture / création dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier TVA pour la période", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
                     new() { Name = "Demande documents", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Envoi de la demande de factures d'achat/vente au client", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0}" },
-                    new() { Name = "Relance documents", StepOrder = 2, StepType = "Relance", AssignmentType = "AutoSystem", IsRequired = false, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 72, Description = "Relances automatiques tant que les documents manquent", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RelanceClient", MaxRetries = 3, RetryIntervalHours = 48, OnMaxRetriesAction = "EscalateToManager", TaskType = "Standard" },
-                    new() { Name = "Réception documents (client)", StepOrder = 3, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Le client dépose les factures et relevés bancaires sur l'extranet", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
-                    new() { Name = "Contrôle exhaustivité", StepOrder = 4, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Vérification exhaustivité pièces; branche EnAttenteCorrection si incomplet", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
-                    new() { Name = "Import & calcul TVA", StepOrder = 5, StepType = "Saisie", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 36, Description = "Import factures, ventilation et calcul TVA (réutilise CalculateTVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculTVA, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.CalculTVA, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Traitement anomalies", StepOrder = 6, StepType = "Controle", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Correction des anomalies (placeholder jusqu'au moteur d'anomalies)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnAttenteCorrection, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Moyenne },
-                    new() { Name = "Revue superviseur", StepOrder = 7, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approuver → Validée ; Refuser → À corriger", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevueSuperviseur, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
-                    new() { Name = "Soumission SIMPL-TVA", StepOrder = 8, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Stub SIMPL-TVA : XML local + accusé ACK placeholder", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnvoyeeSimplTva, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.EnvoyeeSimplTva, ActionOnComplete = "ExportXML", TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
-                    new() { Name = "Dépôt confirmé", StepOrder = 9, StepType = "DepotSoumission", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Confirmation dépôt après ACK stub", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Deposee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Deposee, TaskType = "Standard" },
-                    new() { Name = "Paiement (si TVA due)", StepOrder = 10, StepType = "Paiement", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Stub paiement : confirmer → Payée (ignorer si crédit de TVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.APayer, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Payee, ActionOnEntry = "PaymentReminder", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Rapprochement", StepOrder = 11, StepType = "Rapprochement", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Rapprochement comptable (stub lien compta)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Rapprochee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Rapprochee, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Archivage & clôture", StepOrder = 12, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage puis clôture du dossier", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Archivee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Cloturee, ActionOnComplete = "ArchiveDeclaration", TaskType = "Archiving" }
+                    new() { Name = "Réception documents (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Le client dépose les factures — relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
+                    new() { Name = "Contrôle exhaustivité", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Vérification exhaustivité pièces; branche EnAttenteCorrection si incomplet", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
+                    new() { Name = "Import & calcul TVA", StepOrder = 4, StepType = "Saisie", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 36, Description = "Import factures, ventilation et calcul TVA (réutilise CalculateTVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculTVA, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.CalculTVA, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Traitement anomalies", StepOrder = 5, StepType = "Controle", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Correction des anomalies (placeholder jusqu'au moteur d'anomalies)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnAttenteCorrection, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Moyenne },
+                    new() { Name = "Revue superviseur", StepOrder = 6, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approuver → Validée ; Refuser → À corriger", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevueSuperviseur, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
+                    new() { Name = "Soumission SIMPL-TVA", StepOrder = 7, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Stub SIMPL-TVA : XML local + accusé ACK placeholder", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnvoyeeSimplTva, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.EnvoyeeSimplTva, ActionOnComplete = "ExportXML", TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
+                    new() { Name = "Dépôt confirmé", StepOrder = 8, StepType = "DepotSoumission", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Confirmation dépôt après ACK stub", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Deposee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Deposee, TaskType = "Standard" },
+                    new() { Name = "Paiement (si TVA due)", StepOrder = 9, StepType = "Paiement", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Stub paiement : confirmer → Payée (ignorer si crédit de TVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.APayer, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Payee, ActionOnEntry = "PaymentReminder", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Rapprochement", StepOrder = 10, StepType = "Rapprochement", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Rapprochement comptable (stub lien compta)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Rapprochee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Rapprochee, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Archivage & clôture", StepOrder = 11, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage puis clôture du dossier", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Archivee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Cloturee, ActionOnComplete = "ArchiveDeclaration", TaskType = "Archiving" }
                 }
             },
 
-            // ── IS (Impôt sur les Sociétés — cycle annuel) ───────────────
+            // ── IS (Déclaration fiscale — Liasse annuelle, pattern TVA + métier) ──
             new()
             {
-                Name = "IS — Impôt sur les Sociétés",
-                Description = "Workflow pour la déclaration annuelle d'IS : bilan fiscal, retraitements, calcul de l'impôt, liasse fiscale et dépôt.",
+                Name = "IS — Déclaration fiscale (Liasse annuelle)",
+                Description = "Workflow liasse fiscale annuelle bout-en-bout : collecte Extrane, saisie, lettrage, révision, retraitements, IS/CM, validation client, SIMPL-IS (stub), paiement et clôture.",
                 DeclarationType = "IS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture exercice IS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Initialisation du dossier IS pour l'exercice fiscal", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, TaskType = "Standard" },
-                    new() { Name = "Demande documents annuels", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Demande de la balance générale, inventaires, PV AG, contrats", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Collecte pièces justificatives", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 168, Description = "Le client fournit les documents nécessaires à la clôture annuelle", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Retraitements fiscaux", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Réintégrations, déductions, amortissements, provisions non déductibles", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Contrôle liasse fiscale", StepOrder = 4, StepType = "Controle", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Vérification de cohérence du résultat fiscal, report déficitaire, cotisation minimale", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevision, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, RequiredPermission = "workflow.validate" },
-                    new() { Name = "Validation associé / expert", StepOrder = 5, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Validation finale par l'expert-comptable ou l'associé responsable", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
-                    new() { Name = "Validation client (bilan)", StepOrder = 6, StepType = "ValidationClient", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 120, Description = "Le client approuve le bilan et la liasse fiscale", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Dépôt DGI & paiement", StepOrder = 7, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Télédéclaration IS sur Simpl-IS et génération de l'avis d'imposition", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Soumise, TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
-                    new() { Name = "Clôture & archivage annuel", StepOrder = 8, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 72, Description = "Archivage liasse fiscale, accusé DGI, classement exercice", TaskType = "Archiving" }
+                    new() { Name = "Ouverture dossier liasse", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier liasse (exercice, clôture, deadline 31/03 N+1)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
+                    new() { Name = "Demande pièces annuelles", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Checklist annuelle : inventaire, banques, paie, immobilisations, PV AG…", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0,\"checklist\":\"annuelle\"}" },
+                    new() { Name = "Réception pièces (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 168, Description = "Le client dépose les pièces — relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1,\"requireChecklistComplete\":true}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
+                    new() { Name = "Contrôle exhaustivité", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Vérification exhaustivité pièces; Refuser → retour collecte", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1,\"requireChecklistComplete\":true}" },
+                    new() { Name = "Saisie & tenue comptable", StepOrder = 4, StepType = "Saisie", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Saisie / tenue comptable de l'exercice (lien Comptabilité)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnCours, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Lettrage & rapprochements", StepOrder = 5, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Lettrage clients/fournisseurs et rapprochements bancaires", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Révision / inventaire", StepOrder = 6, StepType = "Controle", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Amortissements, stocks, provisions — révision chef de mission", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevision, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, RequiredPermission = "workflow.validate" },
+                    new() { Name = "Retraitements fiscaux", StepOrder = 7, StepType = "Saisie", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Réintégrations, déductions, déficits reportables", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculIS, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Calcul IS & cotisation minimale", StepOrder = 8, StepType = "Saisie", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Barème IS + CM + acomptes (EditIS)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculIS, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.CalculIS, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Revue associé", StepOrder = 9, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Contrôle qualité associé ; Refuser → étape précédente", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevueSuperviseur, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
+                    new() { Name = "Validation client (bilan)", StepOrder = 10, StepType = "ValidationClient", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 120, Description = "Le client valide Bilan / CPC / résultat fiscal avant dépôt DGI", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Génération & SIMPL-IS", StepOrder = 11, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Pack liasse + stub SIMPL-IS (miroir TVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnvoyeeSimplIs, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.EnvoyeeSimplIs, ActionOnComplete = "ExportXML", TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
+                    new() { Name = "Dépôt confirmé", StepOrder = 12, StepType = "DepotSoumission", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Confirmation dépôt après ACK stub SIMPL-IS", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Deposee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Deposee, TaskType = "Standard" },
+                    new() { Name = "Paiement solde IS/CM", StepOrder = 13, StepType = "Paiement", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Paiement solde IS ou CM (stub comme TVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.APayer, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Payee, ActionOnEntry = "PaymentReminder", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Rapprochement", StepOrder = 14, StepType = "Rapprochement", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Rapprochement comptable (stub lien compta)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Rapprochee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Rapprochee, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
+                    new() { Name = "Archivage & clôture", StepOrder = 15, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 72, Description = "Archivage liasse, clôture dossier (+ option N+1)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Archivee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Cloturee, ActionOnComplete = "ArchiveDeclaration", TaskType = "Archiving" }
                 }
             },
 
@@ -507,7 +743,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "CNSS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Initialisation automatique du bordereau CNSS du mois", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", TaskType = "Standard" },
+                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Le 1er du mois : ouvre le CNSS du mois précédent (ex. 1 août → CNSS juillet, dépôt jusqu'au 10)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", IsScheduled = true, CronExpression = "0 8 1 * *", CronDescription = "Le 1er de chaque mois à 08:00 — CNSS mois précédent (fenêtre dépôt 1–10)", ActionConfigJson = "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":10,\"windowMonthOffset\":1}" },
                     new() { Name = "Demande état du personnel", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Demande des entrées/sorties, absences, heures supplémentaires", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Collecte données paie", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Le client transmet les éléments variables de paie du mois", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Calcul cotisations CNSS", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Calcul des parts salariales et patronales (CNSS, AMO, TFP)", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
@@ -601,7 +837,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "DTS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture période DTS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique de la déclaration annuelle DTS / État 9421", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", TaskType = "Standard" },
+                    new() { Name = "Ouverture période DTS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique de la déclaration annuelle DTS / État 9421", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
                     new() { Name = "Demande états de paie", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Demande des états du personnel, bulletins annuels et éléments de rémunération", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Collecte données annuelles", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 120, Description = "Le client transmet les états de paie et variables de l'exercice", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Établissement État 9421", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Saisie des traitements, salaires et retenues pour l'État 9421", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
@@ -641,6 +877,7 @@ public class WorkflowService : IWorkflowService
                         c.ClientId == dto.ClientId
                         && c.CabinetId == cabinetId
                         && c.IsActive
+                        && !c.IsDeleted
                         && (c.DeclarationType == startDecl || c.DeclarationType == WorkflowDeclarationType.All)
                         && c.WorkflowTemplateId != null);
                 if (cfg?.WorkflowTemplateId != null)
@@ -704,16 +941,35 @@ public class WorkflowService : IWorkflowService
                 declTypeEnum = parsed;
 
             clientConfig = await _db.ClientWorkflowConfigs
-                .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.IsActive &&
+                .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.IsActive && !c.IsDeleted &&
                     (c.DeclarationType == (declTypeEnum ?? WorkflowDeclarationType.All) || c.DeclarationType == WorkflowDeclarationType.All));
         }
 
-        // 4. Create workflow instance
+        // 4. Resolve exercice (from declaration or open exercice)
+        int? exerciceId = null;
+        if (dto.DeclarationId is int declId)
+        {
+            exerciceId = await _db.Declarations.AsNoTracking()
+                .Where(d => d.Id == declId && d.CabinetId == cabinetId)
+                .Select(d => d.ExerciceComptableId)
+                .FirstOrDefaultAsync();
+        }
+        if (exerciceId == null && dto.ClientId > 0)
+        {
+            exerciceId = await _db.ExercicesComptables.AsNoTracking()
+                .Where(e => e.ClientId == dto.ClientId && e.CabinetId == cabinetId && e.Statut == "Ouvert")
+                .OrderByDescending(e => e.Annee)
+                .Select(e => (int?)e.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        // 5. Create workflow instance
         var instance = new WorkflowInstance
         {
             WorkflowTemplateId = template.Id,
             DeclarationId = dto.DeclarationId,
             ClientId = dto.ClientId,
+            ExerciceComptableId = exerciceId,
             CurrentStepOrder = 0,
             Status = WorkflowInstanceStatus.Active,
             StartedByUserId = userId,
@@ -725,7 +981,7 @@ public class WorkflowService : IWorkflowService
         _db.WorkflowInstances.Add(instance);
         await _db.SaveChangesAsync();
 
-        // 5. Create all step instances from template
+        // 6. Create all step instances from template
         var activeSteps = template.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder).ToList();
 
         // Skip client validation step if disabled in client config
@@ -736,10 +992,7 @@ public class WorkflowService : IWorkflowService
 
         foreach (var stepTemplate in activeSteps)
         {
-            var slaHours = stepTemplate.SLAHours;
-            if (clientConfig != null && slaHours.HasValue)
-                slaHours = (int)(slaHours.Value * clientConfig.SLAMultiplier);
-
+            // DueDate is computed when the step actually opens (ActivateStepAsync) from DeadlineAnchor.
             var stepInstance = new WorkflowStepInstance
             {
                 WorkflowInstanceId = instance.Id,
@@ -747,7 +1000,7 @@ public class WorkflowService : IWorkflowService
                 StepOrder = stepTemplate.StepOrder,
                 StepName = stepTemplate.Name,
                 Status = WorkflowStepStatus.Pending,
-                DueDate = slaHours.HasValue ? DateTime.UtcNow.AddHours(slaHours.Value) : null,
+                DueDate = null,
                 CabinetId = cabinetId,
                 CreatedBy = userId
             };
@@ -797,13 +1050,16 @@ public class WorkflowService : IWorkflowService
                 .ThenInclude(si => si.AssignedToUser)
             .Include(wi => wi.StepInstances)
                 .ThenInclude(si => si.CompletedByUser)
-            .Include(wi => wi.StepInstances)
-                .ThenInclude(si => si.WorkflowStepTemplate)
+            // Do NOT ThenInclude WorkflowStepTemplate here: soft-deleted templates
+            // (after Builder refresh / client re-sync) would filter out the steps via query filter.
             .Include(wi => wi.History.OrderByDescending(h => h.ActionDate).Take(20))
+            .AsSplitQuery()
             .FirstOrDefaultAsync();
 
         if (wi == null)
             return ApiResponse<WorkflowInstanceDto>.Fail("Instance de workflow non trouvée.");
+
+        await AttachStepTemplatesIgnoreDeletedAsync(wi.StepInstances);
 
         // Heal open typed workflows that were started without CreateDeclaration on Init
         if (wi.Status == WorkflowInstanceStatus.Active
@@ -820,8 +1076,31 @@ public class WorkflowService : IWorkflowService
         return ApiResponse<WorkflowInstanceDto>.Ok(dto);
     }
 
+    /// <summary>
+    /// Loads step templates including soft-deleted ones so in-flight instances keep their steps
+    /// after a cabinet/client template refresh that soft-deletes prior step definitions.
+    /// </summary>
+    private async Task AttachStepTemplatesIgnoreDeletedAsync(IEnumerable<WorkflowStepInstance>? steps)
+    {
+        var list = steps?.ToList() ?? new List<WorkflowStepInstance>();
+        if (list.Count == 0) return;
+
+        var ids = list.Select(s => s.WorkflowStepTemplateId).Distinct().ToList();
+        var templates = await _db.WorkflowStepTemplates
+            .IgnoreQueryFilters()
+            .Where(t => ids.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id);
+
+        foreach (var s in list)
+        {
+            if (templates.TryGetValue(s.WorkflowStepTemplateId, out var tpl))
+                s.WorkflowStepTemplate = tpl;
+        }
+    }
+
     public async Task<ApiResponse<PagedResult<WorkflowInstanceDto>>> GetInstancesAsync(
-        int cabinetId, int? clientId = null, string? status = null, int? declarationId = null, int page = 1, int pageSize = 20)
+        int cabinetId, int? clientId = null, string? status = null, int? declarationId = null,
+        int page = 1, int pageSize = 20, int? exerciceComptableId = null)
     {
         var query = _db.WorkflowInstances
             .Where(wi => wi.CabinetId == cabinetId)
@@ -839,6 +1118,14 @@ public class WorkflowService : IWorkflowService
 
         if (declarationId.HasValue)
             query = query.Where(wi => wi.DeclarationId == declarationId.Value);
+
+        if (exerciceComptableId is > 0)
+        {
+            var exoId = exerciceComptableId.Value;
+            query = query.Where(wi =>
+                wi.ExerciceComptableId == exoId
+                || (wi.Declaration != null && wi.Declaration.ExerciceComptableId == exoId));
+        }
 
         var total = await query.CountAsync();
         var items = await query
@@ -955,7 +1242,6 @@ public class WorkflowService : IWorkflowService
     {
         var instance = await _db.WorkflowInstances
             .Include(wi => wi.StepInstances.OrderBy(s => s.StepOrder))
-                .ThenInclude(si => si.WorkflowStepTemplate)
             .Include(wi => wi.Declaration)
             .FirstOrDefaultAsync(wi => wi.Id == instanceId && wi.CabinetId == cabinetId);
 
@@ -963,6 +1249,8 @@ public class WorkflowService : IWorkflowService
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance non trouvée.");
         if (instance.Status != WorkflowInstanceStatus.Active)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+
+        await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
         // Find current active step
         var currentStep = instance.StepInstances
@@ -1047,12 +1335,16 @@ public class WorkflowService : IWorkflowService
                 instance.Declaration.UpdatedBy = userId;
             }
 
-            // Stop further relances once documents are received / collecte done
+            // Stop further relances once the waiting step is completed
+            currentStep.NextRetryAt = null;
             if (stepTemplate?.StepType == WorkflowStepType.Collecte
                 || stepTemplate?.DeclarationStatusOnComplete == RefCodes.StatutDeclaration.DocumentsRecus)
             {
                 foreach (var relance in instance.StepInstances.Where(s =>
-                    s.WorkflowStepTemplate?.ActionOnEntry == WorkflowActionType.RelanceClient && s.NextRetryAt != null))
+                    s.Id != currentStep.Id && s.NextRetryAt != null
+                    && (s.WorkflowStepTemplate?.MaxRetries > 0
+                        || s.WorkflowStepTemplate?.ActionOnEntry == WorkflowActionType.RelanceClient
+                        || s.WorkflowStepTemplate?.StepType == WorkflowStepType.Relance)))
                 {
                     relance.NextRetryAt = null;
                 }
@@ -1138,6 +1430,289 @@ public class WorkflowService : IWorkflowService
     }
 
     /// <summary>
+    /// Refuse the current step and send the workflow back to the previous actionable step
+    /// (e.g. Contrôle TVA → étape précédente Saisie / Collecte).
+    /// </summary>
+    public async Task<ApiResponse<WorkflowStepInstanceDto>> RejectStepAsync(
+        int instanceId, RejectStepDto dto, int cabinetId, string userId)
+    {
+        var reason = (dto.Reason ?? dto.Comment ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            return ApiResponse<WorkflowStepInstanceDto>.Fail("Un motif de refus est obligatoire.");
+
+        var instance = await _db.WorkflowInstances
+            .Include(wi => wi.StepInstances.OrderBy(s => s.StepOrder))
+            .Include(wi => wi.Declaration)
+            .FirstOrDefaultAsync(wi => wi.Id == instanceId && wi.CabinetId == cabinetId && !wi.IsDeleted);
+
+        if (instance == null)
+            return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance non trouvée.");
+        if (instance.Status != WorkflowInstanceStatus.Active)
+            return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+
+        await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
+
+        var currentStep = instance.StepInstances
+            .FirstOrDefault(s => s.Status == WorkflowStepStatus.InProgress
+                              || s.Status == WorkflowStepStatus.WaitingForClient
+                              || s.Status == WorkflowStepStatus.WaitingForValidation);
+
+        if (currentStep == null)
+            return ApiResponse<WorkflowStepInstanceDto>.Fail("Aucune étape active à refuser.");
+
+        var stepTemplate = currentStep.WorkflowStepTemplate;
+        await TryClaimStepIfEligibleAsync(currentStep, stepTemplate, instance, cabinetId, userId);
+
+        if (!await CanUserAdvanceStepAsync(currentStep, stepTemplate, instance, userId))
+            return ApiResponse<WorkflowStepInstanceDto>.Fail(
+                "Seul le collaborateur (ou le client) assigné à cette étape peut la refuser.");
+
+        // Previous human/actionable step only (never reopen AutoSystem init/clôture shells)
+        var previousStep = instance.StepInstances
+            .Where(s => s.StepOrder < currentStep.StepOrder
+                        && (s.Status == WorkflowStepStatus.Completed || s.Status == WorkflowStepStatus.Skipped)
+                        && s.WorkflowStepTemplate?.AssignmentType != AssignmentType.AutoSystem)
+            .OrderByDescending(s => s.StepOrder)
+            .FirstOrDefault();
+
+        var previousStatus = currentStep.Status.ToString();
+        var userName = await GetUserNameAsync(userId);
+
+        // First human step (only AutoSystem before): refuse = demand correction on current step
+        if (previousStep == null)
+        {
+            currentStep.Notes = $"Correction demandée : {reason}";
+            if (instance.Declaration != null)
+            {
+                var oldDeclStatut = instance.Declaration.Statut;
+                var targetStatut = !string.IsNullOrWhiteSpace(dto.DeclarationStatusOnReject)
+                    ? dto.DeclarationStatusOnReject!.Trim()
+                    : RefCodes.StatutDeclaration.EnAttenteCorrection;
+
+                instance.Declaration.Statut = targetStatut!;
+                instance.Declaration.MotifRefus = reason;
+                instance.Declaration.UpdatedBy = userId;
+                instance.Declaration.UpdatedAt = DateTime.UtcNow;
+
+                _db.DeclarationHistories.Add(new DeclarationHistory
+                {
+                    DeclarationId = instance.Declaration.Id,
+                    CabinetId = cabinetId,
+                    AncienStatut = oldDeclStatut,
+                    NouveauStatut = targetStatut!,
+                    UserId = userId,
+                    Commentaire = $"Refus / correction sur « {currentStep.StepName} » : {reason}",
+                    CreatedBy = userId
+                });
+            }
+
+            _db.WorkflowHistories.Add(new WorkflowHistory
+            {
+                WorkflowInstanceId = instanceId,
+                WorkflowStepInstanceId = currentStep.Id,
+                Action = "StepRejectedForCorrection",
+                PreviousStatus = previousStatus,
+                NewStatus = currentStep.Status.ToString(),
+                Comment = reason,
+                UserId = userId,
+                UserName = userName,
+                CabinetId = cabinetId,
+                CreatedBy = userId
+            });
+
+            await _db.SaveChangesAsync();
+
+            var stay = await _db.WorkflowStepInstances
+                .Include(s => s.AssignedToUser)
+                .Include(s => s.CompletedByUser)
+                .Include(s => s.WorkflowStepTemplate)
+                .FirstOrDefaultAsync(s => s.Id == currentStep.Id);
+
+            return ApiResponse<WorkflowStepInstanceDto>.Ok(
+                MapStepInstanceDto(stay!),
+                $"Correction demandée sur « {currentStep.StepName} » (pas d'étape précédente humaine).");
+        }
+
+        // Reset current step so it can be activated again after correction
+        currentStep.Status = WorkflowStepStatus.Pending;
+        currentStep.CompletedAt = null;
+        currentStep.CompletedByUserId = null;
+        currentStep.StartedAt = null;
+        currentStep.ActivatedAt = null;
+        currentStep.Notes = $"Refusé → retour à « {previousStep.StepName} » : {reason}";
+
+        if (currentStep.TaskItemId.HasValue)
+        {
+            var linkedTask = await _db.TaskItems.FirstOrDefaultAsync(t => t.Id == currentStep.TaskItemId.Value);
+            if (linkedTask != null && linkedTask.Statut != "Annule")
+            {
+                linkedTask.Statut = "Annule";
+                linkedTask.UpdatedAt = DateTime.UtcNow;
+                linkedTask.UpdatedBy = userId;
+            }
+        }
+
+        await CloseWorkflowStepTakesAsync(currentStep, cabinetId, userId, $"Refus: {reason}");
+
+        _db.WorkflowHistories.Add(new WorkflowHistory
+        {
+            WorkflowInstanceId = instanceId,
+            WorkflowStepInstanceId = currentStep.Id,
+            Action = "StepRejected",
+            PreviousStatus = previousStatus,
+            NewStatus = "Pending",
+            Comment = reason,
+            UserId = userId,
+            UserName = userName,
+            CabinetId = cabinetId,
+            CreatedBy = userId
+        });
+
+        // Reopen previous step
+        var prevTemplate = previousStep.WorkflowStepTemplate;
+        previousStep.CompletedAt = null;
+        previousStep.CompletedByUserId = null;
+        previousStep.Notes = $"Réouverte après refus de « {currentStep.StepName} » : {reason}";
+        previousStep.ActivatedAt = DateTime.UtcNow;
+        previousStep.StartedAt = DateTime.UtcNow;
+
+        if (prevTemplate != null && (prevTemplate.IsClientStep || prevTemplate.AssignmentType == AssignmentType.Client))
+            previousStep.Status = WorkflowStepStatus.WaitingForClient;
+        else
+            previousStep.Status = WorkflowStepStatus.InProgress;
+
+        // Prefer keep previous assignee; else resolve again
+        if (string.IsNullOrEmpty(previousStep.AssignedToUserId) && prevTemplate != null)
+        {
+            previousStep.AssignedToUserId = await ResolveAssigneeAsync(
+                prevTemplate, cabinetId, instance.ClientId, userId);
+        }
+
+        instance.CurrentStepOrder = previousStep.StepOrder;
+
+        // Declaration status: explicit override → previous entry status → ACorriger
+        if (instance.Declaration != null)
+        {
+            var oldDeclStatut = instance.Declaration.Statut;
+            var targetStatut = !string.IsNullOrWhiteSpace(dto.DeclarationStatusOnReject)
+                ? dto.DeclarationStatusOnReject!.Trim()
+                : (!string.IsNullOrWhiteSpace(prevTemplate?.DeclarationStatusOnEntry)
+                    ? prevTemplate!.DeclarationStatusOnEntry
+                    : RefCodes.StatutDeclaration.ACorriger);
+
+            instance.Declaration.Statut = targetStatut!;
+            instance.Declaration.MotifRefus = reason;
+            instance.Declaration.UpdatedBy = userId;
+            instance.Declaration.UpdatedAt = DateTime.UtcNow;
+
+            _db.DeclarationHistories.Add(new DeclarationHistory
+            {
+                DeclarationId = instance.Declaration.Id,
+                CabinetId = cabinetId,
+                AncienStatut = oldDeclStatut,
+                NouveauStatut = targetStatut!,
+                UserId = userId,
+                Commentaire = $"Refus étape « {currentStep.StepName} » → retour « {previousStep.StepName} » : {reason}",
+                CreatedBy = userId
+            });
+        }
+
+        // Reopen or recreate task on previous step
+        if (prevTemplate?.AutoCreateTask == true && prevTemplate.AssignmentType != AssignmentType.AutoSystem)
+        {
+            TaskItem? prevTask = null;
+            if (previousStep.TaskItemId.HasValue)
+                prevTask = await _db.TaskItems.FirstOrDefaultAsync(t => t.Id == previousStep.TaskItemId.Value);
+
+            if (prevTask != null)
+            {
+                prevTask.Statut = "AFaire";
+                prevTask.AssignedToUserId = previousStep.AssignedToUserId;
+                prevTask.UpdatedAt = DateTime.UtcNow;
+                prevTask.UpdatedBy = userId;
+                prevTask.Description = (prevTask.Description ?? "") + $"\n[Réouverture] {reason}";
+            }
+            else
+            {
+                var clientName = instance.Client?.RaisonSociale
+                    ?? (await _db.Clients.AsNoTracking().FirstOrDefaultAsync(c => c.Id == instance.ClientId))?.RaisonSociale
+                    ?? "N/A";
+                var task = new TaskItem
+                {
+                    Titre = $"[Workflow] {previousStep.StepName} — {clientName}",
+                    Description = $"Étape réouverte après refus: {reason}",
+                    ClientId = instance.ClientId,
+                    DeclarationId = instance.DeclarationId,
+                    AssignedToUserId = previousStep.AssignedToUserId,
+                    AssignedByUserId = userId,
+                    DateDebut = DateTime.UtcNow,
+                    DateEcheance = previousStep.DueDate ?? DateTime.UtcNow.AddHours(prevTemplate.SLAHours ?? 48),
+                    Priorite = prevTemplate.TaskPriority,
+                    Statut = "AFaire",
+                    CabinetId = cabinetId,
+                    CreatedBy = userId
+                };
+                _db.TaskItems.Add(task);
+                await _db.SaveChangesAsync();
+                previousStep.TaskItemId = task.Id;
+            }
+        }
+
+        _db.WorkflowHistories.Add(new WorkflowHistory
+        {
+            WorkflowInstanceId = instanceId,
+            WorkflowStepInstanceId = previousStep.Id,
+            Action = "StepReopened",
+            PreviousStatus = "Completed",
+            NewStatus = previousStep.Status.ToString(),
+            Comment = $"Retour suite au refus de « {currentStep.StepName} » : {reason}",
+            UserId = userId,
+            UserName = userName,
+            CabinetId = cabinetId,
+            CreatedBy = userId
+        });
+
+        await _db.SaveChangesAsync();
+
+        // Soft-lock for reopened step assignee
+        if (!string.IsNullOrEmpty(previousStep.AssignedToUserId)
+            && previousStep.Status is WorkflowStepStatus.InProgress or WorkflowStepStatus.WaitingForValidation)
+        {
+            try
+            {
+                await _unitTakes.OpenTakeAsync(new OpenUnitTakeDto
+                {
+                    UnitTypeCode = UnitTypeCodes.WorkflowStep,
+                    UnitEntityId = previousStep.Id,
+                    Comment = $"Réouverture après refus: {reason}",
+                    TaskItemId = previousStep.TaskItemId,
+                    WorkflowStepInstanceId = previousStep.Id,
+                    DeclarationId = instance.DeclarationId,
+                    ForceRelease = true
+                }, cabinetId, previousStep.AssignedToUserId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not open UnitTake on reopened step {StepId}", previousStep.Id);
+            }
+        }
+
+        _logger.LogInformation(
+            "Workflow {InstanceId}: step {Current} rejected by {User}, reopened {Previous}",
+            instanceId, currentStep.StepName, userId, previousStep.StepName);
+
+        var reloaded = await _db.WorkflowStepInstances
+            .Include(s => s.AssignedToUser)
+            .Include(s => s.CompletedByUser)
+            .Include(s => s.WorkflowStepTemplate)
+            .FirstOrDefaultAsync(s => s.Id == previousStep.Id);
+
+        return ApiResponse<WorkflowStepInstanceDto>.Ok(
+            MapStepInstanceDto(reloaded!),
+            $"Étape refusée — retour à « {previousStep.StepName} ».");
+    }
+
+    /// <summary>
     /// Explicitly claim the current active step (exclusive soft lock).
     /// Fails if another matching-role user already holds it, unless Manager/Gérant forceOverride.
     /// </summary>
@@ -1146,8 +1721,6 @@ public class WorkflowService : IWorkflowService
     {
         var instance = await _db.WorkflowInstances
             .Include(wi => wi.StepInstances)
-                .ThenInclude(si => si.WorkflowStepTemplate)
-            .Include(wi => wi.StepInstances)
                 .ThenInclude(si => si.AssignedToUser)
             .FirstOrDefaultAsync(wi => wi.Id == instanceId && wi.CabinetId == cabinetId && !wi.IsDeleted);
 
@@ -1155,6 +1728,8 @@ public class WorkflowService : IWorkflowService
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance workflow introuvable.");
         if (instance.Status != WorkflowInstanceStatus.Active)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+
+        await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
         var currentStep = instance.StepInstances
             .FirstOrDefault(s => s.StepOrder == instance.CurrentStepOrder && !s.IsDeleted)
@@ -1391,12 +1966,12 @@ public class WorkflowService : IWorkflowService
         var instance = await _db.WorkflowInstances
             .Include(wi => wi.StepInstances.OrderBy(s => s.StepOrder))
                 .ThenInclude(si => si.AssignedToUser)
-            .Include(wi => wi.StepInstances)
-                .ThenInclude(si => si.WorkflowStepTemplate)
             .FirstOrDefaultAsync(wi => wi.Id == instanceId && wi.CabinetId == cabinetId);
 
         if (instance == null)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance non trouvée.");
+
+        await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
         var current = instance.StepInstances
             .FirstOrDefault(s => s.Status == WorkflowStepStatus.InProgress || s.Status == WorkflowStepStatus.WaitingForClient || s.Status == WorkflowStepStatus.WaitingForValidation);
@@ -1517,7 +2092,7 @@ public class WorkflowService : IWorkflowService
     public async Task<ApiResponse<List<ClientWorkflowConfigDto>>> GetClientConfigsAsync(int clientId, int cabinetId)
     {
         var configs = await _db.ClientWorkflowConfigs
-            .Where(c => c.ClientId == clientId && c.CabinetId == cabinetId)
+            .Where(c => c.ClientId == clientId && c.CabinetId == cabinetId && !c.IsDeleted)
             .Include(c => c.Client)
             .Include(c => c.WorkflowTemplate)
             .Include(c => c.PrimaryAssignee)
@@ -1542,6 +2117,38 @@ public class WorkflowService : IWorkflowService
         return ApiResponse<List<ClientWorkflowConfigDto>>.Ok(configs);
     }
 
+    public async Task<ApiResponse<bool>> DeleteClientConfigAsync(int configId, int clientId, int cabinetId, string userId)
+    {
+        var cfg = await _db.ClientWorkflowConfigs
+            .FirstOrDefaultAsync(c => c.Id == configId && c.ClientId == clientId && c.CabinetId == cabinetId && !c.IsDeleted);
+        if (cfg == null)
+            return ApiResponse<bool>.Fail("Affectation introuvable.");
+
+        // Soft-delete affectation
+        cfg.IsDeleted = true;
+        cfg.IsActive = false;
+        cfg.UpdatedBy = userId;
+
+        // Deactivate client-owned copy (keep history / running instances intact)
+        if (cfg.WorkflowTemplateId.HasValue)
+        {
+            var tpl = await _db.WorkflowTemplates
+                .FirstOrDefaultAsync(t => t.Id == cfg.WorkflowTemplateId.Value
+                    && t.CabinetId == cabinetId
+                    && t.ClientId == clientId
+                    && !t.IsDeleted);
+            if (tpl != null)
+            {
+                tpl.IsActive = false;
+                tpl.IsDefault = false;
+                tpl.UpdatedBy = userId;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return ApiResponse<bool>.Ok(true, "Workflow retiré de l'affectation client.");
+    }
+
     public async Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto, int cabinetId, string userId)
     {
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
@@ -1557,6 +2164,7 @@ public class WorkflowService : IWorkflowService
         }
 
         var existing = await _db.ClientWorkflowConfigs
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
 
         if (existing != null)
@@ -1568,7 +2176,20 @@ public class WorkflowService : IWorkflowService
             existing.AutoStartWorkflow = dto.AutoStartWorkflow;
             existing.PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId;
             existing.IsActive = dto.IsActive;
+            existing.IsDeleted = false;
             existing.UpdatedBy = userId;
+
+            // Re-activate client-owned template if it was deactivated on delete
+            if (dto.WorkflowTemplateId.HasValue)
+            {
+                var tpl = await _db.WorkflowTemplates
+                    .FirstOrDefaultAsync(t => t.Id == dto.WorkflowTemplateId.Value && t.CabinetId == cabinetId && t.ClientId == dto.ClientId);
+                if (tpl != null && !tpl.IsActive)
+                {
+                    tpl.IsActive = true;
+                    tpl.UpdatedBy = userId;
+                }
+            }
         }
         else
         {
@@ -1608,47 +2229,43 @@ public class WorkflowService : IWorkflowService
         if (source == null)
             return ApiResponse<WorkflowTemplateDto>.Fail("Modèle source introuvable.");
 
-        // Already the client-owned copy
+        // Already the client-owned copy (Personnaliser opened on existing copy) — do not wipe customizations
         if (source.ClientId == clientId)
             return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(source));
 
         if (!Enum.TryParse<WorkflowDeclarationType>(declarationType ?? source.DeclarationType.ToString(), true, out var declType))
             declType = source.DeclarationType;
 
-        // Reuse existing config pointer if it already points to a client-owned template
-        var existingConfig = await _db.ClientWorkflowConfigs
-            .Include(c => c.WorkflowTemplate)
-            .FirstOrDefaultAsync(c => c.ClientId == clientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
-
-        if (existingConfig?.WorkflowTemplateId != null
-            && existingConfig.WorkflowTemplate != null
-            && existingConfig.WorkflowTemplate.ClientId == clientId
-            && !existingConfig.WorkflowTemplate.IsDeleted)
-        {
-            var owned = await GetTemplateByIdAsync(existingConfig.WorkflowTemplateId.Value, cabinetId);
-            if (owned.Success && owned.Data != null)
-                return owned;
-        }
-
-        // Reuse an existing active client template for same declaration type
-        var existingClientTpl = await _db.WorkflowTemplates
-            .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
-            .Include(wt => wt.Client)
-            .FirstOrDefaultAsync(wt =>
-                wt.CabinetId == cabinetId
-                && wt.ClientId == clientId
-                && wt.DeclarationType == declType
-                && wt.IsActive
-                && !wt.IsDeleted
-                && !wt.IsSystem);
-
-        if (existingClientTpl != null)
-            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(existingClientTpl));
-
         var client = await _db.Clients.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null)
             return ApiResponse<WorkflowTemplateDto>.Fail("Client introuvable.");
+
+        // Find existing client-owned copy for this declaration type (incl. deactivated after unassign)
+        var existingClientTpls = await _db.WorkflowTemplates
+            .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
+            .Where(wt =>
+                wt.CabinetId == cabinetId
+                && wt.ClientId == clientId
+                && wt.DeclarationType == declType
+                && !wt.IsDeleted
+                && !wt.IsSystem)
+            .OrderByDescending(wt => wt.IsActive)
+            .ThenByDescending(wt => wt.IsDefault)
+            .ThenByDescending(wt => wt.Id)
+            .ToListAsync();
+
+        var existingClientTpl = existingClientTpls.FirstOrDefault();
+
+        // Extra duplicates for same client+type → archive
+        foreach (var dup in existingClientTpls.Skip(1))
+        {
+            dup.IsActive = false;
+            dup.IsDefault = false;
+            if (!dup.Name.Contains("(ancien)"))
+                dup.Name = $"{dup.Name} (ancien)";
+            dup.UpdatedBy = userId;
+        }
 
         var cloneDto = new WorkflowTemplateCreateDto
         {
@@ -1660,6 +2277,31 @@ public class WorkflowService : IWorkflowService
             Steps = source.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder)
                 .Select(MapStepToCreateDto).ToList()
         };
+
+        // Cabinet (or other) source assigned → client copy must match that model (not an old stale copy)
+        if (existingClientTpl != null)
+        {
+            if (!existingClientTpl.IsActive)
+            {
+                existingClientTpl.IsActive = true;
+                existingClientTpl.UpdatedBy = userId;
+            }
+
+            // Only re-sync when source is a cabinet base (Affecter / pick modèle cabinet)
+            if (!source.ClientId.HasValue)
+            {
+                await _db.SaveChangesAsync();
+                var synced = await UpdateTemplateAsync(existingClientTpl.Id, cloneDto, cabinetId, userId);
+                if (synced.Success)
+                    _logger.LogInformation(
+                        "Re-synced client workflow {ClientTplId} from cabinet {SourceId} for client {ClientId}",
+                        existingClientTpl.Id, sourceTemplateId, clientId);
+                return synced;
+            }
+
+            await _db.SaveChangesAsync();
+            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(existingClientTpl));
+        }
 
         var created = await CreateTemplateAsync(cloneDto, cabinetId, userId);
         if (created.Success)
@@ -1766,6 +2408,7 @@ public class WorkflowService : IWorkflowService
             declType = WorkflowDeclarationType.All;
 
         var existing = await _db.ClientWorkflowConfigs
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.ClientId == dto.ClientId && c.CabinetId == cabinetId && c.DeclarationType == declType);
 
         if (existing != null)
@@ -1777,6 +2420,7 @@ public class WorkflowService : IWorkflowService
             existing.AutoStartWorkflow = dto.AutoStartWorkflow;
             existing.PrimaryAssigneeUserId = dto.PrimaryAssigneeUserId;
             existing.IsActive = dto.IsActive;
+            existing.IsDeleted = false;
             existing.UpdatedBy = userId;
         }
         else
@@ -1821,6 +2465,16 @@ public class WorkflowService : IWorkflowService
         IsClientStep = s.IsClientStep,
         RequiredPermission = s.RequiredPermission,
         SLAHours = s.SLAHours,
+        DeadlineAnchor = s.DeadlineAnchor,
+        DeadlineOffsetDays = s.DeadlineOffsetDays,
+        DeadlineDay = s.DeadlineDay,
+        DeadlineMonth = s.DeadlineMonth,
+        DeadlineMonthOffset = s.DeadlineMonthOffset,
+        DeadlineYearOffset = s.DeadlineYearOffset,
+        ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+        LifecycleEndMode = s.LifecycleEndMode,
+        LifecycleEndDays = s.LifecycleEndDays,
+        ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
         IsRequired = s.IsRequired,
         IsBlocking = s.IsBlocking,
         AutoCreateTask = s.AutoCreateTask,
@@ -1863,6 +2517,16 @@ public class WorkflowService : IWorkflowService
         IsClientStep = s.IsClientStep,
         RequiredPermission = s.RequiredPermission,
         SLAHours = s.SLAHours,
+        DeadlineAnchor = s.DeadlineAnchor,
+        DeadlineOffsetDays = s.DeadlineOffsetDays,
+        DeadlineDay = s.DeadlineDay,
+        DeadlineMonth = s.DeadlineMonth,
+        DeadlineMonthOffset = s.DeadlineMonthOffset,
+        DeadlineYearOffset = s.DeadlineYearOffset,
+        ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+        LifecycleEndMode = s.LifecycleEndMode,
+        LifecycleEndDays = s.LifecycleEndDays,
+        ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
         IsRequired = s.IsRequired,
         IsBlocking = s.IsBlocking,
         AutoCreateTask = s.AutoCreateTask,
@@ -2057,20 +2721,49 @@ public class WorkflowService : IWorkflowService
         if (instance.DeclarationId.HasValue && instance.Declaration == null)
             instance.Declaration = await _db.Declarations.FindAsync(instance.DeclarationId.Value);
 
+        // Clôture: no échéance — system closes via AutoSystem / lifecycle action
+        if (template.StepType == WorkflowStepType.ClotureArchivage)
+        {
+            stepInstance.DueDate = null;
+        }
+        else
+        {
+            decimal? slaMultiplier = null;
+            var clientCfg = await _db.ClientWorkflowConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CabinetId == cabinetId && c.ClientId == instance.ClientId && c.IsActive && !c.IsDeleted);
+            if (clientCfg != null)
+                slaMultiplier = clientCfg.SLAMultiplier;
+            stepInstance.DueDate = ComputeStepDueDate(template, instance.Declaration, DateTime.UtcNow, slaMultiplier);
+            if (template.ApplyDeadlineToDeclaration && instance.Declaration != null && stepInstance.DueDate.HasValue)
+                instance.Declaration.DateLimite = stepInstance.DueDate.Value.Date;
+        }
+
+        // Init: stamp declaration lifecycle end + action
+        if (template.StepType == WorkflowStepType.Initialisation && instance.Declaration != null)
+            ApplyDeclarationLifecycleFromInit(template, instance.Declaration);
+
         // Entry status first; AutoSystem OnComplete may override afterwards (e.g. Archivee → Cloturee)
         if (template.DeclarationStatusOnEntry != null && instance.Declaration != null)
             instance.Declaration.Statut = template.DeclarationStatusOnEntry;
 
-        var isRelanceSchedule = template.AssignmentType == AssignmentType.AutoSystem
-            && template.ActionOnEntry == WorkflowActionType.RelanceClient
+        var isLegacyRelanceStep = (template.StepType == WorkflowStepType.Relance
+                || template.ActionOnEntry == WorkflowActionType.RelanceClient)
+            && template.AssignmentType == AssignmentType.AutoSystem
             && template.MaxRetries > 0;
 
-        if (isRelanceSchedule)
+        var scheduleEmbeddedRelance = !isLegacyRelanceStep
+            && template.MaxRetries > 0
+            && (template.RetryIntervalHours ?? 0) > 0
+            && template.StepType != WorkflowStepType.Initialisation
+            && template.StepType != WorkflowStepType.ClotureArchivage;
+
+        if (isLegacyRelanceStep)
         {
-            // Schedule retries then auto-complete so Collecte (client) can start immediately
+            // Legacy dedicated Relance step: schedule retries then auto-complete so Collecte can start
             stepInstance.RetryCount = Math.Max(stepInstance.RetryCount, 1);
             stepInstance.LastRetryAt = DateTime.UtcNow;
-            stepInstance.NextRetryAt = DateTime.UtcNow.AddHours(template.RetryIntervalHours ?? 48);
+            stepInstance.NextRetryAt = DateTime.UtcNow.AddHours(template.RetryIntervalHours ?? 72);
             stepInstance.Status = WorkflowStepStatus.Completed;
             stepInstance.CompletedAt = DateTime.UtcNow;
             stepInstance.CompletedByUserId = triggerUserId;
@@ -2087,7 +2780,6 @@ public class WorkflowService : IWorkflowService
         }
         else if (template.IsClientStep || template.AssignmentType == AssignmentType.Client)
         {
-            // Always expose on extranet as WaitingForClient (AssignmentType.Client implies client step)
             if (!template.IsClientStep)
                 template.IsClientStep = true;
             stepInstance.Status = WorkflowStepStatus.WaitingForClient;
@@ -2097,14 +2789,26 @@ public class WorkflowService : IWorkflowService
             stepInstance.Status = WorkflowStepStatus.InProgress;
         }
 
+        // Embedded relance on Demande / Collecte / any waiting step
+        if (scheduleEmbeddedRelance
+            && stepInstance.Status is WorkflowStepStatus.WaitingForClient or WorkflowStepStatus.InProgress)
+        {
+            stepInstance.RetryCount = 0;
+            stepInstance.NextRetryAt = DateTime.UtcNow.AddHours(template.RetryIntervalHours ?? 360);
+        }
+
         _db.WorkflowHistories.Add(new WorkflowHistory
         {
             WorkflowInstanceId = instanceId,
             WorkflowStepInstanceId = stepInstance.Id,
-            Action = isRelanceSchedule ? "RelanceScheduled"
+            Action = isLegacyRelanceStep ? "RelanceScheduled"
+                : scheduleEmbeddedRelance ? "RelanceConfigured"
                 : template.AssignmentType == AssignmentType.AutoSystem ? "StepAutoCompleted" : "StepActivated",
             PreviousStatus = "Pending",
             NewStatus = stepInstance.Status.ToString(),
+            Comment = scheduleEmbeddedRelance
+                ? $"Relance auto: 1ère dans {template.RetryIntervalHours ?? 360}h, max {template.MaxRetries}"
+                : null,
             UserId = triggerUserId,
             UserName = await GetUserNameAsync(triggerUserId),
             CabinetId = cabinetId,
@@ -2175,7 +2879,255 @@ public class WorkflowService : IWorkflowService
         }
     }
 
-    /// <summary>Process due Relance steps (Hangfire). Returns count processed.</summary>
+    /// <summary>
+    /// Stamps LifecycleEndsAt / LifecycleEndAction on the declaration from the Init step template.
+    /// </summary>
+    private static void ApplyDeclarationLifecycleFromInit(WorkflowStepTemplate template, Declaration declaration)
+    {
+        // PeriodEnd: DateFin période, except CNSS/TVA/… where work is in the next-month filing window
+        // (ex. CNSS juillet → clôture auto le 10 août = DateLimite).
+        var mode = string.IsNullOrWhiteSpace(template.LifecycleEndMode)
+            ? "PeriodEnd"
+            : template.LifecycleEndMode.Trim();
+        if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        declaration.LifecycleEndsAt = MoroccoDeclarationCalendar.GetLifecycleEndDate(
+            declaration.Type, declaration.DateFin, declaration.DateLimite);
+
+        declaration.LifecycleEndAction = string.IsNullOrWhiteSpace(template.ActionOnLifecycleEnd)
+            ? nameof(WorkflowActionType.ClotureDeclaration)
+            : template.ActionOnLifecycleEnd.Trim();
+        // Allow re-stamp on reopen only if not already processed
+        if (declaration.LifecycleEndedAt.HasValue && declaration.LifecycleEndsAt > DateTime.UtcNow)
+            declaration.LifecycleEndedAt = null;
+    }
+
+    /// <summary>
+    /// Computes step DueDate when the step opens.
+    /// OnStepOpen / OnDeclarationOpen: generic from activation (+ SLA / offset days).
+    /// ExactCalendar: day-of-month (mensuel), day+month (trimestriel/annuel) relative to period.
+    /// </summary>
+    private static DateTime? ComputeStepDueDate(
+        WorkflowStepTemplate template,
+        Declaration? declaration,
+        DateTime activatedAt,
+        decimal? slaMultiplier)
+    {
+        var offsetDays = template.DeadlineOffsetDays ?? 0;
+        // Sage-like default: legal Moroccan filing calendar when a declaration is linked.
+        var anchor = string.IsNullOrWhiteSpace(template.DeadlineAnchor)
+            ? (declaration != null ? "CalendrierMaroc" : "OnStepOpen")
+            : template.DeadlineAnchor.Trim();
+
+        DateTime? FromOpen()
+        {
+            DateTime? due = null;
+            if (template.SLAHours.HasValue)
+            {
+                var hours = (double)template.SLAHours.Value;
+                if (slaMultiplier is > 0)
+                    hours *= (double)slaMultiplier.Value;
+                due = activatedAt.AddHours(hours);
+            }
+            if (offsetDays != 0)
+                due = (due ?? activatedAt).AddDays(offsetDays);
+            return due;
+        }
+
+        return anchor switch
+        {
+            "None" => null,
+            "CalendrierMaroc" => declaration != null
+                ? MoroccoDeclarationCalendar.GetFilingDeadline(
+                    declaration.Type,
+                    declaration.DateDebut,
+                    declaration.DateFin)
+                : FromOpen(),
+            "ExactCalendar" => ComputeExactCalendarDeadline(template, declaration) ?? FromOpen(),
+            "PeriodStart" => declaration != null
+                ? declaration.DateDebut.Date.AddDays(offsetDays)
+                : FromOpen(),
+            "PeriodEnd" => declaration != null
+                ? declaration.DateFin.Date.AddDays(offsetDays)
+                : FromOpen(),
+            "DeclarationDateLimite" => declaration != null
+                ? declaration.DateLimite.Date.AddDays(offsetDays)
+                : FromOpen(),
+            // Ouverture générique (étape ou déclaration)
+            "OnDeclarationOpen" => FromOpen(),
+            _ => FromOpen() // OnStepOpen (default)
+        };
+    }
+
+    private static DateTime? ComputeExactCalendarDeadline(WorkflowStepTemplate template, Declaration? declaration)
+    {
+        if (declaration == null) return null;
+
+        var periodEnd = declaration.DateFin.Date;
+        var day = Math.Clamp(template.DeadlineDay ?? 20, 1, 31);
+        var freq = InferDeclarationFrequency(declaration);
+
+        return freq switch
+        {
+            "Annuelle" => ClampDate(
+                periodEnd.Year + (template.DeadlineYearOffset ?? 1),
+                template.DeadlineMonth ?? 3,
+                day),
+
+            "Trimestrielle" => template.DeadlineMonth is >= 1 and <= 12
+                ? ClampDate(
+                    ResolveExactYear(periodEnd, template.DeadlineMonth.Value, template.DeadlineYearOffset ?? 0),
+                    template.DeadlineMonth.Value,
+                    day)
+                : ClampDateFromMonth(periodEnd.AddMonths(template.DeadlineMonthOffset ?? 1), day),
+
+            // Mensuelle (default) — jour N du mois suivant (ou + MonthOffset)
+            _ => ClampDateFromMonth(periodEnd.AddMonths(template.DeadlineMonthOffset ?? 1), day)
+        };
+    }
+
+    private static string InferDeclarationFrequency(Declaration declaration)
+    {
+        var periode = declaration.Periode?.Trim() ?? "";
+        if (periode.Contains('Q', StringComparison.OrdinalIgnoreCase) || periode.Contains("-T", StringComparison.OrdinalIgnoreCase))
+            return "Trimestrielle";
+        if (System.Text.RegularExpressions.Regex.IsMatch(periode, @"^\d{4}$"))
+            return "Annuelle";
+        if (periode.Length >= 7 && periode[4] == '-')
+            return "Mensuelle";
+
+        var spanDays = (declaration.DateFin.Date - declaration.DateDebut.Date).TotalDays;
+        if (spanDays > 300) return "Annuelle";
+        if (spanDays > 80) return "Trimestrielle";
+        return "Mensuelle";
+    }
+
+    private static int ResolveExactYear(DateTime periodEnd, int month, int yearOffset)
+    {
+        var year = periodEnd.Year + yearOffset;
+        // If no year offset and target month is before/equal period end month, use next year
+        if (yearOffset == 0 && month <= periodEnd.Month)
+            year = periodEnd.Year + 1;
+        return year;
+    }
+
+    private static DateTime ClampDateFromMonth(DateTime monthCursor, int day)
+        => ClampDate(monthCursor.Year, monthCursor.Month, day);
+
+    private static DateTime ClampDate(int year, int month, int day)
+    {
+        month = Math.Clamp(month, 1, 12);
+        var dim = DateTime.DaysInMonth(year, month);
+        return new DateTime(year, month, Math.Min(Math.Max(day, 1), dim));
+    }
+
+    /// <summary>Process declarations whose lifecycle end is due (Hangfire). Returns count processed.</summary>
+    public async Task<int> ProcessDueLifecycleEndsAsync()
+    {
+        var now = DateTime.UtcNow;
+        var terminal = new[]
+        {
+            RefCodes.StatutDeclaration.Cloturee,
+            RefCodes.StatutDeclaration.Archivee,
+            RefCodes.StatutDeclaration.Suspendue
+        };
+
+        var due = await _db.Declarations
+            .Where(d => d.LifecycleEndsAt != null
+                && d.LifecycleEndsAt <= now
+                && d.LifecycleEndedAt == null
+                && !terminal.Contains(d.Statut))
+            .OrderBy(d => d.LifecycleEndsAt)
+            .Take(100)
+            .ToListAsync();
+
+        var processed = 0;
+        foreach (var decl in due)
+        {
+            try
+            {
+                var actionName = string.IsNullOrWhiteSpace(decl.LifecycleEndAction)
+                    ? nameof(WorkflowActionType.ClotureDeclaration)
+                    : decl.LifecycleEndAction.Trim();
+                if (!Enum.TryParse<WorkflowActionType>(actionName, true, out var action)
+                    || action == WorkflowActionType.None)
+                    action = WorkflowActionType.ClotureDeclaration;
+
+                var instance = await _db.WorkflowInstances
+                    .Include(wi => wi.StepInstances)
+                    .Include(wi => wi.Declaration)
+                    .FirstOrDefaultAsync(wi => wi.DeclarationId == decl.Id
+                        && wi.CabinetId == decl.CabinetId
+                        && wi.Status == WorkflowInstanceStatus.Active);
+
+                if (instance != null)
+                {
+                    instance.Declaration ??= decl;
+                    var dummyStep = instance.StepInstances.OrderBy(s => s.StepOrder).FirstOrDefault()
+                        ?? new WorkflowStepInstance
+                        {
+                            WorkflowInstanceId = instance.Id,
+                            StepOrder = 0,
+                            StepName = "LifecycleEnd",
+                            Status = WorkflowStepStatus.Completed,
+                            CabinetId = decl.CabinetId,
+                            CreatedBy = "SYSTEM"
+                        };
+                    await ExecuteStepActionAsync(action, instance, dummyStep, decl.CabinetId, "SYSTEM");
+
+                    // Clear open relance schedules
+                    foreach (var si in instance.StepInstances.Where(s => s.NextRetryAt != null))
+                        si.NextRetryAt = null;
+
+                    if (action is WorkflowActionType.ClotureDeclaration or WorkflowActionType.ArchiveDeclaration)
+                    {
+                        instance.Status = WorkflowInstanceStatus.Completed;
+                        instance.CompletedAt = now;
+                    }
+                }
+                else
+                {
+                    // No active WF — apply action directly on declaration
+                    switch (action)
+                    {
+                        case WorkflowActionType.ArchiveDeclaration:
+                            decl.Statut = RefCodes.StatutDeclaration.Archivee;
+                            break;
+                        case WorkflowActionType.SuspendDeclaration:
+                            decl.Statut = RefCodes.StatutDeclaration.Suspendue;
+                            break;
+                        case WorkflowActionType.SubmitDeclaration:
+                            decl.Statut = RefCodes.StatutDeclaration.Soumise;
+                            break;
+                        case WorkflowActionType.ValidateDeclaration:
+                            decl.Statut = RefCodes.StatutDeclaration.Validee;
+                            break;
+                        case WorkflowActionType.CompleteDeclaration:
+                            decl.Statut = RefCodes.StatutDeclaration.Completee;
+                            break;
+                        default:
+                            decl.Statut = RefCodes.StatutDeclaration.Cloturee;
+                            break;
+                    }
+                    decl.UpdatedBy = "SYSTEM";
+                }
+
+                decl.LifecycleEndedAt = now;
+                processed++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lifecycle end failed for declaration {Id}", decl.Id);
+            }
+        }
+
+        if (processed > 0)
+            await _db.SaveChangesAsync();
+        return processed;
+    }
+
+    /// <summary>Process due relances on waiting steps (embedded config) + legacy Relance steps. Hangfire.</summary>
     public async Task<int> ProcessDueRelancesAsync()
     {
         var now = DateTime.UtcNow;
@@ -2186,16 +3138,26 @@ public class WorkflowService : IWorkflowService
             .Include(s => s.WorkflowInstance).ThenInclude(wi => wi!.StepInstances).ThenInclude(si => si.WorkflowStepTemplate)
             .Where(s => s.NextRetryAt != null && s.NextRetryAt <= now
                 && s.WorkflowStepTemplate != null
-                && s.WorkflowStepTemplate.ActionOnEntry == WorkflowActionType.RelanceClient
+                && s.WorkflowStepTemplate.MaxRetries > 0
                 && s.WorkflowInstance != null
                 && s.WorkflowInstance.Status == WorkflowInstanceStatus.Active)
             .ToListAsync();
 
-        // Only while client document step still open
-        due = due.Where(s => s.WorkflowInstance!.StepInstances.Any(si =>
-            si.Status == WorkflowStepStatus.WaitingForClient
-            || (si.WorkflowStepTemplate?.StepType == WorkflowStepType.Collecte
-                && si.Status is WorkflowStepStatus.WaitingForClient or WorkflowStepStatus.InProgress or WorkflowStepStatus.Pending))).ToList();
+        // Embedded: step still open. Legacy Relance step: completed but Collecte still waiting.
+        due = due.Where(s =>
+        {
+            var tpl = s.WorkflowStepTemplate!;
+            var isLegacy = tpl.StepType == WorkflowStepType.Relance
+                || tpl.ActionOnEntry == WorkflowActionType.RelanceClient;
+            if (isLegacy && s.Status == WorkflowStepStatus.Completed)
+            {
+                return s.WorkflowInstance!.StepInstances.Any(si =>
+                    si.Status == WorkflowStepStatus.WaitingForClient
+                    || (si.WorkflowStepTemplate?.StepType == WorkflowStepType.Collecte
+                        && si.Status is WorkflowStepStatus.WaitingForClient or WorkflowStepStatus.InProgress or WorkflowStepStatus.Pending));
+            }
+            return s.Status is WorkflowStepStatus.WaitingForClient or WorkflowStepStatus.InProgress;
+        }).ToList();
 
         var processed = 0;
         foreach (var step in due)
@@ -2204,23 +3166,47 @@ public class WorkflowService : IWorkflowService
             var instance = step.WorkflowInstance!;
             try
             {
+                var declStatut = instance.Declaration?.Statut;
+                if (IsDeclarationClosedForRelance(declStatut))
+                {
+                    step.NextRetryAt = null;
+                    await _db.SaveChangesAsync();
+                    continue;
+                }
+
+                // Step completed meanwhile — stop
+                if (step.Status is WorkflowStepStatus.Completed or WorkflowStepStatus.Skipped or WorkflowStepStatus.Failed
+                    && template.StepType != WorkflowStepType.Relance
+                    && template.ActionOnEntry != WorkflowActionType.RelanceClient)
+                {
+                    step.NextRetryAt = null;
+                    await _db.SaveChangesAsync();
+                    continue;
+                }
+
                 step.RetryCount++;
                 step.LastRetryAt = now;
                 await ExecuteStepActionAsync(WorkflowActionType.RelanceClient, instance, step, step.CabinetId, "SYSTEM");
 
                 if (template.MaxRetries > 0 && step.RetryCount >= template.MaxRetries)
                 {
-                    var action = (template.OnMaxRetriesAction ?? "EscalateToManager").Trim();
+                    var action = (template.OnMaxRetriesAction ?? "Suspend").Trim();
                     if (string.Equals(action, "Suspend", StringComparison.OrdinalIgnoreCase))
                     {
-                        instance.Status = WorkflowInstanceStatus.Paused;
+                        step.NextRetryAt = null;
+                        await SuspendDeclarationAfterMaxRelancesAsync(instance, step, template.MaxRetries, "SYSTEM");
+                    }
+                    else if (string.Equals(action, "Cancel", StringComparison.OrdinalIgnoreCase))
+                    {
+                        instance.Status = WorkflowInstanceStatus.Cancelled;
+                        instance.CancelledAt = now;
                         step.NextRetryAt = null;
                         _db.WorkflowHistories.Add(new WorkflowHistory
                         {
                             WorkflowInstanceId = instance.Id,
                             WorkflowStepInstanceId = step.Id,
-                            Action = "RelanceMaxRetriesSuspend",
-                            Comment = $"Max relances ({template.MaxRetries}) atteint — workflow suspendu.",
+                            Action = "RelanceMaxRetriesCancel",
+                            Comment = $"Max relances ({template.MaxRetries}) atteint — workflow annulé.",
                             UserId = "SYSTEM",
                             CabinetId = step.CabinetId,
                             CreatedBy = "SYSTEM"
@@ -2230,11 +3216,14 @@ public class WorkflowService : IWorkflowService
                           || string.Equals(action, "SkipStep", StringComparison.OrdinalIgnoreCase))
                     {
                         step.NextRetryAt = null;
-                        await AdvanceStepAsync(instance.Id, new AdvanceStepDto
+                        if (step.Status is WorkflowStepStatus.WaitingForClient or WorkflowStepStatus.InProgress)
                         {
-                            Notes = "Avance auto après max relances",
-                            ForceSkip = string.Equals(action, "SkipStep", StringComparison.OrdinalIgnoreCase)
-                        }, step.CabinetId, "SYSTEM");
+                            await AdvanceStepAsync(instance.Id, new AdvanceStepDto
+                            {
+                                Notes = "Avance auto après max relances",
+                                ForceSkip = string.Equals(action, "SkipStep", StringComparison.OrdinalIgnoreCase)
+                            }, step.CabinetId, "SYSTEM");
+                        }
                     }
                     else
                     {
@@ -2245,8 +3234,8 @@ public class WorkflowService : IWorkflowService
                         foreach (var mgr in managers)
                         {
                             await _notifications.CreateAsync(mgr.Id,
-                                "Relance TVA — escalade",
-                                $"Max relances atteint pour {instance.Client?.RaisonSociale ?? "client"} (WF #{instance.Id}).",
+                                "Relance — escalade",
+                                $"Max relances atteint pour {instance.Client?.RaisonSociale ?? "client"} — étape « {step.StepName} » (WF #{instance.Id}).",
                                 "Warning", "Workflow", null, step.CabinetId);
                         }
                         _db.WorkflowHistories.Add(new WorkflowHistory
@@ -2263,13 +3252,13 @@ public class WorkflowService : IWorkflowService
                 }
                 else
                 {
-                    step.NextRetryAt = now.AddHours(template.RetryIntervalHours ?? 48);
+                    step.NextRetryAt = now.AddHours(template.RetryIntervalHours ?? 360);
                     _db.WorkflowHistories.Add(new WorkflowHistory
                     {
                         WorkflowInstanceId = instance.Id,
                         WorkflowStepInstanceId = step.Id,
                         Action = "RelanceExecuted",
-                        Comment = $"Relance #{step.RetryCount} (prochaine: {step.NextRetryAt:u})",
+                        Comment = $"Relance #{step.RetryCount}/{template.MaxRetries} sur « {step.StepName} » (prochaine: {step.NextRetryAt:u})",
                         UserId = "SYSTEM",
                         CabinetId = step.CabinetId,
                         CreatedBy = "SYSTEM"
@@ -2286,6 +3275,81 @@ public class WorkflowService : IWorkflowService
         }
 
         return processed;
+    }
+
+    private static bool IsDeclarationClosedForRelance(string? statut) =>
+        string.Equals(statut, RefCodes.StatutDeclaration.Suspendue, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.Validee, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.Archivee, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.Cloturee, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.Deposee, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.Soumise, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.EnvoyeeSimplTva, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(statut, RefCodes.StatutDeclaration.EnvoyeeSimplIs, StringComparison.OrdinalIgnoreCase);
+
+    private async Task SuspendDeclarationAfterMaxRelancesAsync(
+        WorkflowInstance instance,
+        WorkflowStepInstance step,
+        int maxRetries,
+        string userId)
+    {
+        instance.Status = WorkflowInstanceStatus.Paused;
+        var clientName = instance.Client?.RaisonSociale ?? "client";
+
+        if (instance.Declaration != null
+            && !string.Equals(instance.Declaration.Statut, RefCodes.StatutDeclaration.Suspendue, StringComparison.OrdinalIgnoreCase))
+        {
+            var oldStatut = instance.Declaration.Statut;
+            instance.Declaration.Statut = RefCodes.StatutDeclaration.Suspendue;
+            instance.Declaration.UpdatedBy = userId;
+            instance.Declaration.UpdatedAt = DateTime.UtcNow;
+
+            _db.DeclarationHistories.Add(new DeclarationHistory
+            {
+                DeclarationId = instance.Declaration.Id,
+                CabinetId = step.CabinetId,
+                AncienStatut = oldStatut,
+                NouveauStatut = RefCodes.StatutDeclaration.Suspendue,
+                UserId = userId,
+                Commentaire = $"Suspendue après {maxRetries} relance(s) documents sans réponse.",
+                CreatedBy = userId
+            });
+        }
+
+        _db.WorkflowHistories.Add(new WorkflowHistory
+        {
+            WorkflowInstanceId = instance.Id,
+            WorkflowStepInstanceId = step.Id,
+            Action = "RelanceMaxRetriesSuspend",
+            Comment = $"Max relances ({maxRetries}) atteint — déclaration suspendue, workflow en pause.",
+            UserId = userId,
+            CabinetId = step.CabinetId,
+            CreatedBy = userId
+        });
+
+        var notifyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var si in instance.StepInstances)
+        {
+            if (!string.IsNullOrEmpty(si.AssignedToUserId))
+                notifyIds.Add(si.AssignedToUserId);
+        }
+
+        var managers = await _db.Users
+            .Where(u => u.CabinetId == step.CabinetId && u.IsActive)
+            .Take(5).Select(u => u.Id).ToListAsync();
+        foreach (var id in managers)
+            notifyIds.Add(id);
+
+        var declUrl = instance.DeclarationId.HasValue
+            ? $"/Declarations/Details/{instance.DeclarationId}"
+            : null;
+        foreach (var uid in notifyIds)
+        {
+            await _notifications.CreateAsync(uid,
+                "Déclaration suspendue — documents manquants",
+                $"La déclaration de {clientName} a été suspendue après {maxRetries} relance(s) sans documents (WF #{instance.Id}).",
+                "Warning", "Declaration", declUrl, step.CabinetId);
+        }
     }
 
     private async Task ExecuteStepActionAsync(
@@ -2306,12 +3370,21 @@ public class WorkflowService : IWorkflowService
             case WorkflowActionType.NotifyClient:
             case WorkflowActionType.PaymentReminder:
             {
+                if (action == WorkflowActionType.RequestDocuments && instance.DeclarationId.HasValue
+                    && string.Equals(instance.Declaration?.Type, "IS", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _declarations.EnsureAnnualChecklistAsync(instance.DeclarationId.Value, cabinetId, userId);
+                }
+
                 var clientName = instance.Client?.RaisonSociale ?? $"Client #{instance.ClientId}";
+                var declTypeLabel = instance.Declaration?.Type ?? "déclaration";
                 var title = action switch
                 {
                     WorkflowActionType.RequestDocuments => "Demande de documents",
                     WorkflowActionType.RelanceClient => "Relance documents",
-                    WorkflowActionType.PaymentReminder => "Rappel de paiement TVA",
+                    WorkflowActionType.PaymentReminder => declTypeLabel.Equals("IS", StringComparison.OrdinalIgnoreCase)
+                        ? "Rappel de paiement IS / CM"
+                        : "Rappel de paiement TVA",
                     _ => "Notification client"
                 };
                 var body = action switch
@@ -2321,7 +3394,9 @@ public class WorkflowService : IWorkflowService
                     WorkflowActionType.RelanceClient =>
                         $"Rappel : documents manquants pour {instance.Declaration?.Type} {instance.Declaration?.Periode} (tentative {step.RetryCount}).",
                     WorkflowActionType.PaymentReminder =>
-                        $"TVA due à régler pour {instance.Declaration?.Periode}. Confirmez le paiement (stub).",
+                        declTypeLabel.Equals("IS", StringComparison.OrdinalIgnoreCase)
+                            ? $"Solde IS / CM à régler pour l'exercice {instance.Declaration?.Periode}. Confirmez le paiement (stub)."
+                            : $"TVA due à régler pour {instance.Declaration?.Periode}. Confirmez le paiement (stub).",
                     _ => $"Notification workflow — {step.StepName}"
                 };
 
@@ -2342,6 +3417,11 @@ public class WorkflowService : IWorkflowService
                 break;
             }
 
+            case WorkflowActionType.SuspendDeclaration:
+                await SuspendDeclarationAfterMaxRelancesAsync(instance, step, step.RetryCount > 0 ? step.RetryCount : 0, userId);
+                step.NextRetryAt = null;
+                break;
+
             case WorkflowActionType.ArchiveDeclaration:
                 if (instance.Declaration != null)
                 {
@@ -2350,18 +3430,35 @@ public class WorkflowService : IWorkflowService
                 }
                 break;
 
+            case WorkflowActionType.ClotureDeclaration:
+                if (instance.Declaration != null)
+                {
+                    instance.Declaration.Statut = RefCodes.StatutDeclaration.Cloturee;
+                    instance.Declaration.UpdatedBy = userId;
+                    instance.Declaration.LifecycleEndedAt ??= DateTime.UtcNow;
+                }
+                break;
+
             case WorkflowActionType.ExportXML:
+            {
+                var isIs = string.Equals(instance.Declaration?.Type, "IS", StringComparison.OrdinalIgnoreCase)
+                    || instance.WorkflowTemplate?.DeclarationType == WorkflowDeclarationType.IS;
                 _db.WorkflowHistories.Add(new WorkflowHistory
                 {
                     WorkflowInstanceId = instance.Id,
                     WorkflowStepInstanceId = step.Id,
-                    Action = "SimplTvaStubExport",
-                    Comment = $"XML/ACK stub généré pour déclaration #{instance.DeclarationId} (pas d'appel DGI réel).",
+                    Action = isIs ? "SimplIsStubExport" : "SimplTvaStubExport",
+                    Comment = isIs
+                        ? $"Pack liasse / ACK stub SIMPL-IS pour déclaration #{instance.DeclarationId} (pas d'appel DGI réel)."
+                        : $"XML/ACK stub généré pour déclaration #{instance.DeclarationId} (pas d'appel DGI réel).",
                     UserId = userId,
                     CabinetId = cabinetId,
                     CreatedBy = userId
                 });
+                if (instance.Declaration != null && isIs)
+                    instance.Declaration.Statut = RefCodes.StatutDeclaration.EnvoyeeSimplIs;
                 break;
+            }
 
             case WorkflowActionType.CompleteDeclaration:
                 if (instance.Declaration != null)
@@ -2376,7 +3473,10 @@ public class WorkflowService : IWorkflowService
             case WorkflowActionType.SubmitDeclaration:
                 if (instance.Declaration != null)
                 {
-                    instance.Declaration.Statut = RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+                    var isIsSubmit = string.Equals(instance.Declaration.Type, "IS", StringComparison.OrdinalIgnoreCase);
+                    instance.Declaration.Statut = isIsSubmit
+                        ? RefCodes.StatutDeclaration.EnvoyeeSimplIs
+                        : RefCodes.StatutDeclaration.EnvoyeeSimplTva;
                     instance.Declaration.DateSoumission ??= DateTime.UtcNow;
                 }
                 break;
@@ -2436,11 +3536,22 @@ public class WorkflowService : IWorkflowService
             return;
         }
 
+        var initCfg = await ResolveInitPeriodConfigAsync(instance.WorkflowTemplateId, declType);
+
         var created = await _declarations.CreateAsync(new CreateDeclarationDto
         {
             ClientId = instance.ClientId,
             Type = declType,
-            AnneeFiscale = DateTime.UtcNow.Year
+            AnneeFiscale = DateTime.UtcNow.Year,
+            Frequency = initCfg.Frequency,
+            Periode = initCfg.Periode,
+            PeriodStart = initCfg.PeriodStart,
+            PeriodEnd = initCfg.PeriodEnd,
+            WindowStartDay = initCfg.WindowStartDay,
+            WindowEndDay = initCfg.WindowEndDay,
+            WindowMonthOffset = initCfg.WindowMonthOffset,
+            DeadlineMonth = initCfg.DeadlineMonth,
+            DeadlineYearOffset = initCfg.DeadlineYearOffset
         }, cabinetId, userId);
 
         if (created.Success && created.Data != null)
@@ -2455,6 +3566,147 @@ public class WorkflowService : IWorkflowService
         }
     }
 
+        private sealed record InitPeriodConfig(
+        string? Frequency,
+        string? Periode,
+        DateTime? PeriodStart,
+        DateTime? PeriodEnd,
+        int? WindowStartDay,
+        int? WindowEndDay,
+        int? WindowMonthOffset,
+        int? DeadlineMonth,
+        int? DeadlineYearOffset);
+
+    /// <summary>
+    /// Reads Init period template table (periods[]) — source of truth for DateDebut / DateFin / échéance.
+    /// </summary>
+    private async Task<InitPeriodConfig> ResolveInitPeriodConfigAsync(int workflowTemplateId, string declarationType)
+    {
+        string? frequency = null;
+        string? periode = null;
+        DateTime? periodStart = null, periodEnd = null;
+        int? startDay = null, endDay = null, monthOffset = null, deadlineMonth = null, deadlineYearOffset = null;
+        var patternPeriods = new List<(int StartMonth, int StartDay, int EndMonth, int EndDay, string? Label)>();
+
+        var init = await _db.WorkflowStepTemplates
+            .Where(s => s.WorkflowTemplateId == workflowTemplateId
+                && !s.IsDeleted
+                && s.StepType == WorkflowStepType.Initialisation)
+            .OrderBy(s => s.StepOrder)
+            .Select(s => new { s.ActionConfigJson, s.CronExpression })
+            .FirstOrDefaultAsync();
+
+        if (init != null && !string.IsNullOrWhiteSpace(init.ActionConfigJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(init.ActionConfigJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("periodFrequency", out var pf) && pf.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var v = pf.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) frequency = v.Trim();
+                }
+                if (root.TryGetProperty("periodTemplate", out var pt) && pt.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var v = pt.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) frequency ??= v.Trim();
+                }
+                if (root.TryGetProperty("periods", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var el in arr.EnumerateArray())
+                    {
+                        string? label = null;
+                        if (el.TryGetProperty("label", out var lb) && lb.ValueKind == System.Text.Json.JsonValueKind.String)
+                            label = lb.GetString();
+
+                        int sm, sd, em, ed;
+                        // Prefer explicit month/day fields
+                        if (el.TryGetProperty("startMonth", out var smEl) && smEl.TryGetInt32(out sm)
+                            && el.TryGetProperty("startDay", out var sdEl) && sdEl.TryGetInt32(out sd)
+                            && el.TryGetProperty("endMonth", out var emEl) && emEl.TryGetInt32(out em)
+                            && el.TryGetProperty("endDay", out var edEl) && edEl.TryGetInt32(out ed))
+                        {
+                            patternPeriods.Add((sm, sd, em, ed, label));
+                            continue;
+                        }
+
+                        if (!el.TryGetProperty("start", out var sEl) || !el.TryGetProperty("end", out var eEl))
+                            continue;
+                        if (!DeclarationPeriodTemplate.TryParseMonthDay(sEl.GetString(), out sm, out sd))
+                            continue;
+                        if (!DeclarationPeriodTemplate.TryParseMonthDay(eEl.GetString(), out em, out ed))
+                            continue;
+                        patternPeriods.Add((sm, sd, em, ed, label));
+                    }
+                }
+                // legacy offsets (ignored when periods table present)
+                if (root.TryGetProperty("windowStartDay", out var ws) && ws.TryGetInt32(out var wsd)) startDay = wsd;
+                if (root.TryGetProperty("windowEndDay", out var we) && we.TryGetInt32(out var wed)) endDay = wed;
+                if (root.TryGetProperty("windowMonthOffset", out var wo) && wo.TryGetInt32(out var mo)) monthOffset = mo;
+                if (root.TryGetProperty("deadlineMonth", out var dm) && dm.TryGetInt32(out var dmv)) deadlineMonth = dmv;
+                if (root.TryGetProperty("deadlineYearOffset", out var dy) && dy.TryGetInt32(out var dyv)) deadlineYearOffset = dyv;
+            }
+            catch { /* ignore bad json */ }
+        }
+
+        if (frequency == null && init != null && !string.IsNullOrWhiteSpace(init.CronExpression))
+        {
+            var cron = init.CronExpression.Trim();
+            var parts = cron.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 5)
+            {
+                var dom = parts[2]; var mon = parts[3]; var dow = parts[4];
+                if (dow == "*")
+                {
+                    if (mon != "*" && mon.Split(',').Length <= 4) frequency = "Trimestrielle";
+                    else if (mon != "*") frequency = "Annuelle";
+                    else if (dom != "*") frequency = "Mensuelle";
+                }
+            }
+        }
+
+        frequency ??= "Mensuelle";
+
+        // Period template table is year-agnostic (JJ/MM/YYYY) — YYYY filled at runtime like cron
+        if (patternPeriods.Count > 0)
+        {
+            var slice = DeclarationPeriodTemplate.ResolvePatternTableAsOf(DateTime.UtcNow, patternPeriods, previousClosed: true);
+            if (slice != null)
+            {
+                periodStart = slice.Start;
+                periodEnd = slice.End;
+                periode = slice.Label;
+            }
+        }
+        else
+        {
+            var resolved = DeclarationPeriodTemplate.ResolveAsOf(DateTime.UtcNow, frequency, previousClosed: true);
+            if (resolved != null)
+            {
+                periodStart = resolved.Start;
+                periodEnd = resolved.End;
+                periode = resolved.Code;
+            }
+        }
+
+        var life = MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(frequency);
+        startDay ??= life.StartDay;
+        endDay ??= life.EndDay;
+        monthOffset ??= life.Months;
+        deadlineYearOffset ??= life.Years;
+
+        return new InitPeriodConfig(
+            frequency,
+            periode,
+            periodStart,
+            periodEnd,
+            startDay,
+            endDay,
+            monthOffset,
+            deadlineMonth,
+            deadlineYearOffset);
+    }
     private async Task<string?> EvaluateDocumentGateAsync(WorkflowStepTemplate stepTemplate, int declarationId, int cabinetId)
     {
         if (string.IsNullOrWhiteSpace(stepTemplate.ValidationRulesJson))
@@ -2466,12 +3718,34 @@ public class WorkflowService : IWorkflowService
             var root = doc.RootElement;
             var require = root.TryGetProperty("requireDocuments", out var rd) && rd.ValueKind == System.Text.Json.JsonValueKind.True;
             var minDocs = root.TryGetProperty("minDocuments", out var md) && md.TryGetInt32(out var m) ? m : 1;
-            if (!require) return null;
+            var requireChecklist = root.TryGetProperty("requireChecklistComplete", out var rc)
+                && rc.ValueKind == System.Text.Json.JsonValueKind.True;
 
-            var count = await _db.Documents.CountAsync(d =>
-                d.CabinetId == cabinetId && d.DeclarationId == declarationId && !d.IsDeleted);
-            if (count < minDocs)
-                return $"Documents insuffisants ({count}/{minDocs}). Déposez les pièces ou utilisez « Passer » (ForceSkip) si autorisé.";
+            if (require)
+            {
+                var count = await _db.Documents.CountAsync(d =>
+                    d.CabinetId == cabinetId && d.DeclarationId == declarationId && !d.IsDeleted);
+                if (count < minDocs)
+                    return $"Documents insuffisants ({count}/{minDocs}). Déposez les pièces ou utilisez « Passer » (ForceSkip) si autorisé.";
+            }
+
+            if (requireChecklist)
+            {
+                var required = await _db.DeclarationChecklistItems
+                    .Where(c => c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted && c.IsRequired)
+                    .ToListAsync();
+                if (required.Count == 0)
+                {
+                    await _declarations.EnsureAnnualChecklistAsync(declarationId, cabinetId, "system");
+                    required = await _db.DeclarationChecklistItems
+                        .Where(c => c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted && c.IsRequired)
+                        .ToListAsync();
+                }
+
+                var missing = required.Where(c => !c.IsReceived).Select(c => c.Label).ToList();
+                if (missing.Count > 0)
+                    return $"Checklist annuelle incomplète ({required.Count - missing.Count}/{required.Count}). Manquant : {string.Join(", ", missing.Take(4))}{(missing.Count > 4 ? "…" : "")}.";
+            }
         }
         catch (Exception ex)
         {
@@ -2816,6 +4090,16 @@ public class WorkflowService : IWorkflowService
             IsClientStep = s.IsClientStep,
             RequiredPermission = s.RequiredPermission,
             SLAHours = s.SLAHours,
+            DeadlineAnchor = s.DeadlineAnchor,
+            DeadlineOffsetDays = s.DeadlineOffsetDays,
+            DeadlineDay = s.DeadlineDay,
+            DeadlineMonth = s.DeadlineMonth,
+            DeadlineMonthOffset = s.DeadlineMonthOffset,
+            DeadlineYearOffset = s.DeadlineYearOffset,
+            ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+            LifecycleEndMode = s.LifecycleEndMode,
+            LifecycleEndDays = s.LifecycleEndDays,
+            ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
             IsRequired = s.IsRequired,
             IsBlocking = s.IsBlocking,
             AutoCreateTask = s.AutoCreateTask,

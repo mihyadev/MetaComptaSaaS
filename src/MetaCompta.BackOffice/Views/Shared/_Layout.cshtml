@@ -239,6 +239,8 @@
                     var canTasks = PermissionHelper.HasAnyDomain(Context.Session, "task");
 
                     var showComptaFam = canCompta && HasAny("COMPTABILITE", "TRESORERIE", "BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG");
+                    // Exercice lifecycle is foundational (Sage) — not tied to a contract service line
+                    var showExercices = canCompta;
                     var showFiscalFam = canFiscalAny && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM", "ACOMPTES", "REG_IS", "IS", "LIASSEFISCALE");
                     var showIsFam = canFiscalIs && HasAny("ACOMPTES", "REG_IS", "IS", "DRF", "CM", "LIASSEFISCALE");
                     var showSocialFam = canSocial && HasAny("CNSS", "DTS", "PAIE");
@@ -267,6 +269,16 @@
                             _ => canFiscalAny
                         };
                     }
+                }
+
+                @if (showExercices)
+                {
+                <li class="nav-item">
+                    <a class="nav-link @(currentController == "Comptabilite" && (currentAction == "Exercices" || currentAction == "Cloture") ? "active" : "")"
+                       href="@Url.Action("Exercices", "Comptabilite")">
+                        <i class="bi bi-calendar3"></i> Exercices
+                    </a>
+                </li>
                 }
 
                 @if (showFiscalFam || showIsFam)
@@ -423,7 +435,7 @@
                 </li>
                 }
 
-                @if (!showFiscalFam && !showIsFam && !showComptaFam && !showSocialFam && !showJuridiqueFam)
+                @if (!showExercices && !showFiscalFam && !showIsFam && !showComptaFam && !showSocialFam && !showJuridiqueFam)
                 {
                 <li class="nav-item px-3 py-2">
                     <div class="small text-body-secondary">
@@ -579,6 +591,24 @@
         </header>
 
         <div class="mc-content">
+            @if (ViewBag.HasSelectedClient == true && ViewBag.HasOpenExercice != true)
+            {
+                <div class="alert alert-danger border-0 shadow-sm mb-4" role="alert" style="border-left:6px solid #b42318 !important;">
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                        <div>
+                            <h4 class="alert-heading mb-2"><i class="bi bi-calendar-x me-2"></i>Aucun exercice comptable ouvert</h4>
+                            <p class="mb-1">Impossible de cr&#233;er des d&#233;clarations, &#233;critures, p&#233;riodes de paie ou g&#233;n&#233;rer des services sans exercice ouvert.</p>
+                            <p class="mb-0 small text-muted">Cr&#233;ez d&#8217;abord l&#8217;exercice (dates selon le mois de cl&#244;ture client), puis reprenez vos op&#233;rations.</p>
+                        </div>
+                        @if (ViewBag.CanComptabiliteCreate == true)
+                        {
+                            <button type="button" class="btn btn-danger text-nowrap" data-bs-toggle="modal" data-bs-target="#createExerciceModal">
+                                <i class="bi bi-plus-circle me-1"></i> Cr&#233;er l&#8217;exercice
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
             @if (TempData["Success"] != null)
             {
                 <div class="alert alert-success alert-dismissible fade show" role="alert">

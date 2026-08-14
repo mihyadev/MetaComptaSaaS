@@ -118,6 +118,7 @@ public class GenerateDeclarationsRequestDto
 {
     public int ClientId { get; set; }
     public int ExerciceFiscal { get; set; }
+    public int? ExerciceComptableId { get; set; }
     public List<string>? TypeServices { get; set; } // null = all active services
 }
 
@@ -268,6 +269,7 @@ public class DeclarationDto
 {
     public int Id { get; set; }
     public int ClientId { get; set; }
+    public int? ExerciceComptableId { get; set; }
     public string? ClientName { get; set; }
     public string Type { get; set; } = string.Empty;
     public string Periode { get; set; } = string.Empty;
@@ -634,6 +636,57 @@ public class ExerciceCreateDto
     public int Annee { get; set; }
     public DateTime? DateDebut { get; set; }
     public DateTime? DateFin { get; set; }
+}
+
+public class ExerciceClotureCheckItemDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public bool Ok { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class AnLignePreviewDto
+{
+    public string NumCompte { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public decimal SoldeDebiteur { get; set; }
+    public decimal SoldeCrediteur { get; set; }
+}
+
+public class ExerciceCloturePrecheckDto
+{
+    public int ExerciceId { get; set; }
+    public int ClientId { get; set; }
+    public int Annee { get; set; }
+    public bool CanCloturer { get; set; }
+    public List<ExerciceClotureCheckItemDto> Checks { get; set; } = new();
+    public List<AnLignePreviewDto> AnPreview { get; set; } = new();
+}
+
+public class ExerciceClotureRequestDto
+{
+    public int ExerciceId { get; set; }
+    public bool ApprouverANouveaux { get; set; } = true;
+    public bool OuvrirExerciceSuivant { get; set; } = true;
+    public bool RolloverServices { get; set; } = true;
+    public bool ForceWithReason { get; set; }
+    public string? ForceReason { get; set; }
+    public List<AnLignePreviewDto>? AnLignes { get; set; }
+}
+
+public class ExerciceClotureResultDto
+{
+    public int ExerciceId { get; set; }
+    public string Statut { get; set; } = string.Empty;
+    public int? NextExerciceId { get; set; }
+    public int? NextExerciceAnnee { get; set; }
+    public int? AnEcritureId { get; set; }
+}
+
+public class ExerciceReouvrirDto
+{
+    public string Reason { get; set; } = string.Empty;
 }
 
 public class ComptaDashboardDto
@@ -1177,6 +1230,23 @@ public class CreateDeclarationDto
     public string Type { get; set; } = string.Empty; // TVA, IS, IR, CNSS, ACOMPTES, …
     public string? Periode { get; set; } // optional override "2026-01", "2026-Q1", "2026"
     public int? AnneeFiscale { get; set; } // for IS/IR annual declarations
+    public int? ExerciceComptableId { get; set; }
+    /// <summary>Init Fréquence override: Mensuelle, Trimestrielle, Annuelle, Periodique — drives DateDebut/DateFin when no explicit period dates.</summary>
+    public string? Frequency { get; set; }
+    /// <summary>Init window: opening day (1–31) in the filing month (legacy).</summary>
+    public int? WindowStartDay { get; set; }
+    /// <summary>Init window: deadline day (1–31) — legacy DateLimite.</summary>
+    public int? WindowEndDay { get; set; }
+    /// <summary>Months after period end for the filing window (legacy).</summary>
+    public int? WindowMonthOffset { get; set; }
+    /// <summary>Annuel: mois d'échéance (1–12) — legacy.</summary>
+    public int? DeadlineMonth { get; set; }
+    /// <summary>Annuel: année relative (0 = N, 1 = N+1) — legacy.</summary>
+    public int? DeadlineYearOffset { get; set; }
+    /// <summary>Explicit period start from Init period template table.</summary>
+    public DateTime? PeriodStart { get; set; }
+    /// <summary>Explicit period end / échéance from Init period template table.</summary>
+    public DateTime? PeriodEnd { get; set; }
 }
 
 public class DeclarationShellSaveDto
@@ -1446,6 +1516,16 @@ public class WorkflowStepTemplateDto
     public bool IsClientStep { get; set; }
     public string? RequiredPermission { get; set; }
     public int? SLAHours { get; set; }
+    public string? DeadlineAnchor { get; set; }
+    public int? DeadlineOffsetDays { get; set; }
+    public int? DeadlineDay { get; set; }
+    public int? DeadlineMonth { get; set; }
+    public int? DeadlineMonthOffset { get; set; }
+    public int? DeadlineYearOffset { get; set; }
+    public bool ApplyDeadlineToDeclaration { get; set; }
+    public string? LifecycleEndMode { get; set; }
+    public int? LifecycleEndDays { get; set; }
+    public string? ActionOnLifecycleEnd { get; set; }
     public bool IsRequired { get; set; }
     public bool IsBlocking { get; set; }
     public bool AutoCreateTask { get; set; }
@@ -1499,6 +1579,16 @@ public class WorkflowStepTemplateCreateDto
     public bool IsClientStep { get; set; }
     public string? RequiredPermission { get; set; }
     public int? SLAHours { get; set; }
+    public string? DeadlineAnchor { get; set; }
+    public int? DeadlineOffsetDays { get; set; }
+    public int? DeadlineDay { get; set; }
+    public int? DeadlineMonth { get; set; }
+    public int? DeadlineMonthOffset { get; set; }
+    public int? DeadlineYearOffset { get; set; }
+    public bool ApplyDeadlineToDeclaration { get; set; }
+    public string? LifecycleEndMode { get; set; }
+    public int? LifecycleEndDays { get; set; }
+    public string? ActionOnLifecycleEnd { get; set; }
     public bool IsRequired { get; set; } = true;
     public bool IsBlocking { get; set; } = true;
     public bool AutoCreateTask { get; set; } = true;
@@ -1904,10 +1994,23 @@ public class ContratCommercialDto
     public decimal MontantTTC { get; set; }
     public decimal MontantRemise { get; set; }
     public int Version { get; set; }
+    public int? ParentContratId { get; set; }
+    public string? ParentContratReference { get; set; }
+    public int? RemplaceParContratId { get; set; }
+    public string? RemplaceParContratReference { get; set; }
+    public string? MotifRectificatif { get; set; }
+    public bool EstRectificatif => ParentContratId.HasValue;
     public string? PdfUrl { get; set; }
     public string? ContratSigneUrl { get; set; }
     public string? Notes { get; set; }
     public bool PeutValider => EstSigne && Statut == RefCodes.StatutContrat.Signe;
+    /// <summary>Signed/validated contracts can spawn a rectificatif draft.</summary>
+    public bool PeutRectifier =>
+        (Statut == RefCodes.StatutContrat.Valide
+         || Statut == RefCodes.StatutContrat.Actif
+         || Statut == RefCodes.StatutContrat.Signe
+         || Statut == RefCodes.StatutContrat.Suspendu)
+        && RemplaceParContratId == null;
     public int NombreFactures { get; set; }
     public decimal TotalFacture { get; set; }
     public string? ResponsableId { get; set; }
@@ -1942,6 +2045,11 @@ public class ContratSignatureDto
     public string SignataireNom { get; set; } = string.Empty;
     public string? SignataireFonction { get; set; }
     public string? SignatureUrl { get; set; }
+}
+
+public class ContratRectificatifRequestDto
+{
+    public string? Motif { get; set; }
 }
 
 /// <summary>Update contract dossier team (members + métier roles).</summary>

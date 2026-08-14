@@ -86,11 +86,13 @@ public sealed class ClientFacade : IClientFacade
         }
     }
 
-    public async Task<ContractAccessContextDto> GetContractAccessAsync(int clientId)
+    public async Task<ContractAccessContextDto> GetContractAccessAsync(int clientId, int? exerciceId = null)
     {
         try
         {
-            var result = await _api.GetAsync<ContractAccessContextDto>($"api/clients/{clientId}/contract-access");
+            var url = QueryBuilder.For($"api/clients/{clientId}/contract-access")
+                .Add("exerciceId", exerciceId);
+            var result = await _api.GetAsync<ContractAccessContextDto>(url);
             return result?.Data ?? new ContractAccessContextDto();
         }
         catch
@@ -177,13 +179,14 @@ public sealed class DeclarationFacade : IDeclarationFacade
 
     public DeclarationFacade(IApiClient api) => _api = api;
 
-    public async Task<PagedResult<DeclarationDto>?> GetAllAsync(int? clientId = null, string? type = null, string? statut = null, int page = 1)
+    public async Task<PagedResult<DeclarationDto>?> GetAllAsync(int? clientId = null, string? type = null, string? statut = null, int page = 1, int? exerciceId = null)
     {
         var url = QueryBuilder.For("api/declarations")
             .Add("page", page)
             .Add("clientId", clientId)
             .Add("type", type)
-            .Add("statut", statut);
+            .Add("statut", statut)
+            .Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<PagedResult<DeclarationDto>>(url);
         return result?.Data;
     }
@@ -346,9 +349,11 @@ public sealed class PayrollFacade : IPayrollFacade
 
     public PayrollFacade(IApiClient api) => _api = api;
 
-    public async Task<List<PayrollPeriodDto>> GetAllPeriodsAsync(int? clientId = null)
+    public async Task<List<PayrollPeriodDto>> GetAllPeriodsAsync(int? clientId = null, int? exerciceId = null)
     {
-        var url = QueryBuilder.For("api/payroll").Add("clientId", clientId);
+        var url = QueryBuilder.For("api/payroll")
+            .Add("clientId", clientId)
+            .Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<List<PayrollPeriodDto>>(url);
         return result?.Data ?? new List<PayrollPeriodDto>();
     }
@@ -622,6 +627,22 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
         var result = await _api.GetAsync<ExerciceComptableDto>($"api/comptabilite/exercices/{id}");
         return result?.Data;
     }
+
+    public async Task<bool> HasOpenExerciceAsync(int clientId)
+    {
+        var result = await _api.GetAsync<bool>($"api/comptabilite/exercices/has-open?clientId={clientId}");
+        return result?.Data == true;
+    }
+
+    public async Task<ApiResponse<ExerciceCloturePrecheckDto>?> PrecheckClotureAsync(int exerciceId)
+        => await _api.GetAsync<ExerciceCloturePrecheckDto>($"api/comptabilite/exercices/{exerciceId}/precheck-cloture");
+
+    public async Task<ApiResponse<ExerciceClotureResultDto>?> CloturerExerciceAsync(ExerciceClotureRequestDto dto)
+        => await _api.PostAsync<ExerciceClotureResultDto>("api/comptabilite/exercices/cloturer", dto);
+
+    public async Task<ApiResponse<ExerciceComptableDto>?> ReouvrirExerciceAsync(int exerciceId, string reason)
+        => await _api.PostAsync<ExerciceComptableDto>($"api/comptabilite/exercices/{exerciceId}/reouvrir",
+            new ExerciceReouvrirDto { Reason = reason });
 
     public async Task<ComptaDashboardDto?> GetDashboardAsync(int clientId, int? exerciceId = null)
     {
@@ -1025,12 +1046,18 @@ public sealed class WorkflowFacade : IWorkflowFacade
 
     // ── Templates ────────────────────────────────────────────────
 
-    public async Task<PagedResult<WorkflowTemplateDto>?> GetTemplatesAsync(string? declarationType = null, int? clientId = null, int page = 1)
+    public async Task<PagedResult<WorkflowTemplateDto>?> GetTemplatesAsync(
+        string? declarationType = null, int? clientId = null, int page = 1, int pageSize = 20,
+        bool cabinetOnly = false, bool activeOnly = false, bool excludeAncien = false)
     {
         var url = QueryBuilder.For("api/workflow/templates")
             .Add("page", page)
+            .Add("pageSize", pageSize)
             .Add("declarationType", declarationType)
-            .Add("clientId", clientId);
+            .Add("clientId", clientId)
+            .Add("cabinetOnly", cabinetOnly)
+            .Add("activeOnly", activeOnly)
+            .Add("excludeAncien", excludeAncien);
         var result = await _api.GetAsync<PagedResult<WorkflowTemplateDto>>(url);
         return result?.Data;
     }
@@ -1053,21 +1080,23 @@ public sealed class WorkflowFacade : IWorkflowFacade
     public async Task<ApiResponse<WorkflowTemplateDto>?> CreateDefaultTemplateAsync()
         => await _api.PostAsync<WorkflowTemplateDto>("api/workflow/templates/default", new { });
 
-    public async Task<ApiResponse<List<WorkflowTemplateDto>>?> SeedAllDefaultTemplatesAsync()
-        => await _api.PostAsync<List<WorkflowTemplateDto>>("api/workflow/templates/seed-all-defaults", new { });
+    public async Task<ApiResponse<List<WorkflowTemplateDto>>?> SeedAllDefaultTemplatesAsync(bool forceReset = false)
+        => await _api.PostAsync<List<WorkflowTemplateDto>>(
+            $"api/workflow/templates/seed-all-defaults?forceReset={(forceReset ? "true" : "false")}", new { });
 
     // ── Instances ────────────────────────────────────────────────
 
     public async Task<ApiResponse<WorkflowInstanceDto>?> StartWorkflowAsync(StartWorkflowDto dto)
         => await _api.PostAsync<WorkflowInstanceDto>("api/workflow/start", dto);
 
-    public async Task<PagedResult<WorkflowInstanceDto>?> GetInstancesAsync(int? clientId = null, string? status = null, int? declarationId = null, int page = 1)
+    public async Task<PagedResult<WorkflowInstanceDto>?> GetInstancesAsync(int? clientId = null, string? status = null, int? declarationId = null, int page = 1, int? exerciceId = null)
     {
         var url = QueryBuilder.For("api/workflow/instances")
             .Add("page", page)
             .Add("clientId", clientId)
             .Add("status", status)
-            .Add("declarationId", declarationId);
+            .Add("declarationId", declarationId)
+            .Add("exerciceId", exerciceId);
         var result = await _api.GetAsync<PagedResult<WorkflowInstanceDto>>(url);
         return result?.Data;
     }
@@ -1124,6 +1153,9 @@ public sealed class WorkflowFacade : IWorkflowFacade
 
     public async Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto)
         => await _api.PostAsync<ClientWorkflowConfigDto>("api/workflow/client-config", dto);
+
+    public async Task<ApiResponse<bool>?> DeleteClientConfigAsync(int configId, int clientId)
+        => await _api.DeleteAsync<bool>($"api/workflow/client-config/{configId}?clientId={clientId}");
 
     public async Task<ApiResponse<WorkflowTemplateDto>?> EnsureClientTemplateAsync(EnsureClientWorkflowDto dto)
         => await _api.PostAsync<WorkflowTemplateDto>("api/workflow/client-config/ensure-template", dto);
@@ -1274,6 +1306,9 @@ public sealed class CommercialFacade : ICommercialFacade
 
     public async Task<ApiResponse<ContratCommercialDto>?> DupliquerContratAsync(int id)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/dupliquer", new { });
+
+    public async Task<ApiResponse<ContratCommercialDto>?> CreateRectificatifContratAsync(int id, string? motif = null)
+        => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/rectificatif", new { Motif = motif });
 
     public async Task<ApiResponse<int>?> SyncServicesFromContratAsync(int contratId)
         => await _api.PostAsync<int>($"api/contrats/{contratId}/sync-services", new { });

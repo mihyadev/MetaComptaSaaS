@@ -13,6 +13,7 @@ public class ClientsController : BaseController
     private readonly IWorkflowFacade _workflow;
     private readonly ICabinetFacade _cabinet;
     private readonly IComptabiliteFacade _compta;
+    private readonly IDepartmentFacade _departments;
 
     private static readonly string[] ClientRefCategories = new[]
     {
@@ -26,7 +27,8 @@ public class ClientsController : BaseController
         ICommercialFacade commercial,
         IWorkflowFacade workflow,
         ICabinetFacade cabinet,
-        IComptabiliteFacade compta)
+        IComptabiliteFacade compta,
+        IDepartmentFacade departments)
         : base(referenceData, contextAccessor)
     {
         _clients = clients;
@@ -34,6 +36,7 @@ public class ClientsController : BaseController
         _workflow = workflow;
         _cabinet = cabinet;
         _compta = compta;
+        _departments = departments;
     }
 
     [RequirePermission(ClaimDefinitions.ClientList)]
@@ -76,7 +79,12 @@ public class ClientsController : BaseController
             // ── Workflow data (embedded tab) ──
             try
             {
-                var templates = await _workflow.GetTemplatesAsync(clientId: null, page: 1);
+                // Ensure cabinet defaults exist for TVA/IS/IR/CNSS… and hide outdated "(ancien)"
+                try { await _workflow.SeedAllDefaultTemplatesAsync(); } catch { /* non-blocking */ }
+
+                var templates = await _workflow.GetTemplatesAsync(
+                    clientId: null, page: 1, pageSize: 200,
+                    cabinetOnly: true, activeOnly: true, excludeAncien: true);
                 ViewBag.WorkflowTemplates = templates?.Items ?? new List<WorkflowTemplateDto>();
 
                 var instances = await _workflow.GetInstancesAsync(clientId: id, page: 1);
@@ -96,6 +104,15 @@ public class ClientsController : BaseController
                 {
                     ViewBag.CabinetEmployees = new List<CabinetEmployeeDto>();
                 }
+
+                try
+                {
+                    ViewBag.Departments = await _departments.GetAllAsync() ?? new List<DepartmentDto>();
+                }
+                catch
+                {
+                    ViewBag.Departments = new List<DepartmentDto>();
+                }
             }
             catch
             {
@@ -105,6 +122,7 @@ public class ClientsController : BaseController
                 ViewBag.WorkflowPendingSteps = new List<WorkflowStepInstanceDto>();
                 ViewBag.WorkflowConfigs = new List<ClientWorkflowConfigDto>();
                 ViewBag.CabinetEmployees = new List<CabinetEmployeeDto>();
+                ViewBag.Departments = new List<DepartmentDto>();
             }
 
             await LoadReferenceDataToViewBagAsync("FORME_JURIDIQUE", "STATUT_CLIENT", "TYPE_TVA");
@@ -130,11 +148,31 @@ public class ClientsController : BaseController
 
         var result = await _workflow.SaveClientConfigAsync(dto);
         if (result?.Success == true)
-            TempData["Success"] = result.Message ?? "Affectation enregistrée — une copie workflow a été créée pour ce client.";
+            TempData["Success"] = result.Message ?? "Affectation enregistrée — copie identique au modèle cabinet créée/mise à jour pour ce client.";
         else
             TempData["Error"] = result?.Message ?? "Erreur lors de l'affectation du workflow.";
 
         return RedirectToAction("Details", new { id = dto.ClientId, tab = "workflow" });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> DeleteWorkflowAffectation(int configId, int clientId)
+    {
+        if (clientId <= 0 || configId <= 0)
+        {
+            TempData["Error"] = "Affectation invalide.";
+            return RedirectToAction("Index");
+        }
+
+        var result = await _workflow.DeleteClientConfigAsync(configId, clientId);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Workflow retiré de l'affectation client.";
+        else
+            TempData["Error"] = result?.Message ?? "Impossible de supprimer l'affectation.";
+
+        return RedirectToAction("Details", new { id = clientId, tab = "workflow" });
     }
 
     /// <summary>Clone cabinet template → client-owned copy (or return existing) for Personnaliser.</summary>
@@ -324,15 +362,7 @@ public class ClientsController : BaseController
                 // Enter dossier-client workspace mode (dynamic client menu)
                 HttpContext.Session.SetString("WorkspaceMode", "Client");
 
-                // Store active services + contract access for dossier Manage/Consult
-                var access = await _clients.GetContractAccessAsync(clientId.Value);
-                HttpContext.Session.SetString("ActiveServices", System.Text.Json.JsonSerializer.Serialize(access.ActiveServices));
-                HttpContext.Session.SetString("HasActiveContract", access.AllowsManage.ToString());
-                HttpContext.Session.SetString("ContractAccessMode", access.Mode);
-                HttpContext.Session.SetString("ContractAccessReason", access.Reason);
-                HttpContext.Session.SetString("ContractAccessReasonLabel", access.ReasonLabel ?? "");
-
-                // Auto-pick exercice: latest Ouvert, else current year (ensure creates it)
+                // Auto-pick exercice first, then scope ActiveServices to that exercice
                 object? exercicePayload = null;
                 try
                 {
@@ -355,6 +385,13 @@ public class ClientsController : BaseController
                 {
                     ClearExerciceSession();
                 }
+
+                var access = await _clients.GetContractAccessAsync(clientId.Value, SelectedExerciceId);
+                HttpContext.Session.SetString("ActiveServices", System.Text.Json.JsonSerializer.Serialize(access.ActiveServices));
+                HttpContext.Session.SetString("HasActiveContract", access.AllowsManage.ToString());
+                HttpContext.Session.SetString("ContractAccessMode", access.Mode);
+                HttpContext.Session.SetString("ContractAccessReason", access.Reason);
+                HttpContext.Session.SetString("ContractAccessReasonLabel", access.ReasonLabel ?? "");
 
                 return Json(new
                 {

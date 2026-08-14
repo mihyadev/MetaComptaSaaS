@@ -167,13 +167,8 @@ public class ClientService : IClientService
     /// </summary>
     public async Task<List<string>> GetActiveServicesAsync(int clientId, int cabinetId)
     {
-        var today = ContractAccessService.BusinessToday();
-        return await _db.ServiceContrats
-            .Where(s => s.ClientId == clientId && s.Client!.CabinetId == cabinetId
-                && s.Actif && s.DateDebut.Date <= today && (s.DateFin == null || s.DateFin.Value.Date >= today))
-            .Select(s => s.TypeService)
-            .Distinct()
-            .ToListAsync();
+        var ctx = await _contractAccess.GetContractAccessContextAsync(clientId, cabinetId);
+        return ctx.ActiveServices ?? new List<string>();
     }
 
     /// <summary>
@@ -182,17 +177,30 @@ public class ClientService : IClientService
     public Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
         => _contractAccess.HasManageAccessAsync(clientId, cabinetId);
 
-    public Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId)
-        => _contractAccess.GetContractAccessContextAsync(clientId, cabinetId);
+    public Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId, int? exerciceComptableId = null)
+        => _contractAccess.GetContractAccessContextAsync(clientId, cabinetId, exerciceComptableId);
 
-    /// <summary>Returns all service contracts for a client, optionally filtered by exercise year</summary>
-    public async Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(int clientId, int cabinetId, int? exerciceFiscal = null)
+    /// <summary>Returns all service contracts for a client, optionally filtered by exercise year / id</summary>
+    public async Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(
+        int clientId, int cabinetId, int? exerciceFiscal = null, int? exerciceComptableId = null)
     {
         var query = _db.ServiceContrats
             .Where(s => s.ClientId == clientId && s.Client!.CabinetId == cabinetId);
 
-        if (exerciceFiscal.HasValue)
+        if (exerciceComptableId is > 0)
+        {
+            var exoId = exerciceComptableId.Value;
+            var exo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == exoId && e.ClientId == clientId && e.CabinetId == cabinetId);
+            var annee = exo?.Annee;
+            query = query.Where(s =>
+                s.ExerciceComptableId == exoId
+                || (s.ExerciceComptableId == null && (annee == null || s.ExerciceFiscal == null || s.ExerciceFiscal == annee)));
+        }
+        else if (exerciceFiscal.HasValue)
+        {
             query = query.Where(s => s.ExerciceFiscal == exerciceFiscal.Value || s.ExerciceFiscal == null);
+        }
 
         var services = await query.OrderBy(s => s.Categorie).ThenBy(s => s.TypeService).ToListAsync();
         return ApiResponse<List<ServiceContratDto>>.Ok(_mapper.Map<List<ServiceContratDto>>(services));
@@ -288,11 +296,22 @@ public class ClientService : IClientService
         var result = new GenerateDeclarationsResultDto();
         var exercice = request.ExerciceFiscal;
 
+        var openExo = await _db.ExercicesComptables.AsNoTracking()
+            .Where(e => e.ClientId == request.ClientId && e.CabinetId == cabinetId && e.Statut == "Ouvert")
+            .OrderByDescending(e => e.Annee)
+            .FirstOrDefaultAsync();
+        if (request.ExerciceComptableId is > 0)
+            openExo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == request.ExerciceComptableId && e.ClientId == request.ClientId && e.CabinetId == cabinetId && e.Statut == "Ouvert");
+        if (openExo == null)
+            return ApiResponse<GenerateDeclarationsResultDto>.Fail(ExerciceContextService.NoOpenExerciceMessage);
+        if (exercice <= 0) exercice = openExo.Annee;
+
         // Filter services eligible for declaration generation
         var declarationTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TVA", "IS", "IR", "CNSS", "BILAN", "LIASSEFISCALE", "ETATSSYNTHESE", "CPC", "AMORTISSEMENTS" };
         var services = client.ServiceContrats
             .Where(s => s.Actif && declarationTypes.Contains(s.TypeService)
-                && (s.ExerciceFiscal == null || s.ExerciceFiscal == exercice)
+                && (s.ExerciceComptableId == openExo.Id || s.ExerciceFiscal == null || s.ExerciceFiscal == exercice)
                 && s.AutoGenererDeclarations)
             .ToList();
 
@@ -305,9 +324,9 @@ public class ClientService : IClientService
             return ApiResponse<GenerateDeclarationsResultDto>.Ok(result);
         }
 
-        // Compute exercise boundaries
-        var moisCloture = client.MoisClotureExercice;
-        var (exDebut, exFin) = ComputeExerciceBounds(exercice, moisCloture);
+        // Periods must fall inside the open exercice window
+        var exDebut = openExo.DateDebut.Date;
+        var exFin = openExo.DateFin.Date;
 
         var existingDeclarations = client.Declarations
             .Where(d => d.DateDebut >= exDebut && d.DateFin <= exFin)
@@ -333,6 +352,7 @@ public class ClientService : IClientService
                 {
                     ClientId = request.ClientId,
                     CabinetId = cabinetId,
+                    ExerciceComptableId = openExo.Id,
                     Type = svc.TypeService,
                     Periode = period.Periode,
                     DateDebut = period.DateDebut,
@@ -462,48 +482,30 @@ public class ClientService : IClientService
         }
     }
 
-    /// <summary>Generate declaration periods for a service within exercise bounds</summary>
+    /// <summary>Generate declaration periods for a service within exercise bounds (shared template).</summary>
     private static List<(string Periode, DateTime DateDebut, DateTime DateFin, DateTime DateLimite)> GeneratePeriodsForService(
         ServiceContrat svc, DateTime exDebut, DateTime exFin)
     {
         var periods = new List<(string Periode, DateTime DateDebut, DateTime DateFin, DateTime DateLimite)>();
         var jourLimite = svc.JourLimiteDeclaration ?? 20;
         var delaiMois = svc.DelaiDeclarationMois ?? 1;
+        var freq = DeclarationPeriodTemplate.NormalizeFrequency(svc.Frequence);
 
-        switch (svc.Frequence?.ToUpperInvariant())
+        // Walk each calendar year covered by the exercise
+        for (var year = exDebut.Year; year <= exFin.Year; year++)
         {
-            case "MENSUELLE":
-                var current = exDebut;
-                while (current <= exFin)
-                {
-                    var periodEnd = new DateTime(current.Year, current.Month, DateTime.DaysInMonth(current.Year, current.Month));
-                    var limiteDate = periodEnd.AddMonths(delaiMois);
-                    limiteDate = new DateTime(limiteDate.Year, limiteDate.Month, Math.Min(jourLimite, DateTime.DaysInMonth(limiteDate.Year, limiteDate.Month)));
-                    periods.Add(($"{current:yyyy-MM}", current, periodEnd, limiteDate));
-                    current = current.AddMonths(1);
-                }
-                break;
-
-            case "TRIMESTRIELLE":
-                var qStart = exDebut;
-                int q = 1;
-                while (qStart <= exFin)
-                {
-                    var qEnd = qStart.AddMonths(3).AddDays(-1);
-                    if (qEnd > exFin) qEnd = exFin;
-                    var limiteDate = qEnd.AddMonths(delaiMois);
-                    limiteDate = new DateTime(limiteDate.Year, limiteDate.Month, Math.Min(jourLimite, DateTime.DaysInMonth(limiteDate.Year, limiteDate.Month)));
-                    periods.Add(($"{qStart.Year}-Q{q}", qStart, qEnd, limiteDate));
-                    qStart = qStart.AddMonths(3);
-                    q++;
-                }
-                break;
-
-            case "ANNUELLE":
-                var annualLimite = exFin.AddMonths(delaiMois);
-                annualLimite = new DateTime(annualLimite.Year, annualLimite.Month, Math.Min(jourLimite, DateTime.DaysInMonth(annualLimite.Year, annualLimite.Month)));
-                periods.Add(($"{exDebut.Year}", exDebut, exFin, annualLimite));
-                break;
+            foreach (var slice in DeclarationPeriodTemplate.GenerateForYear(year, freq))
+            {
+                if (slice.End < exDebut || slice.Start > exFin) continue;
+                var start = slice.Start < exDebut ? exDebut : slice.Start;
+                var end = slice.End > exFin ? exFin : slice.End;
+                var limiteDate = end.AddMonths(delaiMois);
+                limiteDate = new DateTime(
+                    limiteDate.Year,
+                    limiteDate.Month,
+                    Math.Min(jourLimite, DateTime.DaysInMonth(limiteDate.Year, limiteDate.Month)));
+                periods.Add((slice.Code, start, end, limiteDate));
+            }
         }
 
         return periods;

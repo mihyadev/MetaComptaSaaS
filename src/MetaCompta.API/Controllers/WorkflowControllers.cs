@@ -82,8 +82,15 @@ public class WorkflowController : ControllerBase
 
     [HttpGet("templates")]
     [Authorize(Policy = ClaimDefinitions.WorkflowView)]
-    public async Task<IActionResult> GetTemplates([FromQuery] string? declarationType = null, [FromQuery] int? clientId = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
-        => Ok(await _workflow.GetTemplatesAsync(CabinetId, declarationType, clientId, page, pageSize));
+    public async Task<IActionResult> GetTemplates(
+        [FromQuery] string? declarationType = null,
+        [FromQuery] int? clientId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] bool cabinetOnly = false,
+        [FromQuery] bool activeOnly = false,
+        [FromQuery] bool excludeAncien = false)
+        => Ok(await _workflow.GetTemplatesAsync(CabinetId, declarationType, clientId, page, pageSize, cabinetOnly, activeOnly, excludeAncien));
 
     [HttpGet("templates/{id}")]
     [Authorize(Policy = ClaimDefinitions.WorkflowView)]
@@ -112,8 +119,8 @@ public class WorkflowController : ControllerBase
 
     [HttpPost("templates/seed-all-defaults")]
     [Authorize(Policy = ClaimDefinitions.WorkflowCreate)]
-    public async Task<IActionResult> SeedAllDefaultTemplates()
-        => Ok(await _workflow.SeedAllDefaultTemplatesAsync(CabinetId, UserId));
+    public async Task<IActionResult> SeedAllDefaultTemplates([FromQuery] bool forceReset = false)
+        => Ok(await _workflow.SeedAllDefaultTemplatesAsync(CabinetId, UserId, forceReset));
 
     // ── Instances ────────────────────────────────────────────────
 
@@ -124,8 +131,8 @@ public class WorkflowController : ControllerBase
 
     [HttpGet("instances")]
     [Authorize(Policy = ClaimDefinitions.WorkflowView)]
-    public async Task<IActionResult> GetInstances([FromQuery] int? clientId = null, [FromQuery] string? status = null, [FromQuery] int? declarationId = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
-        => Ok(await _workflow.GetInstancesAsync(CabinetId, clientId, status, declarationId, page, pageSize));
+    public async Task<IActionResult> GetInstances([FromQuery] int? clientId = null, [FromQuery] string? status = null, [FromQuery] int? declarationId = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] int? exerciceId = null)
+        => Ok(await _workflow.GetInstancesAsync(CabinetId, clientId, status, declarationId, page, pageSize, exerciceId));
 
     [HttpGet("instances/{id}")]
     [Authorize(Policy = ClaimDefinitions.WorkflowView)]
@@ -156,6 +163,11 @@ public class WorkflowController : ControllerBase
     [HttpPost("instances/{id}/advance")]
     public async Task<IActionResult> AdvanceStep(int id, [FromBody] AdvanceStepDto dto)
         => Ok(await _workflow.AdvanceStepAsync(id, dto, CabinetId, UserId));
+
+    /// <summary>Refuse current step and reopen the previous actionable step (assignee-only).</summary>
+    [HttpPost("instances/{id}/reject")]
+    public async Task<IActionResult> RejectStep(int id, [FromBody] RejectStepDto dto)
+        => Ok(await _workflow.RejectStepAsync(id, dto ?? new RejectStepDto(), CabinetId, UserId));
 
     /// <summary>Claim current step exclusively (Prendre / Ouvrir). Manager may forceOverride with reason.</summary>
     [HttpPost("instances/{id}/claim")]
@@ -188,6 +200,11 @@ public class WorkflowController : ControllerBase
     [Authorize(Policy = ClaimDefinitions.WorkflowConfigure)]
     public async Task<IActionResult> SaveClientConfig([FromBody] ClientWorkflowConfigCreateDto dto)
         => Ok(await _workflow.SaveClientConfigAsync(dto, CabinetId, UserId));
+
+    [HttpDelete("client-config/{configId}")]
+    [Authorize(Policy = ClaimDefinitions.WorkflowConfigure)]
+    public async Task<IActionResult> DeleteClientConfig(int configId, [FromQuery] int clientId)
+        => Ok(await _workflow.DeleteClientConfigAsync(configId, clientId, CabinetId, UserId));
 
     [HttpPost("client-config/ensure-template")]
     [Authorize(Policy = ClaimDefinitions.WorkflowConfigure)]
@@ -344,6 +361,25 @@ public class ClientDeclarationsController : ControllerBase
         if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
             return NotFound(ApiResponse<DeclarationISDto>.Fail("Introuvable."));
         return Ok(await _service.GetISDataAsync(id, CabinetId));
+    }
+
+    [HttpGet("{id}/checklist")]
+    public async Task<IActionResult> GetChecklist(int id)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<List<DeclarationChecklistItemDto>>.Fail("Introuvable."));
+        await _service.EnsureAnnualChecklistAsync(id, CabinetId, UserId);
+        return Ok(await _service.GetChecklistAsync(id, CabinetId));
+    }
+
+    [HttpPost("{id}/checklist/{itemId}/received")]
+    public async Task<IActionResult> MarkChecklistReceived(int id, int itemId, [FromQuery] int? documentId = null)
+    {
+        var decl = await _service.GetByIdAsync(id, CabinetId);
+        if (!decl.Success || decl.Data == null || (ClientId > 0 && decl.Data.ClientId != ClientId))
+            return NotFound(ApiResponse<DeclarationChecklistItemDto>.Fail("Introuvable."));
+        return Ok(await _service.MarkChecklistItemReceivedAsync(id, itemId, documentId, CabinetId, UserId));
     }
 
     [HttpGet("{id}/ir")]

@@ -614,6 +614,23 @@ public class CommercialController : BaseController
         return RedirectToAction("ContratDetails", new { id });
     }
 
+    /// <summary>Create a rectificatif (amendment) — editable draft; original kept until validate.</summary>
+    [HttpPost]
+    [RequirePermission(ClaimDefinitions.CommercialCreate)]
+    public async Task<IActionResult> ContratRectificatif(int id, string? motif = null)
+    {
+        var result = await _commercial.CreateRectificatifContratAsync(id, motif);
+        if (result?.Success == true)
+        {
+            TempData["Success"] = result.Data?.EstRectificatif == true
+                ? $"Rectificatif {result.Data.Reference} créé — éditez, signez et validez pour remplacer l'original."
+                : $"Contrat {result.Data?.Reference} ouvert.";
+            return RedirectToAction("ContratEdit", new { id = result.Data?.Id });
+        }
+        SetApiError(result, "Impossible de créer le rectificatif.");
+        return RedirectToAction("ContratDetails", new { id });
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  FACTURES
     // ════════════════════════════════════════════════════════════════

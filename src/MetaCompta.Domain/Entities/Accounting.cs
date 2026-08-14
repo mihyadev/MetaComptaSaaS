@@ -136,6 +136,9 @@ public class RapprochementBancaire : TenantEntity
     public int? CompteBancaireId { get; set; }
     public virtual CompteBancaire? CompteBancaireNav { get; set; }
 
+    public int? ExerciceComptableId { get; set; }
+    public virtual ExerciceComptable? Exercice { get; set; }
+
     public string CompteBancaire { get; set; } = string.Empty;
     public string Periode { get; set; } = string.Empty;
     public decimal SoldeCompta { get; set; }

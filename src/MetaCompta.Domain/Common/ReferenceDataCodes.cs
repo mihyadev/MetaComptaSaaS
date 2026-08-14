@@ -79,14 +79,18 @@ public static class RefCodes
         public const string ControleEnCours = "ControleEnCours";
         public const string EnAttenteCorrection = "EnAttenteCorrection";
         public const string CalculTVA = "CalculTVA";
+        public const string CalculIS = "CalculIS";
         public const string EnRevueSuperviseur = "EnRevueSuperviseur";
         public const string ACorriger = "ACorriger";
         public const string EnvoyeeSimplTva = "EnvoyeeSimplTva";
+        public const string EnvoyeeSimplIs = "EnvoyeeSimplIs";
         public const string Deposee = "Deposee";
         public const string APayer = "APayer";
         public const string Rapprochee = "Rapprochee";
         public const string Archivee = "Archivee";
         public const string Cloturee = "Cloturee";
+        /// <summary>Documents never received after max client relances.</summary>
+        public const string Suspendue = "Suspendue";
 
         /// <summary>French UI labels for badges (canonical + legacy).</summary>
         public static string Label(string? statut) => statut switch
@@ -103,12 +107,14 @@ public static class RefCodes
             Completee => "Complétée",
             EnAttenteCorrection => "En attente correction",
             CalculTVA => "Calcul TVA",
+            CalculIS => "Calcul IS / CM",
             EnRevueSuperviseur => "En revue superviseur",
             EnRevision => "En révision",
             ACorriger => "À corriger",
             Refusee => "Refusée",
             Validee => "Validée",
             EnvoyeeSimplTva => "Envoyée à SIMPL-TVA",
+            EnvoyeeSimplIs => "Envoyée à SIMPL-IS",
             Soumise => "Soumise",
             Rejetee => "Rejetée",
             Deposee => "Déposée",
@@ -117,6 +123,7 @@ public static class RefCodes
             Rapprochee => "Rapprochée",
             Archivee => "Archivée",
             Cloturee => "Clôturée",
+            Suspendue => "Suspendue",
             _ => statut ?? ""
         };
 
@@ -125,11 +132,11 @@ public static class RefCodes
         {
             ACreer or CreeeParSysteme or Brouillon => "badge-brouillon",
             DocumentsDemandes or ACompleter or EnAttenteCorrection or ACorriger or Refusee => "badge-acompleter",
-            DocumentsRecus or ControleEnCours or EnCours or EnPreparation or Completee or CalculTVA => "badge-completee",
+            DocumentsRecus or ControleEnCours or EnCours or EnPreparation or Completee or CalculTVA or CalculIS => "badge-completee",
             EnRevueSuperviseur or EnRevision => "badge-enrevision",
             Validee or Deposee or Rapprochee or Archivee => "badge-validee",
-            EnvoyeeSimplTva or Soumise or Payee or APayer or Cloturee => "badge-soumise",
-            Rejetee => "badge-refusee",
+            EnvoyeeSimplTva or EnvoyeeSimplIs or Soumise or Payee or APayer or Cloturee => "badge-soumise",
+            Rejetee or Suspendue => "badge-refusee",
             _ => "badge-brouillon"
         };
     }
@@ -151,6 +158,8 @@ public static class RefCodes
         public const string Resilie = "Resilie";
         public const string Termine = "Termine";
         public const string Annule = "Annule";
+        /// <summary>Replaced by a validated rectificatif (original kept for history).</summary>
+        public const string Remplace = "Remplace";
 
         /// <summary>Statuses that allow declarations and service operations.</summary>
         public static readonly string[] ActiveStatuses = [Valide, Actif];

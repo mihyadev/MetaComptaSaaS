@@ -46,9 +46,7 @@ public class TasksController : BaseController
         }
 
         var result = await _tasks.GetAllAsync(statut: statut, clientId: clientId, page: page, assignedToKind: assignedToKind);
-        ViewBag.Clients = SelectedClientId.HasValue
-            ? new List<ClientDto>()
-            : await _clients.GetAllForDropdownAsync();
+        ViewBag.Clients = await LoadTaskClientFilterAsync();
         ViewBag.Statut = statut;
         ViewBag.ClientId = clientId;
         ViewBag.IsClientSpace = SelectedClientId.HasValue;
@@ -59,36 +57,70 @@ public class TasksController : BaseController
     }
 
     [RequirePermission(ClaimDefinitions.TaskDetail)]
-    public async Task<IActionResult> MyTasks(int page = 1)
+    public async Task<IActionResult> MyTasks(string? statut = null, int? clientId = null, int page = 1)
     {
+        if (SelectedClientId.HasValue)
+            clientId = SelectedClientId;
+
         var result = await _tasks.GetAllAsync(
+            statut: statut,
             assignedTo: "me",
-            clientId: SelectedClientId,
+            clientId: clientId,
             page: page);
+        ViewBag.Clients = await LoadTaskClientFilterAsync();
+        ViewBag.Statut = statut;
         ViewBag.IsClientSpace = SelectedClientId.HasValue;
         ViewBag.SelectedClientName = SelectedClientName;
-        ViewBag.ClientId = SelectedClientId;
+        ViewBag.ClientId = clientId;
         ViewBag.IsMyTasks = true;
         await LoadReferenceDataToViewBagAsync("STATUT_TACHE", "PRIORITE_TACHE");
         return View("Index", result);
     }
 
     [RequirePermission(ClaimDefinitions.TaskDetail)]
-    public async Task<IActionResult> Overdue(int page = 1)
+    public async Task<IActionResult> Overdue(int? clientId = null, int page = 1)
     {
         string? assignedToKind = SelectedClientId.HasValue ? "Client" : null;
+        if (SelectedClientId.HasValue)
+            clientId = SelectedClientId;
+
         var result = await _tasks.GetAllAsync(
             statut: "EnRetard",
-            clientId: SelectedClientId,
+            clientId: clientId,
             page: page,
             assignedToKind: assignedToKind);
+        ViewBag.Clients = await LoadTaskClientFilterAsync();
         ViewBag.Statut = "EnRetard";
         ViewBag.IsClientSpace = SelectedClientId.HasValue;
         ViewBag.SelectedClientName = SelectedClientName;
-        ViewBag.ClientId = SelectedClientId;
+        ViewBag.ClientId = clientId;
         ViewBag.AssignedToKind = assignedToKind;
         await LoadReferenceDataToViewBagAsync("STATUT_TACHE", "PRIORITE_TACHE");
         return View("Index", result);
+    }
+
+    /// <summary>
+    /// Client dropdown for task filters. In dossier mode show the selected client only;
+    /// otherwise load all clients (needed for Fiscaliste / specialized roles on Mes tâches).
+    /// </summary>
+    private async Task<List<ClientDto>> LoadTaskClientFilterAsync()
+    {
+        if (SelectedClientId.HasValue)
+        {
+            try
+            {
+                var one = await _clients.GetByIdAsync(SelectedClientId.Value);
+                if (one != null)
+                    return new List<ClientDto> { one };
+            }
+            catch { /* fall through */ }
+            return new List<ClientDto>
+            {
+                new() { Id = SelectedClientId.Value, RaisonSociale = SelectedClientName ?? $"Client #{SelectedClientId}" }
+            };
+        }
+
+        return await _clients.GetAllForDropdownAsync();
     }
 
     [RequirePermission(ClaimDefinitions.TaskDetail)]
@@ -227,6 +259,34 @@ public class TasksController : BaseController
         else
             TempData["Error"] = result?.Message ?? "Erreur lors de la validation de l'étape.";
         return RedirectToAction("MyTasks");
+    }
+
+    /// <summary>Refuse current workflow step from a task and reopen the previous step.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.TaskDetail)]
+    public async Task<IActionResult> RejectWorkflowStep(int taskId, int workflowInstanceId, string? reason = null, string? comment = null)
+    {
+        var dto = new RejectStepDto { Reason = reason, Comment = comment };
+        var result = await _workflow.RejectStepAsync(workflowInstanceId, dto);
+        if (result?.Success == true)
+        {
+            var msg = result.Message ?? "Étape refusée.";
+            TempData["Success"] = msg;
+            // Correction on same step (first human step) → stay on task
+            if (msg.Contains("Correction demandée", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("pas d'étape précédente", StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction("Details", new { id = taskId });
+            }
+
+            // Sent back to previous step → this task is no longer current
+            await _tasks.ChangeStatusAsync(taskId, "Annule");
+            return RedirectToAction("MyTasks");
+        }
+
+        TempData["Error"] = result?.Message ?? "Erreur lors du refus de l'étape.";
+        return RedirectToAction("Details", new { id = taskId });
     }
 
     [HttpPost]

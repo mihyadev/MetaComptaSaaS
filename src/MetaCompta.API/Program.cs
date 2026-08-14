@@ -120,6 +120,8 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IClientUserService, ClientUserService>();
 builder.Services.AddScoped<IComptabiliteService, ComptabiliteService>();
+builder.Services.AddScoped<IExerciceContextService, ExerciceContextService>();
+builder.Services.AddScoped<IExerciceClotureService, ExerciceClotureService>();
 
 // ===== Hangfire (Background Jobs) =====
 builder.Services.AddHangfire(config => config
@@ -1037,6 +1039,32 @@ using (var scope = app.Services.CreateScope())
         SET IDENTITY_INSERT [ReferenceData] OFF;
     ");
 
+    // ===== Patch: ContratCommercial rectificatif (ParentContratId / RemplacePar) =====
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('ContratsCommerciaux', 'ParentContratId') IS NULL
+            ALTER TABLE [ContratsCommerciaux] ADD [ParentContratId] int NULL;
+        IF COL_LENGTH('ContratsCommerciaux', 'RemplaceParContratId') IS NULL
+            ALTER TABLE [ContratsCommerciaux] ADD [RemplaceParContratId] int NULL;
+        IF COL_LENGTH('ContratsCommerciaux', 'MotifRectificatif') IS NULL
+            ALTER TABLE [ContratsCommerciaux] ADD [MotifRectificatif] nvarchar(1000) NULL;
+    ");
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('ContratsCommerciaux', 'ParentContratId') IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_ContratsCommerciaux_ParentContrat')
+        BEGIN
+            ALTER TABLE [ContratsCommerciaux] WITH CHECK
+            ADD CONSTRAINT [FK_ContratsCommerciaux_ParentContrat]
+            FOREIGN KEY ([ParentContratId]) REFERENCES [ContratsCommerciaux]([Id]);
+        END
+        IF COL_LENGTH('ContratsCommerciaux', 'RemplaceParContratId') IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_ContratsCommerciaux_RemplacePar')
+        BEGIN
+            ALTER TABLE [ContratsCommerciaux] WITH CHECK
+            ADD CONSTRAINT [FK_ContratsCommerciaux_RemplacePar]
+            FOREIGN KEY ([RemplaceParContratId]) REFERENCES [ContratsCommerciaux]([Id]);
+        END
+    ");
+
     // ===== Patch: Add IsSystem column to WorkflowTemplates =====
     await db.Database.ExecuteSqlRawAsync(@"
         IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('WorkflowTemplates') AND name = 'IsSystem')
@@ -1075,8 +1103,25 @@ using (var scope = app.Services.CreateScope())
         IF COL_LENGTH('WorkflowStepTemplates', 'TriggerSource') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [TriggerSource] int NOT NULL DEFAULT 0;
         IF COL_LENGTH('WorkflowStepTemplates', 'UseServiceContratAffectation') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [UseServiceContratAffectation] bit NOT NULL DEFAULT 0;
         IF COL_LENGTH('WorkflowStepTemplates', 'AssignedToUserIds') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [AssignedToUserIds] nvarchar(max) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineAnchor') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineAnchor] nvarchar(50) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineOffsetDays') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineOffsetDays] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineDay') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineDay] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineMonth') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineMonth] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineMonthOffset') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineMonthOffset] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'DeadlineYearOffset') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [DeadlineYearOffset] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ApplyDeadlineToDeclaration') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ApplyDeadlineToDeclaration] bit NOT NULL DEFAULT 0;
+        IF COL_LENGTH('WorkflowStepTemplates', 'LifecycleEndMode') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [LifecycleEndMode] nvarchar(50) NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'LifecycleEndDays') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [LifecycleEndDays] int NULL;
+        IF COL_LENGTH('WorkflowStepTemplates', 'ActionOnLifecycleEnd') IS NULL ALTER TABLE [WorkflowStepTemplates] ADD [ActionOnLifecycleEnd] nvarchar(100) NULL;
     ");
     Console.WriteLine("[Startup] WorkflowStepTemplates scheduling/action columns check/add complete.");
+
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('Declarations', 'LifecycleEndsAt') IS NULL ALTER TABLE [Declarations] ADD [LifecycleEndsAt] datetime2 NULL;
+        IF COL_LENGTH('Declarations', 'LifecycleEndAction') IS NULL ALTER TABLE [Declarations] ADD [LifecycleEndAction] nvarchar(100) NULL;
+        IF COL_LENGTH('Declarations', 'LifecycleEndedAt') IS NULL ALTER TABLE [Declarations] ADD [LifecycleEndedAt] datetime2 NULL;
+    ");
+    Console.WriteLine("[Startup] Declarations lifecycle columns check/add complete.");
 
     // ===== Patch: WorkflowStepInstances relance/routing columns =====
     try
@@ -1526,6 +1571,11 @@ using (var scope = app.Services.CreateScope())
         RecurringJob.AddOrUpdate<IWorkflowSchedulerService>(
             "workflow-process-due-relances",
             svc => svc.ProcessDueRelancesAsync(),
+            "*/15 * * * *"); // every 15 minutes
+
+        RecurringJob.AddOrUpdate<IWorkflowSchedulerService>(
+            "workflow-process-due-lifecycle-ends",
+            svc => svc.ProcessDueLifecycleEndsAsync(),
             "*/15 * * * *"); // every 15 minutes
 
         Console.WriteLine("[Startup] Hangfire workflow scheduler synced successfully.");

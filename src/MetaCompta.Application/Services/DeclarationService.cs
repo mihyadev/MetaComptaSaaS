@@ -15,14 +15,35 @@ public class DeclarationService : IDeclarationService
     private readonly IReferenceDataService _refData;
     private readonly INotificationService _notifications;
     private readonly IContractAccessService _contractAccess;
+    private readonly IExerciceContextService _exerciceContext;
 
-    public DeclarationService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData, INotificationService notifications, IContractAccessService contractAccess)
+    public DeclarationService(
+        MetaComptaDbContext db,
+        IMapper mapper,
+        IReferenceDataService refData,
+        INotificationService notifications,
+        IContractAccessService contractAccess,
+        IExerciceContextService exerciceContext)
     {
         _db = db;
         _mapper = mapper;
         _refData = refData;
         _notifications = notifications;
         _contractAccess = contractAccess;
+        _exerciceContext = exerciceContext;
+    }
+
+    private async Task<ApiResponse<ExerciceComptableDto>> RequireExerciceAsync(int clientId, int cabinetId, int? preferredId = null)
+        => await _exerciceContext.RequireOpenExerciceAsync(clientId, cabinetId, preferredId);
+
+    private async Task<string?> EnsureDeclarationExerciceOpenAsync(Declaration declaration, int cabinetId)
+    {
+        if (declaration.ExerciceComptableId is not int exoId) return null;
+        var exo = await _db.ExercicesComptables.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == exoId && e.CabinetId == cabinetId);
+        if (exo != null && !string.Equals(exo.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase))
+            return ExerciceContextService.ClosedExerciceMessage;
+        return null;
     }
 
     // ─── WORKFLOW STEP OWNERSHIP LOCK ──────────────────────────────
@@ -112,7 +133,9 @@ public class DeclarationService : IDeclarationService
         => _contractAccess.HasManageAccessAsync(clientId, cabinetId);
 
     // ─── LIST / GET ────────────────────────────────────────────────
-    public async Task<ApiResponse<PagedResult<DeclarationDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? type = null, string? statut = null, int page = 1, int pageSize = 20)
+    public async Task<ApiResponse<PagedResult<DeclarationDto>>> GetAllAsync(
+        int cabinetId, int? clientId = null, string? type = null, string? statut = null,
+        int page = 1, int pageSize = 20, int? exerciceComptableId = null)
     {
         var query = _db.Declarations
             .Where(d => d.CabinetId == cabinetId)
@@ -124,6 +147,34 @@ public class DeclarationService : IDeclarationService
         if (clientId.HasValue) query = query.Where(d => d.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(type)) query = query.Where(d => d.Type == type);
         if (!string.IsNullOrWhiteSpace(statut)) query = query.Where(d => d.Statut == statut);
+
+        if (exerciceComptableId is > 0)
+        {
+            var exoId = exerciceComptableId.Value;
+            var exo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == exoId && e.CabinetId == cabinetId
+                    && (!clientId.HasValue || e.ClientId == clientId.Value));
+            if (exo != null)
+            {
+                var annee = exo.Annee;
+                var debut = exo.DateDebut.Date;
+                var fin = exo.DateFin.Date;
+                query = query.Where(d =>
+                    d.ExerciceComptableId == exoId
+                    || (d.ExerciceComptableId == null
+                        && d.DateDebut >= debut && d.DateFin <= fin)
+                    || (d.ExerciceComptableId == null
+                        && d.Periode != null
+                        && (d.Periode == annee.ToString()
+                            || d.Periode.StartsWith(annee.ToString() + "-")
+                            || d.Periode.StartsWith(annee.ToString() + "Q")
+                            || d.Periode.StartsWith(annee.ToString() + "-Q"))));
+            }
+            else
+            {
+                query = query.Where(d => d.ExerciceComptableId == exoId);
+            }
+        }
 
         var total = await query.CountAsync();
         var items = await query
@@ -192,18 +243,59 @@ public class DeclarationService : IDeclarationService
         if (!await HasActiveContractAsync(dto.ClientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration : le client n'a aucun contrat actif ou validé.");
 
+        var exoGate = await RequireExerciceAsync(dto.ClientId, cabinetId, dto.ExerciceComptableId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+        dto.ExerciceComptableId = exoGate.Data.Id;
+
         var type = DeclarationServiceCatalog.NormalizeType(dto.Type);
         dto.Type = type;
 
         return type switch
         {
-            "TVA" => await CreateTVAAsync(dto.ClientId, cabinetId, userId),
-            "IS" => await CreateISAsync(dto.ClientId, dto.AnneeFiscale ?? DateTime.UtcNow.Year, cabinetId, userId),
-            "IR" => await CreateIRAsync(dto.ClientId, dto.AnneeFiscale ?? DateTime.UtcNow.Year, cabinetId, userId),
-            "CNSS" => await CreateCNSSAsync(dto.ClientId, cabinetId, userId),
+            "TVA" => await CreateTVAInternalAsync(dto.ClientId, cabinetId, userId, dto.ExerciceComptableId, dto),
+            "IS" => await CreateISInternalAsync(dto.ClientId, dto.AnneeFiscale ?? exoGate.Data.Annee, cabinetId, userId, dto.ExerciceComptableId, dto),
+            "IR" => await CreateIRInternalAsync(dto.ClientId, dto.AnneeFiscale ?? exoGate.Data.Annee, cabinetId, userId, dto.ExerciceComptableId, dto),
+            "CNSS" => await CreateCNSSInternalAsync(dto.ClientId, cabinetId, userId, dto.ExerciceComptableId, dto),
             _ when DeclarationServiceCatalog.IsSupported(type) => await CreateShellAsync(dto, cabinetId, userId),
             _ => ApiResponse<DeclarationDto>.Fail($"Type de déclaration '{dto.Type}' non supporté.")
         };
+    }
+
+    private static DateTime ResolveInitDateLimite(CreateDeclarationDto? periodCfg, MoroccoDeclarationCalendar.Window window, string type)
+    {
+        if (periodCfg?.PeriodEnd is DateTime pe)
+            return pe.Date;
+        if (periodCfg == null) return window.FilingDeadline;
+        if ((periodCfg.WindowEndDay is >= 1 and <= 31) || (periodCfg.DeadlineMonth is >= 1 and <= 12))
+        {
+            return MoroccoDeclarationCalendar.ApplyInitDeadline(
+                periodCfg.Frequency ?? window.Frequency,
+                window.PeriodEnd,
+                periodCfg.WindowEndDay,
+                periodCfg.WindowMonthOffset,
+                periodCfg.DeadlineMonth,
+                periodCfg.DeadlineYearOffset,
+                type);
+        }
+        return window.FilingDeadline;
+    }
+
+    /// <summary>Init period template table wins over calendar defaults.</summary>
+    private static (DateTime Start, DateTime End, DateTime Limite, string Periode) ApplyPeriodTemplate(
+        CreateDeclarationDto? dto, MoroccoDeclarationCalendar.Window window, string type)
+    {
+        if (dto?.PeriodStart is DateTime ps && dto.PeriodEnd is DateTime pe)
+        {
+            var label = !string.IsNullOrWhiteSpace(dto.Periode)
+                ? dto.Periode!
+                : (ps.Month == 1 && pe.Month == 12 && ps.Day == 1 && pe.Day == 31 && ps.Year == pe.Year
+                    ? ps.Year.ToString()
+                    : ps.ToString("yyyy-MM"));
+            return (ps.Date, pe.Date, pe.Date, label);
+        }
+
+        return (window.PeriodStart, window.PeriodEnd, ResolveInitDateLimite(dto, window, type), window.PeriodeLabel);
     }
 
     /// <summary>
@@ -219,20 +311,33 @@ public class DeclarationService : IDeclarationService
         if (!await HasActiveContractAsync(dto.ClientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail($"Impossible de créer une déclaration {entry.DisplayName} : aucun contrat actif.");
 
+        var exoGate = await RequireExerciceAsync(dto.ClientId, cabinetId, dto.ExerciceComptableId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == dto.ClientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
 
-        var (debut, fin, limite, periode) = ResolvePeriod(type, dto.AnneeFiscale, dto.Periode);
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            type,
+            DateTime.UtcNow,
+            dto.AnneeFiscale ?? exoGate.Data.Annee,
+            dto.Periode,
+            client.TypeTVA,
+            dto.Frequency);
+
+        var (periodStart, periodEnd, dateLimite, periodeLabel) = ApplyPeriodTemplate(dto, window, type);
 
         var declaration = new Declaration
         {
             ClientId = dto.ClientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Type = type,
-            Periode = periode,
-            DateDebut = debut,
-            DateFin = fin,
-            DateLimite = limite,
+            Periode = periodeLabel,
+            DateDebut = periodStart,
+            DateFin = periodEnd,
+            DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
             AssistantId = userId,
             CreatedBy = userId,
@@ -640,57 +745,17 @@ public class DeclarationService : IDeclarationService
         return Math.Min(26, (end - start).Days + 1);
     }
 
-    /// <summary>Morocco métier calendar defaults by declaration type.</summary>
-    private static (DateTime debut, DateTime fin, DateTime limite, string periode) ResolvePeriod(string type, int? anneeFiscale, string? periodeOverride)
+    /// <summary>Morocco métier calendar defaults by declaration type + frequency.</summary>
+    private static (DateTime debut, DateTime fin, DateTime limite, string periode) ResolvePeriod(string type, int? anneeFiscale, string? periodeOverride, string? clientTypeTva = null)
     {
-        var now = DateTime.UtcNow;
-        var year = anneeFiscale ?? now.Year;
-
-        switch (type.ToUpperInvariant())
-        {
-            case "TVA":
-            case "CNSS":
-            case "IR_SAL":
-            {
-                var debut = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
-                var fin = debut.AddMonths(1).AddDays(-1);
-                var dayLimit = type.Equals("CNSS", StringComparison.OrdinalIgnoreCase) ? 10 : 20;
-                var limiteMonth = fin.AddMonths(1);
-                var limite = new DateTime(limiteMonth.Year, limiteMonth.Month, Math.Min(dayLimit, DateTime.DaysInMonth(limiteMonth.Year, limiteMonth.Month)));
-                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? debut.ToString("yyyy-MM") : periodeOverride!);
-            }
-            case "ACOMPTES":
-            {
-                var q = (now.Month - 1) / 3 + 1;
-                var debut = new DateTime(now.Year, (q - 1) * 3 + 1, 1);
-                var fin = debut.AddMonths(3).AddDays(-1);
-                var limiteDay = q switch { 1 => new DateTime(now.Year, 3, 31), 2 => new DateTime(now.Year, 6, 30), 3 => new DateTime(now.Year, 9, 30), _ => new DateTime(now.Year, 12, 31) };
-                return (debut, fin, limiteDay, string.IsNullOrWhiteSpace(periodeOverride) ? $"{now.Year}-Q{q}" : periodeOverride!);
-            }
-            case "REG_IS":
-            case "CM":
-            case "DRF":
-            case "IS":
-            case "IR":
-            case "DTS":
-            {
-                var debut = new DateTime(year, 1, 1);
-                var fin = new DateTime(year, 12, 31);
-                var limite = new DateTime(year + 1, 3, 31);
-                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? year.ToString() : periodeOverride!);
-            }
-            case "RAS_FONC":
-            case "RAS_DIV":
-            default:
-            {
-                var debut = new DateTime(now.Year, now.Month, 1);
-                var fin = debut.AddMonths(1).AddDays(-1);
-                var limite = fin.AddDays(30);
-                return (debut, fin, limite, string.IsNullOrWhiteSpace(periodeOverride) ? debut.ToString("yyyy-MM") : periodeOverride!);
-            }
-        }
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            type,
+            DateTime.UtcNow,
+            anneeFiscale,
+            periodeOverride,
+            clientTypeTva);
+        return (window.PeriodStart, window.PeriodEnd, window.FilingDeadline, window.PeriodeLabel);
     }
-
     // ─── DELETE ────────────────────────────────────────────────────
     public async Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId)
     {
@@ -709,27 +774,34 @@ public class DeclarationService : IDeclarationService
     //  TVA
     // ═══════════════════════════════════════════════════════════════
     public async Task<ApiResponse<DeclarationDto>> CreateTVAAsync(int clientId, int cabinetId, string userId)
+        => await CreateTVAInternalAsync(clientId, cabinetId, userId, null);
+
+    private async Task<ApiResponse<DeclarationDto>> CreateTVAInternalAsync(int clientId, int cabinetId, string userId, int? exerciceId, CreateDeclarationDto? periodCfg = null)
     {
         if (!await HasActiveContractAsync(clientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration TVA : le client n'a aucun contrat actif ou validé.");
 
+        var exoGate = await RequireExerciceAsync(clientId, cabinetId, exerciceId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
 
-        var now = DateTime.UtcNow;
-        var periodeDebut = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
-        var periodeFin = periodeDebut.AddMonths(1).AddDays(-1);
-        var dateLimite = periodeFin.AddMonths(1);
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            "TVA", DateTime.UtcNow, exoGate.Data.Annee, periodCfg?.Periode, client.TypeTVA, periodCfg?.Frequency);
+        var (periodStart, periodEnd, dateLimite, periodeLabel) = ApplyPeriodTemplate(periodCfg, window, "TVA");
 
         var declaration = new Declaration
         {
             ClientId = clientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Type = "TVA",
-            Periode = periodeDebut.ToString("yyyy-MM"),
-            DateDebut = periodeDebut,
-            DateFin = periodeFin,
-            DateLimite = new DateTime(dateLimite.Year, dateLimite.Month, Math.Min(30, DateTime.DaysInMonth(dateLimite.Year, dateLimite.Month))),
+            Periode = periodeLabel,
+            DateDebut = periodStart,
+            DateFin = periodEnd,
+            DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
             AssistantId = userId,
             CreatedBy = userId
@@ -795,6 +867,8 @@ public class DeclarationService : IDeclarationService
             return ApiResponse<DeclarationTVADto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
         if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
             return ApiResponse<DeclarationTVADto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        var exoClosed = await EnsureDeclarationExerciceOpenAsync(declaration, cabinetId);
+        if (exoClosed != null) return ApiResponse<DeclarationTVADto>.Fail(exoClosed);
         var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
         if (lockErr != null) return ApiResponse<DeclarationTVADto>.Fail(lockErr);
 
@@ -1074,22 +1148,35 @@ public class DeclarationService : IDeclarationService
     //  IS (Impôt sur les Sociétés)
     // ═══════════════════════════════════════════════════════════════
     public async Task<ApiResponse<DeclarationDto>> CreateISAsync(int clientId, int anneeFiscale, int cabinetId, string userId)
+        => await CreateISInternalAsync(clientId, anneeFiscale, cabinetId, userId, null);
+
+    private async Task<ApiResponse<DeclarationDto>> CreateISInternalAsync(int clientId, int anneeFiscale, int cabinetId, string userId, int? exerciceId, CreateDeclarationDto? periodCfg = null)
     {
         if (!await HasActiveContractAsync(clientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration IS : le client n'a aucun contrat actif ou validé.");
 
+        var exoGate = await RequireExerciceAsync(clientId, cabinetId, exerciceId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
+
+        var freq = periodCfg?.Frequency ?? "Annuelle";
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            "IS", DateTime.UtcNow, anneeFiscale, periodCfg?.Periode, null, freq);
+        var dateLimite = ResolveInitDateLimite(periodCfg, window, "IS");
 
         var declaration = new Declaration
         {
             ClientId = clientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Type = "IS",
-            Periode = anneeFiscale.ToString(),
-            DateDebut = new DateTime(anneeFiscale, 1, 1),
-            DateFin = new DateTime(anneeFiscale, 12, 31),
-            DateLimite = new DateTime(anneeFiscale + 1, 3, 31), // 31 March N+1
+            Periode = window.PeriodeLabel,
+            DateDebut = window.PeriodStart,
+            DateFin = window.PeriodEnd,
+            DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
             AssistantId = userId,
             CreatedBy = userId
@@ -1105,7 +1192,8 @@ public class DeclarationService : IDeclarationService
             CreatedBy = userId
         });
         await _db.SaveChangesAsync();
-        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration), "Déclaration IS créée.");
+        await EnsureAnnualChecklistInternalAsync(declaration.Id, cabinetId, userId);
+        return ApiResponse<DeclarationDto>.Ok(_mapper.Map<DeclarationDto>(declaration), "Déclaration fiscale (liasse) créée.");
     }
 
     public async Task<ApiResponse<DeclarationISDto>> GetISDataAsync(int declarationId, int cabinetId)
@@ -1117,18 +1205,34 @@ public class DeclarationService : IDeclarationService
 
     public Task<ApiResponse<DeclarationISDto>> CalculateISAsync(DeclarationISDto dto)
     {
+        // Aggregate retraitement lines into totals when provided
+        if (dto.Retraitements is { Count: > 0 })
+        {
+            dto.Reintegrations = dto.Retraitements.Where(r => string.Equals(r.Type, "Deduction", StringComparison.OrdinalIgnoreCase) == false)
+                .Sum(r => r.Montant);
+            dto.Deductions = dto.Retraitements.Where(r => string.Equals(r.Type, "Deduction", StringComparison.OrdinalIgnoreCase))
+                .Sum(r => r.Montant);
+            dto.RetraitementsJson = System.Text.Json.JsonSerializer.Serialize(dto.Retraitements);
+        }
+
         dto.ResultatFiscal = dto.ResultatComptable + dto.Reintegrations - dto.Deductions;
         dto.BaseImposable = Math.Max(0, dto.ResultatFiscal - dto.DeficitsAnterieurs);
 
-        // Moroccan IS progressive rates 2026
+        // Moroccan IS rates (aligned UI + API): 10 / 20 / 31 / 35
         decimal isDu;
         if (dto.BaseImposable <= 300_000m) { dto.TauxIS = 10m; isDu = dto.BaseImposable * 0.10m; }
         else if (dto.BaseImposable <= 1_000_000m) { dto.TauxIS = 20m; isDu = dto.BaseImposable * 0.20m; }
-        else { dto.TauxIS = 31m; isDu = dto.BaseImposable * 0.31m; }
+        else if (dto.BaseImposable <= 100_000_000m) { dto.TauxIS = 31m; isDu = dto.BaseImposable * 0.31m; }
+        else { dto.TauxIS = 35m; isDu = dto.BaseImposable * 0.35m; }
 
         dto.ISDu = Math.Round(isDu, 2);
-        dto.CotisationMinimale = Math.Max(dto.ResultatComptable * 0.005m, 3000m); // 0.5% min or 3000 MAD
+        // Cotisation minimale : 0,5 % du CA/résultat comptable (plancher 3 000 MAD)
+        dto.CotisationMinimale = Math.Round(Math.Max(dto.ResultatComptable * 0.005m, 3000m), 2);
         dto.ISDu = Math.Max(dto.ISDu, dto.CotisationMinimale);
+
+        if (dto.AcomptesVerses <= 0)
+            dto.AcomptesVerses = dto.Acompte1 + dto.Acompte2 + dto.Acompte3 + dto.Acompte4;
+
         dto.ISNet = dto.ISDu - dto.AcomptesVerses;
 
         return Task.FromResult(ApiResponse<DeclarationISDto>.Ok(dto));
@@ -1140,8 +1244,10 @@ public class DeclarationService : IDeclarationService
         if (declaration == null) return ApiResponse<DeclarationISDto>.Fail("Déclaration non trouvée.");
         if (!await HasActiveContractAsync(declaration.ClientId, cabinetId))
             return ApiResponse<DeclarationISDto>.Fail("Modification impossible : le client n'a aucun contrat actif ou validé.");
-        if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee)
-            return ApiResponse<DeclarationISDto>.Fail("Impossible de modifier une déclaration validée ou soumise.");
+        if (declaration.Statut == RefCodes.StatutDeclaration.Soumise || declaration.Statut == RefCodes.StatutDeclaration.Validee
+            || declaration.Statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs || declaration.Statut == RefCodes.StatutDeclaration.Deposee
+            || declaration.Statut == RefCodes.StatutDeclaration.Cloturee)
+            return ApiResponse<DeclarationISDto>.Fail("Impossible de modifier une déclaration validée, soumise ou clôturée.");
         var lockErr = await EnsureStepHolderCanEditAsync(declarationId, cabinetId, userId);
         if (lockErr != null) return ApiResponse<DeclarationISDto>.Fail(lockErr);
 
@@ -1166,35 +1272,135 @@ public class DeclarationService : IDeclarationService
         isData.ISDu = calculated.ISDu;
         isData.AcomptesVerses = calculated.AcomptesVerses;
         isData.ISNet = calculated.ISNet;
+        isData.CotisationMinimale = calculated.CotisationMinimale;
         isData.Acompte1 = calculated.Acompte1; isData.Acompte2 = calculated.Acompte2;
         isData.Acompte3 = calculated.Acompte3; isData.Acompte4 = calculated.Acompte4;
+        isData.RetraitementsJson = calculated.RetraitementsJson ?? dto.RetraitementsJson;
+        if (!string.IsNullOrWhiteSpace(dto.LiassePanesJson))
+            isData.LiassePanesJson = dto.LiassePanesJson;
+        isData.UpdatedBy = userId;
+        isData.UpdatedAt = DateTime.UtcNow;
 
         declaration.MontantDu = Math.Max(0, calculated.ISNet);
         declaration.MontantCredit = calculated.ISNet < 0 ? Math.Abs(calculated.ISNet) : 0;
         await _db.SaveChangesAsync();
-        return ApiResponse<DeclarationISDto>.Ok(calculated, "Données IS sauvegardées.");
+        return ApiResponse<DeclarationISDto>.Ok(calculated, "Données IS / liasse sauvegardées.");
+    }
+
+    private static readonly (string Code, string Label, string Categorie)[] AnnualChecklistTemplate =
+    {
+        ("BALANCE", "Balance générale / grand livre", "Comptable"),
+        ("JOURNAUX", "Journaux (achats, ventes, banque, OD)", "Comptable"),
+        ("BANQUES", "Relevés bancaires annuels + rapprochements", "Bancaire"),
+        ("INVENTAIRE", "Inventaire stocks / travaux en cours", "Comptable"),
+        ("IMMOB", "État des immobilisations & amortissements", "Comptable"),
+        ("PAIE", "États de paie / CNSS / IR salaires", "Social"),
+        ("FACTURES", "Factures d'achat et de vente significatives", "Fiscal"),
+        ("PV_AG", "PV Assemblée Générale / affectation résultat", "Legal"),
+        ("CONTRATS", "Contrats, baux, emprunts en cours", "Legal"),
+        ("PROVISIONS", "Détail provisions et créances douteuses", "Comptable"),
+    };
+
+    private async Task EnsureAnnualChecklistInternalAsync(int declarationId, int cabinetId, string userId)
+    {
+        var existing = await _db.DeclarationChecklistItems
+            .CountAsync(c => c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted);
+        if (existing > 0) return;
+
+        var order = 0;
+        foreach (var (code, label, cat) in AnnualChecklistTemplate)
+        {
+            _db.DeclarationChecklistItems.Add(new DeclarationChecklistItem
+            {
+                DeclarationId = declarationId,
+                CabinetId = cabinetId,
+                Code = code,
+                Label = label,
+                Categorie = cat,
+                SortOrder = order++,
+                IsRequired = true,
+                CreatedBy = userId
+            });
+        }
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task<ApiResponse<List<DeclarationChecklistItemDto>>> GetChecklistAsync(int declarationId, int cabinetId)
+    {
+        var items = await _db.DeclarationChecklistItems
+            .Where(c => c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted)
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+        return ApiResponse<List<DeclarationChecklistItemDto>>.Ok(_mapper.Map<List<DeclarationChecklistItemDto>>(items));
+    }
+
+    public async Task<ApiResponse<List<DeclarationChecklistItemDto>>> EnsureAnnualChecklistAsync(int declarationId, int cabinetId, string userId)
+    {
+        var decl = await _db.Declarations.FirstOrDefaultAsync(d => d.Id == declarationId && d.CabinetId == cabinetId);
+        if (decl == null) return ApiResponse<List<DeclarationChecklistItemDto>>.Fail("Déclaration non trouvée.");
+        await EnsureAnnualChecklistInternalAsync(declarationId, cabinetId, userId);
+        return await GetChecklistAsync(declarationId, cabinetId);
+    }
+
+    public async Task<ApiResponse<DeclarationChecklistItemDto>> MarkChecklistItemReceivedAsync(
+        int declarationId, int itemId, int? documentId, int cabinetId, string userId)
+    {
+        var item = await _db.DeclarationChecklistItems
+            .FirstOrDefaultAsync(c => c.Id == itemId && c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted);
+        if (item == null) return ApiResponse<DeclarationChecklistItemDto>.Fail("Pièce checklist introuvable.");
+
+        item.IsReceived = true;
+        item.ReceivedAt = DateTime.UtcNow;
+        item.DocumentId = documentId ?? item.DocumentId;
+        item.UpdatedBy = userId;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return ApiResponse<DeclarationChecklistItemDto>.Ok(_mapper.Map<DeclarationChecklistItemDto>(item), "Pièce marquée reçue.");
+    }
+
+    public async Task<ApiResponse<bool>> IsChecklistCompleteAsync(int declarationId, int cabinetId)
+    {
+        var required = await _db.DeclarationChecklistItems
+            .Where(c => c.DeclarationId == declarationId && c.CabinetId == cabinetId && !c.IsDeleted && c.IsRequired)
+            .ToListAsync();
+        if (required.Count == 0) return ApiResponse<bool>.Ok(true);
+        var complete = required.All(c => c.IsReceived);
+        return ApiResponse<bool>.Ok(complete);
     }
 
     // ═══════════════════════════════════════════════════════════════
     //  IR (Impôt sur le Revenu)
     // ═══════════════════════════════════════════════════════════════
     public async Task<ApiResponse<DeclarationDto>> CreateIRAsync(int clientId, int anneeFiscale, int cabinetId, string userId)
+        => await CreateIRInternalAsync(clientId, anneeFiscale, cabinetId, userId, null);
+
+    private async Task<ApiResponse<DeclarationDto>> CreateIRInternalAsync(int clientId, int anneeFiscale, int cabinetId, string userId, int? exerciceId, CreateDeclarationDto? periodCfg = null)
     {
         if (!await HasActiveContractAsync(clientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration IR : le client n'a aucun contrat actif ou validé.");
 
+        var exoGate = await RequireExerciceAsync(clientId, cabinetId, exerciceId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
+
+        var freq = periodCfg?.Frequency ?? "Annuelle";
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            "IR", DateTime.UtcNow, anneeFiscale, periodCfg?.Periode, null, freq);
+        var dateLimite = ResolveInitDateLimite(periodCfg, window, "IR");
 
         var declaration = new Declaration
         {
             ClientId = clientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Type = "IR",
-            Periode = anneeFiscale.ToString(),
-            DateDebut = new DateTime(anneeFiscale, 1, 1),
-            DateFin = new DateTime(anneeFiscale, 12, 31),
-            DateLimite = new DateTime(anneeFiscale + 1, 4, 30), // 30 April N+1
+            Periode = window.PeriodeLabel,
+            DateDebut = window.PeriodStart,
+            DateFin = window.PeriodEnd,
+            DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
             AssistantId = userId,
             CreatedBy = userId
@@ -1267,26 +1473,34 @@ public class DeclarationService : IDeclarationService
     //  CNSS
     // ═══════════════════════════════════════════════════════════════
     public async Task<ApiResponse<DeclarationDto>> CreateCNSSAsync(int clientId, int cabinetId, string userId)
+        => await CreateCNSSInternalAsync(clientId, cabinetId, userId, null);
+
+    private async Task<ApiResponse<DeclarationDto>> CreateCNSSInternalAsync(int clientId, int cabinetId, string userId, int? exerciceId, CreateDeclarationDto? periodCfg = null)
     {
         if (!await HasActiveContractAsync(clientId, cabinetId))
             return ApiResponse<DeclarationDto>.Fail("Impossible de créer une déclaration CNSS : le client n'a aucun contrat actif ou validé.");
 
+        var exoGate = await RequireExerciceAsync(clientId, cabinetId, exerciceId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<DeclarationDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<DeclarationDto>.Fail("Client non trouvé.");
 
-        var now = DateTime.UtcNow;
-        var periodeDebut = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
-        var periodeFin = periodeDebut.AddMonths(1).AddDays(-1);
+        var window = MoroccoDeclarationCalendar.ResolveForCreate(
+            "CNSS", DateTime.UtcNow, exoGate.Data.Annee, periodCfg?.Periode, null, periodCfg?.Frequency);
+        var (periodStart, periodEnd, dateLimite, periodeLabel) = ApplyPeriodTemplate(periodCfg, window, "CNSS");
 
         var declaration = new Declaration
         {
             ClientId = clientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Type = "CNSS",
-            Periode = periodeDebut.ToString("yyyy-MM"),
-            DateDebut = periodeDebut,
-            DateFin = periodeFin,
-            DateLimite = new DateTime(periodeFin.AddMonths(1).Year, periodeFin.AddMonths(1).Month, Math.Min(10, DateTime.DaysInMonth(periodeFin.AddMonths(1).Year, periodeFin.AddMonths(1).Month))),
+            Periode = periodeLabel,
+            DateDebut = periodStart,
+            DateFin = periodEnd,
+            DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
             AssistantId = userId,
             CreatedBy = userId

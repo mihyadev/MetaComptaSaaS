@@ -1,0 +1,259 @@
+@model List<MetaCompta.Application.DTOs.ExerciceComptableDto>
+@{
+    ViewData["Title"] = "Exercices comptables";
+    var client = ViewBag.Client as MetaCompta.Application.DTOs.ClientDto;
+    var selectedId = ViewBag.SelectedExerciceId as int?;
+    var canCreate = ViewBag.CanComptabiliteCreate as bool? ?? false;
+    var canCloture = ViewBag.CanComptabiliteCloture as bool? ?? false;
+    var hasOpen = ViewBag.HasOpenExercice as bool? ?? false;
+    var suggestedAnnee = ViewBag.SuggestedAnnee as int? ?? DateTime.Now.Year;
+    var openCount = Model.Count(e => string.Equals(e.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase));
+    var closedCount = Model.Count - openCount;
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="bg-primary text-white rounded-3 p-3 lh-1"><i class="bi bi-calendar3 fs-4"></i></span>
+        <div>
+            <h1 class="h3 fw-bold mb-0">Exercices comptables</h1>
+            <div class="text-body-secondary small">Cycle Sage · ouverture, clôture, report à nouveau (AN)</div>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        @if (canCreate)
+        {
+            <button type="button" class="btn btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCreateExercice">
+                <i class="bi bi-plus-lg me-1"></i> Ouvrir un exercice
+            </button>
+        }
+    </div>
+</div>
+
+@if (client != null)
+{
+    <div class="alert border-0 shadow-sm rounded-4 bg-primary-subtle text-primary-emphasis mb-4 py-2 px-3 d-flex align-items-center gap-2 flex-wrap">
+        <i class="bi bi-building"></i>
+        <strong>@client.RaisonSociale</strong>
+        <span class="text-muted">@client.FormeJuridique</span>
+        <span class="vr mx-1 d-none d-md-inline"></span>
+        <span class="small text-muted">Mois de clôture : @(client.MoisClotureExercice > 0 ? client.MoisClotureExercice : 12)</span>
+    </div>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card h-100">
+            <div class="stat-label">Total</div>
+            <div class="stat-value">@Model.Count</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-success">
+            <div class="stat-label">Ouvert(s)</div>
+            <div class="stat-value text-success">@openCount</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-secondary">
+            <div class="stat-label">Clôturé(s)</div>
+            <div class="stat-value">@closedCount</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-primary">
+            <div class="stat-label">Sélection session</div>
+            <div class="stat-value" style="font-size:1.25rem;">
+                @if (selectedId is int sid)
+                {
+                    var sel = Model.FirstOrDefault(e => e.Id == sid);
+                    @(sel != null ? $"N{sel.Annee}" : "—")
+                }
+                else { <span class="text-muted">—</span> }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body text-center py-5">
+            <div class="mb-3"><i class="bi bi-calendar-x text-danger" style="font-size:2.5rem;"></i></div>
+            <h4 class="fw-bold mb-2">Aucun exercice pour ce dossier</h4>
+            <p class="text-muted mb-4 mx-auto" style="max-width:32rem;">
+                Créez un exercice ouvert avant toute déclaration, écriture ou période de paie (règle type Sage).
+            </p>
+            @if (canCreate)
+            {
+                <button type="button" class="btn btn-danger rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalCreateExercice">
+                    <i class="bi bi-plus-circle me-1"></i> Créer l'exercice
+                </button>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="exo-board">
+        @foreach (var exo in Model)
+        {
+            var isOpen = string.Equals(exo.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase);
+            var isSelected = selectedId == exo.Id;
+            <div class="exo-card @(isOpen ? "exo-card-open" : "exo-card-closed") @(isSelected ? "exo-card-selected" : "")">
+                <div class="exo-card-top">
+                    <div>
+                        <div class="exo-card-year">Exercice @exo.Annee</div>
+                        <div class="exo-card-dates text-muted small">
+                            @exo.DateDebut.ToString("dd/MM/yyyy") → @exo.DateFin.ToString("dd/MM/yyyy")
+                        </div>
+                    </div>
+                    <span class="badge rounded-pill @(isOpen ? "text-bg-success" : "text-bg-secondary")">
+                        @(isOpen ? "Ouvert" : "Clôturé")
+                    </span>
+                </div>
+
+                @if (isSelected)
+                {
+                    <div class="exo-card-chip"><i class="bi bi-check2-circle"></i> Actif dans la session</div>
+                }
+
+                <div class="exo-card-actions">
+                    @if (!isSelected)
+                    {
+                        <form asp-action="SelectExercice" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="exerciceId" value="@exo.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill">
+                                <i class="bi bi-cursor me-1"></i> Sélectionner
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="btn btn-sm btn-primary rounded-pill disabled"><i class="bi bi-eye me-1"></i> En cours</span>
+                    }
+
+                    <a class="btn btn-sm btn-outline-secondary rounded-pill" href="@Url.Action("Balance", new { exerciceId = exo.Id })">
+                        <i class="bi bi-symmetry-horizontal me-1"></i> Balance
+                    </a>
+                    <a class="btn btn-sm btn-outline-secondary rounded-pill" href="@Url.Action("Ecritures")">
+                        <i class="bi bi-pencil-square me-1"></i> Écritures
+                    </a>
+
+                    @if (isOpen)
+                    {
+                        if (canCloture)
+                        {
+                            <a class="btn btn-sm btn-outline-danger rounded-pill" href="@Url.Action("Cloture", new { exerciceId = exo.Id })">
+                                <i class="bi bi-lock me-1"></i> Clôturer
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="btn btn-sm btn-outline-secondary rounded-pill disabled"
+                                  title="Permission comptabilite.cloture requise (Gérant / Manager / Comptable)">
+                                <i class="bi bi-lock me-1"></i> Clôturer
+                            </span>
+                        }
+                    }
+
+                    @if (!isOpen && canCloture)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-warning rounded-pill"
+                                data-bs-toggle="modal" data-bs-target="#modalReouvrir"
+                                data-exo-id="@exo.Id" data-exo-annee="@exo.Annee">
+                            <i class="bi bi-unlock me-1"></i> Réouvrir
+                        </button>
+                    }
+                </div>
+
+                <div class="exo-card-footer small text-muted">
+                    @if (isOpen)
+                    {
+                        <span><i class="bi bi-info-circle me-1"></i> Créations (déclarations, paie, écritures) autorisées</span>
+                    }
+                    else
+                    {
+                        <span><i class="bi bi-shield-lock me-1"></i> Lecture seule — clôture Sage appliquée</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@* ── Modal créer ── *@
+<div class="modal fade" id="modalCreateExercice" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <form asp-action="CreateExerciceForm" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-calendar-plus text-primary me-2"></i>Ouvrir un exercice</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (hasOpen)
+                    {
+                        <div class="alert alert-info rounded-3 small">
+                            Un exercice est déjà ouvert. Vous pouvez quand même en ouvrir un nouveau (ex. N+1) sans clôturer le précédent. Sélectionnez ensuite l'exercice actif dans le sélecteur.
+                        </div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label" for="annee">Année d'exercice</label>
+                        <input type="number" class="form-control rounded-3" id="annee" name="annee" value="@suggestedAnnee" min="1990" max="2100" required />
+                    </div>
+                    <p class="small text-muted mb-0">
+                        Les dates début/fin sont calculées selon le mois de clôture du client (@(client?.MoisClotureExercice > 0 ? client!.MoisClotureExercice : 12)).
+                    </p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary rounded-pill" @(canCreate ? "" : "disabled")>
+                        <i class="bi bi-check2 me-1"></i> Créer &amp; sélectionner
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ── Modal réouvrir ── *@
+<div class="modal fade" id="modalReouvrir" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <form asp-action="Reouvrir" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="exerciceId" id="reouvrirExerciceId" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-unlock text-warning me-2"></i>Réouvrir l'exercice <span id="reouvrirAnnee"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning rounded-3 small">
+                        Réservé aux cas exceptionnels. Action auditée. Plusieurs exercices peuvent rester ouverts en parallèle.
+                    </div>
+                    <label class="form-label" for="reason">Motif (obligatoire)</label>
+                    <textarea class="form-control rounded-3" name="reason" id="reason" rows="3" required placeholder="Motif de réouverture..."></textarea>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning rounded-pill">
+                        <i class="bi bi-unlock me-1"></i> Confirmer la réouverture
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+document.getElementById('modalReouvrir')?.addEventListener('show.bs.modal', function (ev) {
+    var btn = ev.relatedTarget;
+    if (!btn) return;
+    document.getElementById('reouvrirExerciceId').value = btn.getAttribute('data-exo-id') || '';
+    document.getElementById('reouvrirAnnee').textContent = btn.getAttribute('data-exo-annee') || '';
+});
+</script>
+}

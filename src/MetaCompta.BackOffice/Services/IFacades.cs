@@ -28,7 +28,7 @@ public interface IClientFacade
     /// <summary>Returns true if the client has Manage-mode access (Valide/Actif + dates).</summary>
     Task<bool> HasActiveContractAsync(int clientId);
     /// <summary>Manage vs Consult context for the selected client dossier.</summary>
-    Task<ContractAccessContextDto> GetContractAccessAsync(int clientId);
+    Task<ContractAccessContextDto> GetContractAccessAsync(int clientId, int? exerciceId = null);
     /// <summary>Get all service contracts for a client</summary>
     Task<List<ServiceContratDto>> GetServiceContratsAsync(int clientId, int? exerciceFiscal = null);
     /// <summary>Initialize services for a new exercise year</summary>
@@ -59,7 +59,7 @@ public interface IEmployeeFacade
 /// </summary>
 public interface IDeclarationFacade
 {
-    Task<PagedResult<DeclarationDto>?> GetAllAsync(int? clientId = null, string? type = null, string? statut = null, int page = 1);
+    Task<PagedResult<DeclarationDto>?> GetAllAsync(int? clientId = null, string? type = null, string? statut = null, int page = 1, int? exerciceId = null);
     Task<DeclarationDto?> GetByIdAsync(int id);
     // Generic create
     Task<ApiResponse<DeclarationDto>?> CreateAsync(CreateDeclarationDto dto);
@@ -107,7 +107,7 @@ public interface IDeclarationFacade
 /// </summary>
 public interface IPayrollFacade
 {
-    Task<List<PayrollPeriodDto>> GetAllPeriodsAsync(int? clientId = null);
+    Task<List<PayrollPeriodDto>> GetAllPeriodsAsync(int? clientId = null, int? exerciceId = null);
     Task<PayrollPeriodDto?> GetPeriodAsync(int id);
     Task<List<PaySlipDto>> GetPaySlipsAsync(int periodId);
     Task<ApiResponse<PayrollPeriodDto>?> InitializeAsync(int clientId, int annee, int mois);
@@ -188,6 +188,10 @@ public interface IComptabiliteFacade
     Task<List<ExerciceComptableDto>> GetExercicesAsync(int clientId);
     Task<ApiResponse<ExerciceComptableDto>?> CreateExerciceAsync(ExerciceCreateDto dto);
     Task<ExerciceComptableDto?> GetExerciceByIdAsync(int id);
+    Task<bool> HasOpenExerciceAsync(int clientId);
+    Task<ApiResponse<ExerciceCloturePrecheckDto>?> PrecheckClotureAsync(int exerciceId);
+    Task<ApiResponse<ExerciceClotureResultDto>?> CloturerExerciceAsync(ExerciceClotureRequestDto dto);
+    Task<ApiResponse<ExerciceComptableDto>?> ReouvrirExerciceAsync(int exerciceId, string reason);
     Task<ComptaDashboardDto?> GetDashboardAsync(int clientId, int? exerciceId = null);
     Task<List<CompteComptableDto>> GetComptesAsync(int clientId, string? search = null);
     Task<ApiResponse<CompteComptableDto>?> CreateCompteAsync(CompteComptableCreateDto dto);
@@ -308,17 +312,17 @@ public interface IDepartmentFacade
 public interface IWorkflowFacade
 {
     // Templates
-    Task<PagedResult<WorkflowTemplateDto>?> GetTemplatesAsync(string? declarationType = null, int? clientId = null, int page = 1);
+    Task<PagedResult<WorkflowTemplateDto>?> GetTemplatesAsync(string? declarationType = null, int? clientId = null, int page = 1, int pageSize = 20, bool cabinetOnly = false, bool activeOnly = false, bool excludeAncien = false);
     Task<WorkflowTemplateDto?> GetTemplateByIdAsync(int id);
     Task<ApiResponse<WorkflowTemplateDto>?> CreateTemplateAsync(WorkflowTemplateCreateDto dto);
     Task<ApiResponse<WorkflowTemplateDto>?> UpdateTemplateAsync(int id, WorkflowTemplateCreateDto dto);
     Task<ApiResponse<bool>?> DeleteTemplateAsync(int id);
     Task<ApiResponse<WorkflowTemplateDto>?> CreateDefaultTemplateAsync();
-    Task<ApiResponse<List<WorkflowTemplateDto>>?> SeedAllDefaultTemplatesAsync();
+    Task<ApiResponse<List<WorkflowTemplateDto>>?> SeedAllDefaultTemplatesAsync(bool forceReset = false);
 
     // Instances
     Task<ApiResponse<WorkflowInstanceDto>?> StartWorkflowAsync(StartWorkflowDto dto);
-    Task<PagedResult<WorkflowInstanceDto>?> GetInstancesAsync(int? clientId = null, string? status = null, int? declarationId = null, int page = 1);
+    Task<PagedResult<WorkflowInstanceDto>?> GetInstancesAsync(int? clientId = null, string? status = null, int? declarationId = null, int page = 1, int? exerciceId = null);
     Task<WorkflowInstanceDto?> GetInstanceByIdAsync(int id);
     Task<ApiResponse<bool>?> CancelWorkflowAsync(int id, string reason);
     Task<ApiResponse<bool>?> PauseWorkflowAsync(int id);
@@ -335,6 +339,7 @@ public interface IWorkflowFacade
     // Client Config
     Task<List<ClientWorkflowConfigDto>> GetClientConfigsAsync(int clientId);
     Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto);
+    Task<ApiResponse<bool>?> DeleteClientConfigAsync(int configId, int clientId);
     Task<ApiResponse<WorkflowTemplateDto>?> EnsureClientTemplateAsync(EnsureClientWorkflowDto dto);
     Task<ApiResponse<ClientWorkflowConfigDto>?> SaveClientWorkflowCustomizationAsync(ClientWorkflowCustomizeDto dto);
 
@@ -383,6 +388,7 @@ public interface ICommercialFacade
     Task<ApiResponse<ContratCommercialDto>?> ReactiverContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> TerminerContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> DupliquerContratAsync(int id);
+    Task<ApiResponse<ContratCommercialDto>?> CreateRectificatifContratAsync(int id, string? motif = null);
     Task<ApiResponse<int>?> SyncServicesFromContratAsync(int contratId);
 
     // Factures

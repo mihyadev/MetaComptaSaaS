@@ -97,6 +97,7 @@ public static class ClaimDefinitions
     public const string ComptabiliteCreate = "comptabilite.create";
     public const string ComptabiliteEdit = "comptabilite.edit";
     public const string ComptabiliteDetail = "comptabilite.detail";
+    public const string ComptabiliteCloture = "comptabilite.cloture";
 
     // ── Workflow ─────────────────────────────────────────────────
     public const string WorkflowView = "workflow.view";
@@ -157,7 +158,7 @@ public static class ClaimDefinitions
         TaskCreate, TaskEdit, TaskAssign, TaskDetail,
         ReportView, ReportExport,
         JuridiqueCreate, JuridiqueEdit, JuridiqueDetail,
-        ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail,
+        ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail, ComptabiliteCloture,
         WorkflowView, WorkflowCreate, WorkflowEdit, WorkflowDelete, WorkflowConfigure,
         WorkflowAdvance, WorkflowValidate, WorkflowReassign, WorkflowCancel, WorkflowMonitor,
         DepartmentView, DepartmentCreate, DepartmentEdit, DepartmentDelete, DepartmentManageMembers,
@@ -184,7 +185,7 @@ public static class ClaimDefinitions
         ["task"] = new[] { TaskCreate, TaskEdit, TaskAssign, TaskDetail },
         ["report"] = new[] { ReportView, ReportExport },
         ["juridique"] = new[] { JuridiqueCreate, JuridiqueEdit, JuridiqueDetail },
-        ["comptabilite"] = new[] { ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail },
+        ["comptabilite"] = new[] { ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail, ComptabiliteCloture },
         ["workflow"] = new[] { WorkflowView, WorkflowCreate, WorkflowEdit, WorkflowDelete, WorkflowConfigure, WorkflowAdvance, WorkflowValidate, WorkflowReassign, WorkflowCancel, WorkflowMonitor },
         ["department"] = new[] { DepartmentView, DepartmentCreate, DepartmentEdit, DepartmentDelete, DepartmentManageMembers },
         ["commercial"] = new[] { CommercialCreate, CommercialEdit, CommercialDetail, CommercialDelete, CommercialValidate, CommercialConvert, CommercialSign },

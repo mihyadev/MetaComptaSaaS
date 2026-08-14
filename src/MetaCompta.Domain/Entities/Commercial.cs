@@ -185,8 +185,15 @@ public class ContratCommercial : TenantEntity
     public string? ConditionsParticulieres { get; set; }
     public string? ClausesSpecifiques { get; set; }
 
-    // ── Versioning ──
+    // ── Versioning / rectificatif ──
     public int Version { get; set; } = 1;
+    /// <summary>Original contract this rectificatif amends (null = root contract).</summary>
+    public int? ParentContratId { get; set; }
+    public virtual ContratCommercial? ParentContrat { get; set; }
+    /// <summary>Set on the original when a rectificatif is validated and replaces it.</summary>
+    public int? RemplaceParContratId { get; set; }
+    public virtual ContratCommercial? RemplaceParContrat { get; set; }
+    public string? MotifRectificatif { get; set; }
 
     // ── Assignation ──
     public string? ResponsableId { get; set; }
@@ -208,6 +215,7 @@ public class ContratCommercial : TenantEntity
     public virtual ICollection<LigneDocumentCommercial> Lignes { get; set; } = new List<LigneDocumentCommercial>();
     public virtual ICollection<DocumentCommercialHistorique> Historique { get; set; } = new List<DocumentCommercialHistorique>();
     public virtual ICollection<Facture> Factures { get; set; } = new List<Facture>();
+    public virtual ICollection<ContratCommercial> Rectificatifs { get; set; } = new List<ContratCommercial>();
 }
 
 /// <summary>

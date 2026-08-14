@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MetaCompta.Application.DTOs;
 using MetaCompta.Application.Interfaces;
 using MetaCompta.Domain.Common;
@@ -9,6 +10,8 @@ namespace MetaCompta.Application.Services;
 
 public class ContractAccessService : IContractAccessService
 {
+    private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
+
     private readonly MetaComptaDbContext _db;
 
     public ContractAccessService(MetaComptaDbContext db) => _db = db;
@@ -31,7 +34,8 @@ public class ContractAccessService : IContractAccessService
     public Task<bool> HasManageAccessAsync(int clientId, int cabinetId)
         => IsManageContractQuery(clientId, cabinetId).AnyAsync();
 
-    public async Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId)
+    public async Task<ContractAccessContextDto> GetContractAccessContextAsync(
+        int clientId, int cabinetId, int? exerciceComptableId = null)
     {
         var today = BusinessToday();
         var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
@@ -39,16 +43,66 @@ public class ContractAccessService : IContractAccessService
         var contracts = await _db.Set<ContratCommercial>()
             .AsNoTracking()
             .Where(c => c.ClientId == clientId && c.CabinetId == cabinetId && !c.IsDeleted)
-            .Select(c => new { c.Statut, c.DateDebutContrat, c.DateFinContrat })
+            .Select(c => new { c.Statut, c.DateDebutContrat, c.DateFinContrat, c.ServicesActivesJson })
             .ToListAsync();
 
-        var activeServices = await _db.ServiceContrats
-            .AsNoTracking()
-            .Where(s => s.ClientId == clientId && s.Client!.CabinetId == cabinetId
-                && s.Actif && s.DateDebut.Date <= today && (s.DateFin == null || s.DateFin.Value.Date >= today))
-            .Select(s => s.TypeService)
-            .Distinct()
-            .ToListAsync();
+        int? exoAnnee = null;
+        DateTime? exoDebut = null;
+        DateTime? exoFin = null;
+        if (exerciceComptableId is > 0)
+        {
+            var exo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == exerciceComptableId && e.ClientId == clientId && e.CabinetId == cabinetId);
+            if (exo != null)
+            {
+                exoAnnee = exo.Annee;
+                exoDebut = exo.DateDebut.Date;
+                exoFin = exo.DateFin.Date;
+            }
+        }
+
+        var svcQuery = _db.ServiceContrats.AsNoTracking()
+            .Where(s => s.ClientId == clientId && s.Client!.CabinetId == cabinetId && s.Actif);
+
+        if (exoAnnee.HasValue && exoDebut.HasValue && exoFin.HasValue)
+        {
+            var annee = exoAnnee.Value;
+            var debut = exoDebut.Value;
+            var fin = exoFin.Value;
+            var exoId = exerciceComptableId!.Value;
+            svcQuery = svcQuery.Where(s =>
+                s.ExerciceComptableId == exoId
+                || (s.ExerciceComptableId == null
+                    && (s.ExerciceFiscal == null || s.ExerciceFiscal == annee)
+                    && s.DateDebut.Date <= fin
+                    && (s.DateFin == null || s.DateFin.Value.Date >= debut)));
+        }
+        else
+        {
+            svcQuery = svcQuery.Where(s =>
+                s.DateDebut.Date <= today && (s.DateFin == null || s.DateFin.Value.Date >= today));
+        }
+
+        var fromRows = await svcQuery.Select(s => s.TypeService).Distinct().ToListAsync();
+
+        var manageWindowContracts = contracts.Where(c =>
+            activeStatuses.Contains(c.Statut)
+            && (c.DateDebutContrat == null || c.DateDebutContrat.Value.Date <= today)
+            && (c.DateFinContrat == null || c.DateFinContrat.Value.Date >= today)).ToList();
+
+        // JSON fallback only when no ServiceContrats for the selected exercice
+        var fromJson = new List<string>();
+        if (fromRows.Count == 0)
+        {
+            foreach (var c in manageWindowContracts)
+                fromJson.AddRange(ParseServicesFromJson(c.ServicesActivesJson));
+        }
+
+        var activeServices = fromRows
+            .Concat(fromJson)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         if (contracts.Count == 0)
         {
@@ -61,10 +115,7 @@ public class ContractAccessService : IContractAccessService
             };
         }
 
-        var manageOk = contracts.Any(c =>
-            activeStatuses.Contains(c.Statut)
-            && (c.DateDebutContrat == null || c.DateDebutContrat.Value.Date <= today)
-            && (c.DateFinContrat == null || c.DateFinContrat.Value.Date >= today));
+        var manageOk = manageWindowContracts.Count > 0;
 
         if (manageOk)
         {
@@ -134,5 +185,26 @@ public class ContractAccessService : IContractAccessService
                 && activeStatuses.Contains(c.Statut) && !c.IsDeleted
                 && (c.DateDebutContrat == null || c.DateDebutContrat <= today)
                 && (c.DateFinContrat == null || c.DateFinContrat >= today));
+    }
+
+    private static IEnumerable<string> ParseServicesFromJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) yield break;
+        List<ContratServiceActiveLine>? lines;
+        try
+        {
+            lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(json, JsonOpts);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        if (lines == null) yield break;
+        foreach (var line in lines)
+        {
+            if (!string.IsNullOrWhiteSpace(line.TypeService))
+                yield return line.TypeService.Trim();
+        }
     }
 }

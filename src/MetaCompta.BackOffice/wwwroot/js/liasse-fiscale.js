@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MetaCompta Liasse Fiscale v4.0 — Excel-like Accounting Workspace
  * Every cell: shows value + formula reference from Balance
  * Click any cell: configure formula (change which accounts are used)
@@ -67,20 +67,24 @@ var PCM = (function(){
     };
 })();
 
-/* ═══ 2. STORAGE — Per client + declaration ═══ */
+/* ═══ 2. STORAGE — Per client + exercice ═══ */
 var Storage = (function(){
     var _pfx='lf_', _cpfx='lfc_';
     return {
-        setContext:function(declId,clientId){_pfx='lf_'+declId+'_';_cpfx='lfc_'+clientId+'_';},
+        setContext:function(declId,clientId,exercice){
+            var ex = exercice || '0';
+            var cid = clientId || '0';
+            _pfx = 'lf_'+cid+'_'+ex+'_';
+            _cpfx = 'lfc_'+cid+'_'+ex+'_';
+            if(declId){ /* legacy key still readable for overrides if needed */ }
+        },
         get:function(k){try{return JSON.parse(localStorage.getItem(_pfx+k));}catch(e){return null;}},
         set:function(k,v){try{localStorage.setItem(_pfx+k,JSON.stringify(v));}catch(e){}},
         remove:function(k){localStorage.removeItem(_pfx+k);},
-        /* Client-level formula config — persists across declarations */
         getFormula:function(cellCode){var f=this.getClientFormulas();return f[cellCode]||null;},
         setFormula:function(cellCode,formula){var f=this.getClientFormulas();f[cellCode]=formula;try{localStorage.setItem(_cpfx+'formulas',JSON.stringify(f));}catch(e){}},
         removeFormula:function(cellCode){var f=this.getClientFormulas();delete f[cellCode];try{localStorage.setItem(_cpfx+'formulas',JSON.stringify(f));}catch(e){}},
         getClientFormulas:function(){try{return JSON.parse(localStorage.getItem(_cpfx+'formulas'))||{};}catch(e){return {};}},
-        /* Value overrides per declaration */
         getOverride:function(c){var o=this.get('overrides')||{};return o[c]!==undefined?o[c]:null;},
         setOverride:function(c,v){var o=this.get('overrides')||{};o[c]=v;this.set('overrides',o);},
         removeOverride:function(c){var o=this.get('overrides')||{};delete o[c];this.set('overrides',o);},
@@ -154,6 +158,7 @@ var Journal = (function(){
     }
     return {
         init:function(yr){_entries=_demo(yr);},
+        clear:function(){_entries=[];},
         getAll:function(){return _entries.slice();},
         getByJournal:function(j){return _entries.filter(function(e){return e.journal===j;});},
         getByAccount:function(a){return _entries.filter(function(e){return e.account===a;});},
@@ -175,6 +180,16 @@ var Ledger = (function(){
                 _accts[e.account].totalC+=e.credit;
             });
         },
+        loadFromLines:function(lines){
+            _accts={};
+            (lines||[]).forEach(function(l){
+                var a = l.account || l.numeroCompte || l.NumeroCompte;
+                if(!a) return;
+                var d = Number(l.debit != null ? l.debit : l.totalDebit) || 0;
+                var c = Number(l.credit != null ? l.credit : l.totalCredit) || 0;
+                _accts[a] = {entries:[], totalD:d, totalC:c};
+            });
+        },
         getAccounts:function(){return Object.keys(_accts).sort();},
         getAccount:function(a){return _accts[a]||{entries:[],totalD:0,totalC:0};},
         solde:function(a){var ac=_accts[a];if(!ac)return 0;return ac.totalD-ac.totalC;},
@@ -186,8 +201,10 @@ var Ledger = (function(){
 /* ═══ 5. BALANCE ENGINE ═══ */
 var Balance = (function(){
     var _lines = [];
+    var _fromApi = false;
     return {
         build:function(){
+            _fromApi = false;
             _lines=[];
             Ledger.getAccounts().forEach(function(a){
                 var ac=Ledger.getAccount(a);
@@ -202,6 +219,26 @@ var Balance = (function(){
                 });
             });
         },
+        loadFromApi:function(rows){
+            _fromApi = true;
+            _lines = (rows||[]).map(function(r){
+                var acct = r.account || r.numeroCompte || r.NumeroCompte || '';
+                var debit = Number(r.debit != null ? r.debit : r.totalDebit) || 0;
+                var credit = Number(r.credit != null ? r.credit : r.totalCredit) || 0;
+                var sd = r.soldeD != null ? Number(r.soldeD) : (r.soldeDebiteur != null ? Number(r.soldeDebiteur) : Math.max(0, debit-credit));
+                var sc = r.soldeC != null ? Number(r.soldeC) : (r.soldeCrediteur != null ? Number(r.soldeCrediteur) : Math.max(0, credit-debit));
+                return {
+                    account: acct,
+                    name: r.name || r.libelleCompte || PCM.name(acct),
+                    debit: debit,
+                    credit: credit,
+                    soldeD: sd,
+                    soldeC: sc
+                };
+            }).filter(function(l){return !!l.account;});
+            Ledger.loadFromLines(_lines);
+        },
+        isFromApi:function(){return _fromApi;},
         getAll:function(){return _lines.slice();},
         byPrefix:function(pfx){return _lines.filter(function(l){return l.account.indexOf(pfx)===0;});},
         totalDebit:function(){return _lines.reduce(function(s,l){return s+l.debit;},0);},
@@ -257,7 +294,10 @@ var Formula = (function(){
                 (f.refs||[]).forEach(function(r){val+=compute(r);});
                 break;
             case 'DIFF':
-                if(f.refs&&f.refs.length>=2) val=compute(f.refs[0])-compute(f.refs[1]);
+                if(f.refs&&f.refs.length>=1){
+                    val=compute(f.refs[0]);
+                    for(var di=1;di<f.refs.length;di++) val-=compute(f.refs[di]);
+                }
                 break;
             case 'NEG_SUM':
                 f.accounts.forEach(function(a){val-=Ledger.solde(a);});
@@ -276,9 +316,63 @@ var Formula = (function(){
     function refString(code){
         var f=getFormula(code);
         if(!f)return '';
-        if(f.type==='REF'||f.type==='DIFF') return '= '+f.refs.join(f.type==='DIFF'?' − ':' + ');
+        if(f.type==='REF') return '= '+ (f.refs||[]).join(' + ');
+        if(f.type==='DIFF'){
+            var refs=f.refs||[];
+            if(!refs.length) return '';
+            return '= '+refs[0]+(refs.length>1 ? ' − '+refs.slice(1).join(' − ') : '');
+        }
         if(!f.accounts||!f.accounts.length)return '';
-        return '= Σ('+f.accounts.join(',')+')';
+        var prefix = f.type==='SUM_SC' ? '= ΣSC(' : (f.type==='SUM_SD' ? '= ΣSD(' : '= Σ(');
+        return prefix+f.accounts.join(',')+')';
+    }
+
+    /** Parse Excel-like formula text into a formula object (or override number). */
+    function parseFormulaText(text, fallbackType){
+        if(text==null) return null;
+        var t = String(text).trim();
+        if(!t) return { kind:'clear' };
+        if(t.charAt(0)==='=') t = t.substring(1).trim();
+        if(/^-?\d+([.,]\d+)?$/.test(t)){
+            return { kind:'override', value: parseFloat(t.replace(',','.')) };
+        }
+        /* =CODE1 + CODE2 − CODE3 */
+        if(/[A-Z]{2,}_[A-Z0-9]+/.test(t) && (t.indexOf('+')>=0 || t.indexOf('-')>=0 || t.indexOf('−')>=0)){
+            var parts = t.replace(/−/g,'-').split(/(\+|\-)/).map(function(x){return x.trim();}).filter(Boolean);
+            var refs = [];
+            var op = '+';
+            var first = true;
+            var isDiff = false;
+            parts.forEach(function(p){
+                if(p==='+'||p==='-'){ op=p; return; }
+                if(first){ refs.push(p); first=false; return; }
+                if(op==='-'){ isDiff=true; refs.push(p); }
+                else refs.push(p);
+            });
+            if(refs.length>=2 && isDiff && parts.filter(function(p){return p==='+';}).length===0)
+                return { kind:'formula', formula:{ type:'DIFF', accounts:[], refs:refs, label:refs.join('-') } };
+            if(refs.length>=1)
+                return { kind:'formula', formula:{ type: isDiff ? 'DIFF' : 'REF', accounts:[], refs:refs, label:refs.join('+') } };
+        }
+        /* =Σ(a,b,c) or ΣSD(...) / ΣSC(...) or bare account list */
+        var m = t.match(/^(?:Σ|SUM)?(?:SD|SC)?\s*\((.+)\)\s*$/i) || t.match(/^(?:ΣSD|ΣSC|SUM_SD|SUM_SC)\s*\((.+)\)\s*$/i);
+        var accts = null;
+        var typ = fallbackType || 'SUM_SD';
+        if(m){
+            accts = m[1].split(/[,;\s]+/).map(function(x){return x.trim();}).filter(Boolean);
+            if(/SC/i.test(t)) typ='SUM_SC';
+            else if(/SD/i.test(t)) typ='SUM_SD';
+        } else if(/^\d{3,}/.test(t) || t.indexOf(',')>=0){
+            accts = t.split(/[,;\s]+/).map(function(x){return x.trim();}).filter(function(x){return /^\d/.test(x);});
+        }
+        if(accts && accts.length){
+            return { kind:'formula', formula:{ type:typ, accounts:accts, refs:[], label:'' } };
+        }
+        /* single cell ref */
+        if(/^[A-Z]{2,}_[A-Z0-9]+$/.test(t)){
+            return { kind:'formula', formula:{ type:'REF', accounts:[], refs:[t], label:t } };
+        }
+        return null;
     }
 
     function clearCache(){_cache={};}
@@ -408,7 +502,8 @@ var Formula = (function(){
     _register('ESG_MBR','DIFF',[],['CPC_VMH','CPC_AMH'],'Marge brute / ventes march.');
     _register('ESG_PRD','REF',[],['CPC_VBP','CPC_VST'],'Production de l\'exercice');
     _register('ESG_CNS','REF',[],['CPC_AMP','CPC_ACE','CPC_ACE2'],'Consommation de l\'exercice');
-    _register('ESG_VAJ','REF',[],['ESG_MBR','ESG_PRD'],'Valeur ajoutée (partielle)');
+    _register('ESG_VAJ_BASE','REF',[],['ESG_MBR','ESG_PRD'],'VA base (MB + Production)');
+    _register('ESG_VAJ','DIFF',[],['ESG_VAJ_BASE','ESG_CNS'],'Valeur ajoutée');
     _register('ESG_EBE','DIFF',[],['ESG_VAJ','CPC_IMP','CPC_PER'],'EBE (ou IBE)');
 
     return {
@@ -416,6 +511,7 @@ var Formula = (function(){
         get:getFormula,
         compute:compute,
         ref:refString,
+        parse:parseFormulaText,
         clearCache:clearCache,
         register:_register,
         allDefaults:function(){return Object.assign({},_defaults);}
@@ -424,7 +520,10 @@ var Formula = (function(){
 /* ═══ 7. UI ENGINE — Excel-like rendering with formula references ═══ */
 var UI = (function(){
     var _clientId, _exercice, _declId;
-    var _currentPane = 'donnees-is';
+    var _currentPane = 'bilan';
+    var _usingDemo = false;
+    var _selectedCode = null;
+    var _fxDraft = '';
 
     /* ─── FORMAT helpers ─── */
     function fmt(v){
@@ -436,13 +535,7 @@ var UI = (function(){
         return Number(v).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0});
     }
 
-    /* ─── CELL RENDERER — The heart of v4 ─── */
-    /*
-     * Renders a value cell with formula reference underneath.
-     * code: formula code (e.g. 'BA_IMN')
-     * opts: {editable:bool, override:bool, css:string}
-     * Returns HTML string for a <td>
-     */
+    /* ─── CELL RENDERER ─── */
     function cell(code, opts){
         opts=opts||{};
         var val = Formula.compute(code);
@@ -452,9 +545,11 @@ var UI = (function(){
         var cls = 'lf-cell';
         if(ov!==null) cls+=' lf-override';
         if(custom) cls+=' lf-configured';
+        if(_selectedCode===code) cls+=' lf-cell-selected';
         if(opts.css) cls+=' '+opts.css;
-        var h = '<td class="'+cls+'" data-code="'+code+'" onclick="LiasseFiscale.UI.openConfig(\''+code+'\')" title="'+_escHtml(ref)+'">';
-        h+=fmt(val);
+        var h = '<td class="'+cls+'" data-code="'+code+'" onclick="LiasseFiscale.UI.selectCell(\''+code+'\')" ondblclick="LiasseFiscale.UI.focusFormulaBar()" title="'+_escHtml(ref)+'">';
+        h+='<div class="lf-cell-val">'+fmt(val)+'</div>';
+        if(ref) h+='<div class="lf-cell-ref">'+_escHtml(ref)+'</div>';
         h+='</td>';
         return h;
     }
@@ -474,149 +569,172 @@ var UI = (function(){
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    /* ─── FORMULA CONFIG MODAL ─── */
-    var _configCode = null;
+    /* ─── EXCEL FORMULA BAR ─── */
+    function selectCell(code){
+        var f = Formula.get(code) || Formula.getDefault(code);
+        if(!f && Storage.getOverride(code)===null) return;
+        _selectedCode = code;
+        _fxDraft = Formula.ref(code) || '';
+        var nameEl = document.getElementById('lf-fx-name');
+        var inputEl = document.getElementById('lf-fx-input');
+        var valEl = document.getElementById('lf-fx-value');
+        if(nameEl) nameEl.value = code;
+        if(inputEl) inputEl.value = _fxDraft;
+        if(valEl) valEl.textContent = fmt(Formula.compute(code));
+        document.querySelectorAll('.lf-cell.lf-cell-selected').forEach(function(el){el.classList.remove('lf-cell-selected');});
+        document.querySelectorAll('.lf-cell[data-code="'+code+'"]').forEach(function(el){el.classList.add('lf-cell-selected');});
+        fillAccountPanel(code);
+    }
 
-    function openConfig(code){
-        _configCode = code;
-        var f = Formula.get(code);
-        var def = Formula.getDefault(code);
-        if(!f && !def) return; /* No formula for this cell */
+    function focusFormulaBar(){
+        var inputEl = document.getElementById('lf-fx-input');
+        if(inputEl){ inputEl.focus(); inputEl.select(); }
+    }
 
-        var modal = document.getElementById('lf-config-modal');
-        if(!modal) return;
-
-        var activeF = f || def;
-        var defaultF = def || f;
-
-        document.getElementById('lf-cfg-title').textContent = 'Formule: ' + (activeF.label || code);
-        document.getElementById('lf-cfg-code').textContent = code;
-        document.getElementById('lf-cfg-type').textContent = activeF.type;
-
-        /* Show current formula reference */
-        document.getElementById('lf-cfg-ref').textContent = Formula.ref(code) || '(aucune)';
-
-        /* Build account list */
+    function fillAccountPanel(code){
         var listEl = document.getElementById('lf-cfg-accounts');
-        listEl.innerHTML = '';
-
-        if(activeF.type === 'REF' || activeF.type === 'DIFF'){
-            /* Show referenced cells */
-            var refsH = '<div class="lf-cfg-info">Références: ' + (activeF.refs||[]).join(', ') + '</div>';
-            listEl.innerHTML = refsH;
-        } else {
-            /* Show accounts from Balance with checkboxes */
-            var balAll = Balance.getAll();
-            var usedAccts = {};
-            (activeF.accounts||[]).forEach(function(a){usedAccts[a]=true;});
-
-            /* Filter balance accounts relevant to this formula type */
-            var relevantClass = _guessClassFromCode(code);
-            var filtered = balAll;
-            if(relevantClass > 0){
-                filtered = balAll.filter(function(b){return parseInt(b.account[0])===relevantClass;});
-            }
-            /* If no relevant class or too few, show all */
-            if(filtered.length < 3) filtered = balAll;
-
-            filtered.forEach(function(b){
-                var checked = usedAccts[b.account] ? ' checked' : '';
-                var row = '<label class="lf-acct-row">';
-                row += '<input type="checkbox" value="'+b.account+'"'+checked+'>';
-                row += '<span class="lf-acct-code">'+b.account+'</span>';
-                row += '<span class="lf-acct-name">'+_escHtml(PCM.name(b.account))+'</span>';
-                row += '<span class="lf-acct-solde">'+fmt(b.soldeD-b.soldeC)+'</span>';
-                row += '</label>';
-                listEl.innerHTML += row;
-            });
+        if(!listEl) return;
+        var f = Formula.get(code) || Formula.getDefault(code);
+        if(!f){ listEl.innerHTML = '<div class="text-muted small p-2">Aucune formule</div>'; return; }
+        if(f.type === 'REF' || f.type === 'DIFF'){
+            listEl.innerHTML = '<div class="lf-cfg-info p-2 small">Références: ' + _escHtml((f.refs||[]).join(', ')) + '</div>';
+            return;
         }
-
-        /* Show override section */
-        var ovVal = Storage.getOverride(code);
-        var ovInput = document.getElementById('lf-cfg-override');
-        if(ovInput) ovInput.value = ovVal !== null ? ovVal : '';
-
-        /* Custom indicator */
-        var customEl = document.getElementById('lf-cfg-custom');
-        if(customEl){
-            if(Storage.getFormula(code)){
-                customEl.innerHTML = '<span class="text-warning"><i class="bi bi-pencil-fill"></i> Formule personnalisée</span>';
-            } else {
-                customEl.innerHTML = '<span class="text-muted"><i class="bi bi-check-circle"></i> Formule standard</span>';
-            }
+        var usedAccts = {};
+        (f.accounts||[]).forEach(function(a){usedAccts[a]=true;});
+        var balAll = Balance.getAll();
+        var relevantClass = _guessClassFromCode(code);
+        var filtered = balAll;
+        if(relevantClass > 0){
+            filtered = balAll.filter(function(b){return parseInt(b.account[0])===relevantClass;});
         }
-
-        modal.style.display = 'flex';
+        if(filtered.length < 3) filtered = balAll;
+        var html = '';
+        filtered.forEach(function(b){
+            var checked = usedAccts[b.account] ? ' checked' : '';
+            html += '<label class="lf-acct-row">';
+            html += '<input type="checkbox" value="'+b.account+'"'+checked+'>';
+            html += '<span class="lf-acct-code">'+b.account+'</span>';
+            html += '<span class="lf-acct-name">'+_escHtml(b.name||PCM.name(b.account))+'</span>';
+            html += '<span class="lf-acct-solde">'+fmt(b.soldeD-b.soldeC)+'</span>';
+            html += '</label>';
+        });
+        listEl.innerHTML = html || '<div class="text-muted small p-2">Aucun compte en balance</div>';
     }
 
     function _guessClassFromCode(code){
-        if(code.indexOf('BA_')===0) return 2; /* Actif → class 2,3,5 */
-        if(code.indexOf('BP_')===0) return 1; /* Passif → class 1,4 */
+        if(code.indexOf('BA_')===0) return 0;
+        if(code.indexOf('BP_')===0) return 0;
         if(code.indexOf('CPC_V')===0||code.indexOf('CPC_CA')===0||code.indexOf('CPC_P')===0||code.indexOf('CPC_R')===0) return 7;
         if(code.indexOf('CPC_A')===0||code.indexOf('CPC_C')===0||code.indexOf('CPC_I')===0||code.indexOf('CPC_D')===0) return 6;
-        return 0; /* Show all */
+        return 0;
     }
 
-    function saveConfig(){
-        if(!_configCode) return;
-        var f = Formula.get(_configCode) || Formula.getDefault(_configCode);
-        if(!f) return;
+    function applyFormulaBar(){
+        if(!_selectedCode) return;
+        var inputEl = document.getElementById('lf-fx-input');
+        var text = inputEl ? inputEl.value : '';
+        var f = Formula.get(_selectedCode) || Formula.getDefault(_selectedCode);
+        var parsed = Formula.parse(text, f ? f.type : 'SUM_SD');
 
-        /* Save override value if entered */
-        var ovInput = document.getElementById('lf-cfg-override');
-        if(ovInput && ovInput.value.trim() !== ''){
-            var v = parseFloat(ovInput.value.replace(/\s/g,'').replace(',','.'));
-            if(!isNaN(v)) Storage.setOverride(_configCode, v);
-        } else {
-            Storage.removeOverride(_configCode);
-        }
-
-        /* Save custom account selection (only for non-REF formulas) */
-        if(f.type !== 'REF' && f.type !== 'DIFF'){
-            var listEl = document.getElementById('lf-cfg-accounts');
+        /* Also apply checkbox selection if panel open and SUM-type */
+        var listEl = document.getElementById('lf-cfg-accounts');
+        var panel = document.getElementById('lf-acct-panel');
+        var panelOpen = panel && !panel.classList.contains('d-none');
+        if(panelOpen && listEl && f && f.type !== 'REF' && f.type !== 'DIFF'){
             var checks = listEl.querySelectorAll('input[type=checkbox]');
             var newAccts = [];
             checks.forEach(function(ch){if(ch.checked) newAccts.push(ch.value);});
-
-            /* Check if different from default */
-            var def = Formula.getDefault(_configCode);
-            var defAccts = def ? (def.accounts||[]).slice().sort().join(',') : '';
-            var newAcctsStr = newAccts.slice().sort().join(',');
-
-            if(newAcctsStr !== defAccts){
-                /* Save as custom formula */
-                Storage.setFormula(_configCode, {
-                    type: f.type,
-                    accounts: newAccts,
-                    refs: f.refs || [],
-                    label: f.label || _configCode
-                });
-            } else {
-                /* Matches default — remove custom */
-                Storage.removeFormula(_configCode);
+            if(newAccts.length && (!parsed || parsed.kind==='clear' || (text||'').trim()===(_fxDraft||'').trim())){
+                var def = Formula.getDefault(_selectedCode);
+                var defAccts = def ? (def.accounts||[]).slice().sort().join(',') : '';
+                var newStr = newAccts.slice().sort().join(',');
+                if(newStr !== defAccts){
+                    Storage.setFormula(_selectedCode, { type:f.type, accounts:newAccts, refs:f.refs||[], label:f.label||_selectedCode });
+                } else {
+                    Storage.removeFormula(_selectedCode);
+                }
+                Storage.removeOverride(_selectedCode);
+                Formula.clearCache();
+                onPaneShown(_currentPane);
+                selectCell(_selectedCode);
+                return;
             }
         }
 
-        closeConfig();
-        /* Recompute and re-render current pane */
+        if(!parsed){
+            if(typeof toastr!=='undefined') toastr.error('Formule non reconnue');
+            return;
+        }
+        if(parsed.kind==='clear'){
+            Storage.removeOverride(_selectedCode);
+            Storage.removeFormula(_selectedCode);
+        } else if(parsed.kind==='override'){
+            Storage.setOverride(_selectedCode, parsed.value);
+        } else if(parsed.kind==='formula'){
+            Storage.removeOverride(_selectedCode);
+            var defF = Formula.getDefault(_selectedCode);
+            var same = defF && defF.type===parsed.formula.type
+                && JSON.stringify((defF.accounts||[]).slice().sort())===JSON.stringify((parsed.formula.accounts||[]).slice().sort())
+                && JSON.stringify(defF.refs||[])===JSON.stringify(parsed.formula.refs||[]);
+            if(same) Storage.removeFormula(_selectedCode);
+            else {
+                parsed.formula.label = (defF && defF.label) || _selectedCode;
+                Storage.setFormula(_selectedCode, parsed.formula);
+            }
+        }
         Formula.clearCache();
         onPaneShown(_currentPane);
+        selectCell(_selectedCode);
+    }
+
+    function cancelFormulaBar(){
+        if(!_selectedCode) return;
+        var inputEl = document.getElementById('lf-fx-input');
+        if(inputEl) inputEl.value = Formula.ref(_selectedCode) || '';
+        fillAccountPanel(_selectedCode);
     }
 
     function resetConfig(){
-        if(!_configCode) return;
-        Storage.removeFormula(_configCode);
-        Storage.removeOverride(_configCode);
-        closeConfig();
+        if(!_selectedCode) return;
+        Storage.removeFormula(_selectedCode);
+        Storage.removeOverride(_selectedCode);
         Formula.clearCache();
         onPaneShown(_currentPane);
+        selectCell(_selectedCode);
     }
 
-    function closeConfig(){
-        var modal = document.getElementById('lf-config-modal');
-        if(modal) modal.style.display = 'none';
-        _configCode = null;
+    function toggleAccountPanel(){
+        var panel = document.getElementById('lf-acct-panel');
+        if(!panel) return;
+        panel.classList.toggle('d-none');
+        if(!panel.classList.contains('d-none') && _selectedCode) fillAccountPanel(_selectedCode);
     }
+
+    function bindFormulaBar(){
+        var applyBtn = document.getElementById('lf-fx-apply');
+        var cancelBtn = document.getElementById('lf-fx-cancel');
+        var resetBtn = document.getElementById('lf-fx-reset');
+        var toggleBtn = document.getElementById('lf-fx-toggle-accts');
+        var closePanel = document.getElementById('lf-acct-panel-close');
+        var inputEl = document.getElementById('lf-fx-input');
+        if(applyBtn) applyBtn.onclick = applyFormulaBar;
+        if(cancelBtn) cancelBtn.onclick = cancelFormulaBar;
+        if(resetBtn) resetBtn.onclick = resetConfig;
+        if(toggleBtn) toggleBtn.onclick = toggleAccountPanel;
+        if(closePanel) closePanel.onclick = function(){ var p=document.getElementById('lf-acct-panel'); if(p) p.classList.add('d-none'); };
+        if(inputEl){
+            inputEl.addEventListener('keydown', function(e){
+                if(e.key==='Enter'){ e.preventDefault(); applyFormulaBar(); }
+                if(e.key==='Escape'){ e.preventDefault(); cancelFormulaBar(); }
+            });
+        }
+    }
+
+    /* Legacy aliases */
+    function openConfig(code){ selectCell(code); focusFormulaBar(); }
+    function saveConfig(){ applyFormulaBar(); }
+    function closeConfig(){ cancelFormulaBar(); }
     /* ─── RENDER: JOURNAL ─── */
     function renderJournal(filter){
         var el = document.getElementById('pane-journal');
@@ -1087,24 +1205,28 @@ var UI = (function(){
         h+='<div class="lf-table-wrap"><table class="lf-table">';
         h+='<thead><tr><th class="lf-row-num">#</th><th>RESSOURCES STABLES</th><th class="text-end">Montant</th></tr></thead>';
         h+='<tbody>';
+        var cessions = Formula.compute('CPC_PNC');
+        var dettesFin = Formula.compute('BP_EMP');
+        var totalRes = caf + Math.max(0, cessions) + Math.max(0, dettesFin);
         h+='<tr><td class="lf-row-num">R1</td><td>Capacité d\'autofinancement (CAF)</td>'+cellVal(caf,'text-end')+'</tr>';
-        h+='<tr><td class="lf-row-num">R2</td><td>Cessions d\'immobilisations</td>'+cellVal(0,'text-end text-muted')+'</tr>';
-        h+='<tr><td class="lf-row-num">R3</td><td>Augmentation capitaux propres</td>'+cellVal(0,'text-end text-muted')+'</tr>';
-        h+='<tr><td class="lf-row-num">R4</td><td>Augmentation dettes financement</td>'+cellVal(0,'text-end text-muted')+'</tr>';
-        h+='<tr class="lf-total-row"><td class="lf-row-num">TR</td><td><strong>TOTAL RESSOURCES</strong></td>'+cellVal(caf,'text-end fw-bold')+'</tr>';
+        h+='<tr><td class="lf-row-num">R2</td><td>Produits de cession / non courants (approx.)</td>'+cell('CPC_PNC')+'</tr>';
+        h+='<tr><td class="lf-row-num">R3</td><td>Fonds propres</td>'+cell('BP_TFP')+'</tr>';
+        h+='<tr><td class="lf-row-num">R4</td><td>Dettes de financement</td>'+cell('BP_EMP')+'</tr>';
+        h+='<tr class="lf-total-row"><td class="lf-row-num">TR</td><td><strong>TOTAL RESSOURCES (synthèse)</strong></td>'+cellVal(totalRes,'text-end fw-bold')+'</tr>';
         h+='</tbody></table></div>';
 
         h+='<div class="lf-table-wrap mt-2"><table class="lf-table">';
         h+='<thead><tr><th class="lf-row-num">#</th><th>EMPLOIS STABLES</th><th class="text-end">Montant</th></tr></thead>';
         h+='<tbody>';
         var invst = Formula.compute('BA_TIMM');
-        h+='<tr><td class="lf-row-num">E1</td><td>Acquisitions immobilisations</td>'+cellVal(invst,'text-end')+'</tr>';
-        h+='<tr><td class="lf-row-num">E2</td><td>Remboursement dettes financement</td>'+cellVal(0,'text-end text-muted')+'</tr>';
-        h+='<tr class="lf-total-row"><td class="lf-row-num">TE</td><td><strong>TOTAL EMPLOIS</strong></td>'+cellVal(invst,'text-end fw-bold')+'</tr>';
+        var chargesNc = Formula.compute('CPC_CNC');
+        h+='<tr><td class="lf-row-num">E1</td><td>Actif immobilisé (brut synthèse)</td>'+cell('BA_TIMM')+'</tr>';
+        h+='<tr><td class="lf-row-num">E2</td><td>Charges non courantes (approx. emplois)</td>'+cell('CPC_CNC')+'</tr>';
+        h+='<tr class="lf-total-row"><td class="lf-row-num">TE</td><td><strong>TOTAL EMPLOIS (synthèse)</strong></td>'+cellVal(invst+chargesNc,'text-end fw-bold')+'</tr>';
         h+='</tbody></table></div>';
 
         h+='<div class="lf-kpi-bar mt-2">';
-        h+='<div class="lf-kpi"><span class="lf-kpi-label">Δ Fonds de Roulement</span><span class="lf-kpi-value">'+fmt(caf - invst)+'</span></div>';
+        h+='<div class="lf-kpi"><span class="lf-kpi-label">Δ Fonds de Roulement (approx.)</span><span class="lf-kpi-value">'+fmt(totalRes - invst - chargesNc)+'</span></div>';
         h+='</div>';
 
         el.innerHTML = h;
@@ -1133,8 +1255,8 @@ var UI = (function(){
         h+='<div class="lf-etic-section"><h6>A3 — Changements de méthodes</h6>';
         h+='<p class="text-muted fst-italic">Aucun changement de méthode au cours de l\'exercice.</p></div>';
 
-        /* B1. Détail immobilisations */
-        h+='<div class="lf-etic-section"><h6>B1 — Tableau des immobilisations</h6>';
+        /* B1. Détail immobilisations — brut fin = solde balance (N); début/acq/cessions N/A sans historique */
+        h+='<div class="lf-etic-section"><h6>B1 — Tableau des immobilisations (soldes exercice)</h6>';
         h+='<div class="lf-table-wrap"><table class="lf-table">';
         h+='<thead><tr><th>Nature</th><th class="text-end">Brut Début</th><th class="text-end">Acquisitions</th><th class="text-end">Cessions</th><th class="text-end">Brut Fin</th></tr></thead>';
         h+='<tbody>';
@@ -1180,13 +1302,35 @@ var UI = (function(){
         h+='<tr class="lf-total-row"><td><strong>TOTAL AMORT.</strong></td>'+cellVal(0,'text-end')+cellVal(tAF,'text-end fw-bold')+cellVal(0,'text-end')+cellVal(tAF,'text-end fw-bold')+'</tr>';
         h+='</tbody></table></div></div>';
 
-        /* B3-B14, C1-C5 placeholders */
-        var placeholders = ['B3 — Provisions','B4 — Créances','B5 — Dettes','B6 — Sûretés réelles',
-            'B7 — Engagements hors bilan','B8 — Rémunérations','B9 — Effectifs',
-            'C1 — Répartition capital','C2 — Affectation résultat','C3 — Résultats 3 derniers exercices'];
-        placeholders.forEach(function(p){
-            h+='<div class="lf-etic-section"><h6>'+p+'</h6><p class="text-muted fst-italic">Voir annexe détaillée.</p></div>';
-        });
+        h+='<div class="lf-etic-section"><h6>B3 — Provisions</h6>';
+        h+='<div class="lf-table-wrap"><table class="lf-table"><tbody>';
+        h+='<tr><td>Provisions durables</td>'+cell('BP_PDD')+'</tr>';
+        h+='<tr><td>Provisions dépréciation actif circulant</td>'+cell('BA_CRA')+'</tr>';
+        h+='</tbody></table></div></div>';
+
+        h+='<div class="lf-etic-section"><h6>B4 — Créances</h6>';
+        h+='<div class="lf-table-wrap"><table class="lf-table"><tbody>';
+        h+='<tr><td>Clients & rattachés</td>'+cell('BA_CLI')+'</tr>';
+        h+='<tr><td>État débiteur</td>'+cell('BA_ETA')+'</tr>';
+        h+='<tr><td>Autres débiteurs</td>'+cell('BA_CDA')+'</tr>';
+        h+='</tbody></table></div></div>';
+
+        h+='<div class="lf-etic-section"><h6>B5 — Dettes</h6>';
+        h+='<div class="lf-table-wrap"><table class="lf-table"><tbody>';
+        h+='<tr><td>Fournisseurs</td>'+cell('BP_FRS')+'</tr>';
+        h+='<tr><td>Personnel / organismes sociaux</td>'+cellVal(Formula.compute('BP_PRS')+Formula.compute('BP_OSO'),'text-end')+'</tr>';
+        h+='<tr><td>État créditeur</td>'+cell('BP_ETC')+'</tr>';
+        h+='<tr><td>Dettes de financement</td>'+cell('BP_EMP')+'</tr>';
+        h+='</tbody></table></div></div>';
+
+        h+='<div class="lf-etic-section"><h6>C2 — Affectation du résultat</h6>';
+        h+='<div class="lf-table-wrap"><table class="lf-table"><tbody>';
+        h+='<tr><td>Résultat net de l\'exercice</td>'+cell('CPC_RNE')+'</tr>';
+        h+='<tr><td>Report à nouveau</td>'+cell('BP_REP')+'</tr>';
+        h+='</tbody></table></div></div>';
+
+        h+='<div class="lf-etic-section"><h6>Autres annexes</h6>';
+        h+='<p class="text-muted small mb-0">B6–B9 / C1 / C3 : à compléter hors système (sûretés, effectifs, répartition capital, historiques multi-exercices).</p></div>';
 
         el.innerHTML = h;
     }
@@ -1678,20 +1822,27 @@ var UI = (function(){
     }
 
     /* ─── INIT ─── */
-    function init(clientId, exercice, declId){
+    function init(clientId, exercice, declId, balanceRows){
         _clientId = clientId;
         _exercice = exercice;
         _declId = declId;
+        _usingDemo = false;
 
-        Storage.setContext(declId, clientId);
-        Journal.init(exercice);
-        Ledger.build();
-        Balance.build();
+        Storage.setContext(declId, clientId, exercice);
+        var rows = balanceRows || [];
+        if(rows.length){
+            Journal.clear();
+            Balance.loadFromApi(rows);
+            _usingDemo = false;
+        } else {
+            Journal.init(exercice);
+            Ledger.build();
+            Balance.build();
+            _usingDemo = true;
+        }
         Formula.clearCache();
 
-        console.log('[LiasseFiscale v4] Init — client:'+clientId+' ex:'+exercice+' decl:'+declId);
-        console.log('[LiasseFiscale v4] Journal:'+Journal.getAll().length+' entries, Balance:'+Balance.getAll().length+' accounts');
-        console.log('[LiasseFiscale v4] Custom formulas:'+Object.keys(Storage.getClientFormulas()).length);
+        console.log('[LiasseFiscale v5] Init — client:'+clientId+' ex:'+exercice+' demo:'+_usingDemo+' balance:'+Balance.getAll().length);
     }
 
     /* ─── PUBLIC API ─── */
@@ -1702,11 +1853,24 @@ var UI = (function(){
         saveConfig:saveConfig,
         resetConfig:resetConfig,
         closeConfig:closeConfig,
+        selectCell:selectCell,
+        focusFormulaBar:focusFormulaBar,
+        applyFormulaBar:applyFormulaBar,
+        cancelFormulaBar:cancelFormulaBar,
+        bindFormulaBar:bindFormulaBar,
+        toggleAccountPanel:toggleAccountPanel,
+        isUsingDemo:function(){return _usingDemo;},
         filterJournal:filterJournal,
         filterGL:filterGL,
         resetFormula:resetFormula,
         resetOverride:resetOverride,
-        exportData:exportData
+        exportData:exportData,
+        getServerSnapshot:function(){
+            try{
+                var snap={ overrides:Storage.get('overrides')||{}, journal:Storage.get('journal')||[], formulas:Storage.getClientFormulas()||{} };
+                return snap;
+            }catch(e){ return {}; }
+        }
     };
 })(); /* end UI */
 

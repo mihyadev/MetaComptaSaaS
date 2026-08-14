@@ -34,7 +34,7 @@ public class PayrollController : BaseController
     public async Task<IActionResult> Index(int? clientId = null)
     {
         clientId ??= SelectedClientId;
-        var periods = await _payroll.GetAllPeriodsAsync(clientId);
+        var periods = await _payroll.GetAllPeriodsAsync(clientId, SelectedExerciceId);
         ViewBag.Client = SelectedClientId.HasValue ? await _clients.GetByIdAsync(SelectedClientId.Value) : null;
         ViewBag.ClientId = clientId;
         await LoadReferenceDataToViewBagAsync("STATUT_PAIE");

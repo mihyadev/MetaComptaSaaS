@@ -86,6 +86,8 @@ public class DeclarationsController : ExtranetBaseController
                 case "IS":
                     var isData = await GetAsync<ApiResponse<DeclarationISDto>>($"api/client-declarations/{id}/is");
                     ViewBag.ISData = isData?.Data;
+                    var checklist = await GetAsync<ApiResponse<List<DeclarationChecklistItemDto>>>($"api/client-declarations/{id}/checklist");
+                    ViewBag.Checklist = checklist?.Data ?? new List<DeclarationChecklistItemDto>();
                     break;
                 case "IR":
                     var ir = await GetAsync<ApiResponse<DeclarationIRDto>>($"api/client-declarations/{id}/ir");
@@ -137,7 +139,7 @@ public class DeclarationsController : ExtranetBaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UploadDocument(int declarationId, IFormFile file, string titre, string categorie)
+    public async Task<IActionResult> UploadDocument(int declarationId, IFormFile file, string titre, string categorie, int? checklistItemId = null)
     {
         if (!IsAuthenticated) return RedirectToAction("Login", "Account");
 
@@ -156,6 +158,8 @@ public class DeclarationsController : ExtranetBaseController
         content.Add(new StringContent(titre ?? file.FileName), "titre");
         content.Add(new StringContent(categorie ?? "Fiscal"), "categorie");
         content.Add(new StringContent(declarationId.ToString()), "declarationId");
+        if (checklistItemId.HasValue)
+            content.Add(new StringContent(checklistItemId.Value.ToString()), "checklistItemId");
 
         var response = await client.PostAsync("api/documents/upload", content);
         TempData[response.IsSuccessStatusCode ? "Success" : "Error"] =

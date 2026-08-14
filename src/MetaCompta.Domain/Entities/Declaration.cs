@@ -10,6 +10,10 @@ public class Declaration : TenantEntity
     public int ClientId { get; set; }
     public virtual Client? Client { get; set; }
 
+    /// <summary>Accounting exercice this declaration belongs to (required for new creates).</summary>
+    public int? ExerciceComptableId { get; set; }
+    public virtual ExerciceComptable? Exercice { get; set; }
+
     public string Type { get; set; } = string.Empty; // TVA, IS, IR, CNSS, IR_SALAIRES
     public string Periode { get; set; } = string.Empty; // "2026-02" for monthly, "2026-Q1" for quarterly, "2026" for annual
     public DateTime DateDebut { get; set; }
@@ -40,6 +44,15 @@ public class Declaration : TenantEntity
 
     public string? Notes { get; set; }
     public int Version { get; set; } = 1;
+
+    /// <summary>When the declaration lifecycle ends (stamped from Init step).</summary>
+    public DateTime? LifecycleEndsAt { get; set; }
+
+    /// <summary>WorkflowActionType name to run at lifecycle end (default ClotureDeclaration).</summary>
+    public string? LifecycleEndAction { get; set; }
+
+    /// <summary>Set when the lifecycle-end action has been processed (idempotency).</summary>
+    public DateTime? LifecycleEndedAt { get; set; }
 
     // Navigation
     public virtual ICollection<DeclarationHistory> History { get; set; } = new List<DeclarationHistory>();
@@ -86,7 +99,7 @@ public class DeclarationTVA : TenantEntity
 }
 
 /// <summary>
-/// IS (Corporate Tax) declaration specific data
+/// IS (Corporate Tax) declaration specific data — Déclaration fiscale / Liasse annuelle
 /// </summary>
 public class DeclarationIS : TenantEntity
 {
@@ -104,12 +117,38 @@ public class DeclarationIS : TenantEntity
     public decimal ISDu { get; set; }
     public decimal AcomptesVerses { get; set; }
     public decimal ISNet { get; set; }
+    public decimal CotisationMinimale { get; set; }
 
     // Quarterly installments
     public decimal Acompte1 { get; set; } // 31 March
     public decimal Acompte2 { get; set; } // 30 June
     public decimal Acompte3 { get; set; } // 30 September
     public decimal Acompte4 { get; set; } // 31 December
+
+    /// <summary>JSON array of retraitement lines (réintégrations / déductions).</summary>
+    public string? RetraitementsJson { get; set; }
+
+    /// <summary>JSON map of server-backed liasse panes (bilan, cpc, passage…).</summary>
+    public string? LiassePanesJson { get; set; }
+}
+
+/// <summary>
+/// Annual piece checklist item for IS / liasse (Extrane deposit gate).
+/// </summary>
+public class DeclarationChecklistItem : TenantEntity
+{
+    public int DeclarationId { get; set; }
+    public virtual Declaration? Declaration { get; set; }
+
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Categorie { get; set; } = "Comptable"; // Fiscal, Comptable, Legal, Bancaire, Social
+    public int SortOrder { get; set; }
+    public bool IsRequired { get; set; } = true;
+    public bool IsReceived { get; set; }
+    public int? DocumentId { get; set; }
+    public DateTime? ReceivedAt { get; set; }
+    public string? Notes { get; set; }
 }
 
 /// <summary>

@@ -1,4 +1,4 @@
-﻿@using MetaCompta.Application.DTOs
+@using MetaCompta.Application.DTOs
 @model DeclarationISDto
 @{
     ViewData["Title"] = "Déclaration IS";
@@ -9,8 +9,7 @@
 
 @await Html.PartialAsync("_WorkflowActionBar")
 
-<!-- ═══════ HEADER ═══════ -->
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-1" style="font-size:0.82rem;">
@@ -22,79 +21,43 @@
                 <li class="breadcrumb-item active">Exercice @exercice</li>
             </ol>
         </nav>
-        <h4 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>IS — Liasse Fiscale @exercice</h4>
+        <h4 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>Déclaration fiscale — Liasse @exercice</h4>
         @if (declaration != null)
         {
             <p class="text-muted mb-0 mt-1" style="font-size:0.82rem;">
                 <i class="bi bi-building me-1"></i><strong>@declaration.ClientName</strong>
-                <span class="mx-2">|</span><i class="bi bi-calendar3 me-1"></i>Exercice du 01/01/@exercice au 31/12/@exercice
+                <span class="mx-2">|</span><i class="bi bi-calendar3 me-1"></i>Exercice @exercice
                 <span class="mx-2">|</span><span class="badge bg-primary-subtle text-primary rounded-pill">@declaration.Statut</span>
             </p>
         }
     </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-outline-success rounded-pill px-3 btn-sm" onclick="LiasseFiscale.UI.exportData()"><i class="bi bi-download me-1"></i>Exporter</button>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="@Url.Action("Synthese", "EtatsFiscaux")" class="btn btn-outline-primary rounded-pill px-3 btn-sm">
+            <i class="bi bi-file-earmark-ruled me-1"></i>États de Synthèse
+        </a>
+        <a asp-action="ExportISXml" asp-route-id="@Model.DeclarationId" class="btn btn-outline-success rounded-pill px-3 btn-sm" title="Export stub SIMPL-IS"><i class="bi bi-filetype-xml me-1"></i>SIMPL-IS</a>
         <button class="btn btn-outline-info rounded-pill px-3 btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button>
         <a asp-action="Details" asp-route-id="@Model.DeclarationId" class="btn btn-outline-secondary rounded-pill px-3 btn-sm"><i class="bi bi-arrow-left me-1"></i>Retour</a>
     </div>
 </div>
 
-<!-- ═══════ SIDEBAR NAV + CONTENT ═══════ -->
 <div class="row g-3">
-    <!-- LEFT: Navigation Panel -->
     <div class="col-lg-2 col-md-3">
         <div class="card border-0 shadow-sm rounded-4 position-sticky" style="top:80px;">
             <div class="card-body p-2">
-                <!-- États de Synthèse -->
-                <div class="lf-nav-section">
-                    <div class="lf-nav-group-title"><i class="bi bi-file-earmark-ruled me-1"></i>États de Synthèse</div>
-                    <button class="lf-nav-btn" data-target="bilan"><i class="bi bi-columns-gap"></i>Bilan</button>
-                    <button class="lf-nav-btn" data-target="cpc"><i class="bi bi-graph-up-arrow"></i>CPC</button>
-                    <button class="lf-nav-btn" data-target="esg"><i class="bi bi-bar-chart-line"></i>ESG</button>
-                    <button class="lf-nav-btn" data-target="tf"><i class="bi bi-cash-stack"></i>Tableau Financement</button>
-                    <button class="lf-nav-btn" data-target="etic"><i class="bi bi-file-earmark-text"></i>ETIC</button>
-                    <button class="lf-nav-btn" data-target="detail-cpc"><i class="bi bi-list-columns"></i>Détail CPC</button>
-                    <button class="lf-nav-btn" data-target="passage"><i class="bi bi-arrow-left-right"></i>Passage RF</button>
-                    <button class="lf-nav-btn" data-target="affectation"><i class="bi bi-pie-chart"></i>Affectation Résultat</button>
-                    <button class="lf-nav-btn" data-target="tva"><i class="bi bi-receipt"></i>Détail TVA</button>
-                    <button class="lf-nav-btn" data-target="immob"><i class="bi bi-building-gear"></i>Immobilisations</button>
-                    <button class="lf-nav-btn" data-target="amort"><i class="bi bi-graph-down-arrow"></i>Amortissements</button>
-                    <button class="lf-nav-btn" data-target="provisions"><i class="bi bi-shield-exclamation"></i>Provisions</button>
-                    <button class="lf-nav-btn" data-target="creances"><i class="bi bi-people"></i>Créances / Dettes</button>
-                    <button class="lf-nav-btn" data-target="9421"><i class="bi bi-file-text"></i>État 9421</button>
-                </div>
-                <!-- Fiscal -->
                 <div class="lf-nav-section">
                     <div class="lf-nav-group-title"><i class="bi bi-bank me-1"></i>Fiscal</div>
-                    <button class="lf-nav-btn active" data-target="donnees-is"><i class="bi bi-calculator-fill"></i>Données IS</button>
-                    <button class="lf-nav-btn" data-target="controles"><i class="bi bi-shield-check"></i>Contrôles</button>
+                    <button type="button" class="lf-nav-btn active" data-target="donnees-is"><i class="bi bi-calculator-fill"></i>Données IS</button>
+                    <button type="button" class="lf-nav-btn" data-target="controles"><i class="bi bi-shield-check"></i>Contrôles</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- RIGHT: Content Area -->
     <div class="col-lg-10 col-md-9">
         <div id="lf-content-area">
-
-            <div class="lf-pane" id="pane-bilan" style="display:none;"></div>
-            <div class="lf-pane" id="pane-cpc" style="display:none;"></div>
-            <div class="lf-pane" id="pane-esg" style="display:none;"></div>
-            <div class="lf-pane" id="pane-tf" style="display:none;"></div>
-            <div class="lf-pane" id="pane-etic" style="display:none;"></div>
-            <div class="lf-pane" id="pane-detail-cpc" style="display:none;"></div>
-            <div class="lf-pane" id="pane-passage" style="display:none;"></div>
-            <div class="lf-pane" id="pane-affectation" style="display:none;"></div>
-            <div class="lf-pane" id="pane-tva" style="display:none;"></div>
-            <div class="lf-pane" id="pane-immob" style="display:none;"></div>
-            <div class="lf-pane" id="pane-amort" style="display:none;"></div>
-            <div class="lf-pane" id="pane-provisions" style="display:none;"></div>
-            <div class="lf-pane" id="pane-creances" style="display:none;"></div>
-            <div class="lf-pane" id="pane-9421" style="display:none;"></div>
-
-            <!-- ══════════ DONNÉES IS (default visible) ══════════ -->
             <div class="lf-pane" id="pane-donnees-is">
-                <form asp-action="EditIS" asp-route-id="@Model.DeclarationId" method="post">
+                <form asp-action="EditIS" asp-route-id="@Model.DeclarationId" method="post" id="formEditIS">
                     @Html.AntiForgeryToken()
                     <input type="hidden" asp-for="DeclarationId" />
                     <div class="row g-3">
@@ -135,11 +98,24 @@
                         <div class="card-header bg-transparent border-0 px-4 pt-3"><h6 class="fw-bold mb-0"><i class="bi bi-bar-chart text-warning me-2"></i>Résumé IS</h6></div>
                         <div class="card-body">
                             <div class="row g-3">
-                                <div class="col-md-3"><label class="form-label text-muted small">Résultat Fiscal</label><div id="resFiscal" class="fw-bold">@Model.ResultatFiscal.ToString("N2")</div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">Résultat Fiscal</label><div id="resFiscal" class="fw-bold">@Model.ResultatFiscal.ToString("N2")</div></div>
                                 <div class="col-md-2"><label class="form-label text-muted small">Base Imposable</label><div id="baseImp" class="fw-bold">@Model.BaseImposable.ToString("N2")</div></div>
                                 <div class="col-md-2"><label class="form-label text-muted small">Taux IS</label><div id="tauxIS" class="fw-bold">@Model.TauxIS.ToString("N0")%</div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">CM (0,5%)</label><div id="cmMin" class="fw-bold">@Model.CotisationMinimale.ToString("N2")</div></div>
                                 <div class="col-md-2"><label class="form-label text-muted small">IS Dû</label><div id="isDu" class="fw-bold text-danger fs-5">@Model.ISDu.ToString("N2")</div></div>
-                                <div class="col-md-3"><label class="form-label text-muted small">IS Net</label><div id="isNet" class="fw-bold text-primary fs-4">@Model.ISNet.ToString("N2") <small class="fs-6">MAD</small></div></div>
+                                <div class="col-md-2"><label class="form-label text-muted small">IS Net</label><div id="isNet" class="fw-bold text-primary fs-4">@Model.ISNet.ToString("N2") <small class="fs-6">MAD</small></div></div>
+                            </div>
+                            <input type="hidden" asp-for="RetraitementsJson" id="RetraitementsJson" />
+                            <input type="hidden" asp-for="LiassePanesJson" id="LiassePanesJson" />
+                            <div class="mt-3">
+                                <label class="form-label small fw-semibold">Retraitements fiscaux (persistés)</label>
+                                <div id="retraitements-grid" class="table-responsive">
+                                    <table class="table table-sm align-middle mb-2" id="tbl-retraitements">
+                                        <thead class="table-light"><tr><th>Type</th><th>Libellé</th><th class="text-end">Montant</th><th></th></tr></thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRetraitementRow()"><i class="bi bi-plus"></i> Ligne</button>
                             </div>
                         </div>
                     </div>
@@ -150,42 +126,16 @@
                 </form>
             </div>
 
-            <div class="lf-pane" id="pane-controles" style="display:none;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ═══════ FORMULA CONFIG MODAL — Centered ═══════ -->
-<div id="lf-config-modal" class="lf-modal-backdrop" style="display:none;">
-    <div class="lf-modal">
-        <div class="lf-modal-header">
-            <div>
-                <h6 id="lf-cfg-title" class="mb-0">Configuration Formule</h6>
-                <small class="text-muted">Code: <strong id="lf-cfg-code"></strong> | Type: <span id="lf-cfg-type"></span></small>
-            </div>
-            <button type="button" class="btn-close" onclick="LiasseFiscale.UI.closeConfig()"></button>
-        </div>
-        <div class="lf-modal-body">
-            <div class="mb-2" id="lf-cfg-custom"></div>
-            <div class="mb-3">
-                <label class="form-label fw-bold small">Formule actuelle</label>
-                <div id="lf-cfg-ref" class="lf-cfg-formula-display"></div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-bold small">Comptes de la balance</label>
-                <div id="lf-cfg-accounts" class="lf-acct-list"></div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-bold small">Forcer une valeur manuelle (optionnel)</label>
-                <input type="text" id="lf-cfg-override" class="form-control form-control-sm" placeholder="Laisser vide pour calcul automatique">
-                <small class="text-muted">Si renseigné, cette valeur remplacera le calcul de la formule.</small>
-            </div>
-        </div>
-        <div class="lf-modal-footer">
-            <button class="btn btn-sm btn-outline-danger" onclick="LiasseFiscale.UI.resetConfig()"><i class="bi bi-arrow-counterclockwise me-1"></i>Réinitialiser</button>
-            <div class="ms-auto d-flex gap-2">
-                <button class="btn btn-sm btn-outline-secondary" onclick="LiasseFiscale.UI.closeConfig()">Annuler</button>
-                <button class="btn btn-sm btn-primary" onclick="LiasseFiscale.UI.saveConfig()"><i class="bi bi-check-lg me-1"></i>Appliquer</button>
+            <div class="lf-pane" id="pane-controles" style="display:none;">
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-body p-4">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-shield-check text-primary me-2"></i>Contrôles fiscaux IS</h6>
+                        <ul class="list-unstyled mb-0" id="is-controles-list">
+                            <li class="mb-2"><i class="bi bi-info-circle text-muted me-2"></i>Vérifiez le résultat comptable, les retraitements et les acomptes avant validation workflow.</li>
+                            <li class="mb-2"><i class="bi bi-link-45deg text-primary me-2"></i>Les états financiers (Bilan, CPC, ESG…) se consultent dans <a href="@Url.Action("Synthese", "EtatsFiscaux")">États de Synthèse</a> (tenue comptable).</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -193,9 +143,41 @@
 
 @section Scripts {
 <link rel="stylesheet" href="~/css/liasse-fiscale.css" />
-<script src="~/js/liasse-fiscale.js"></script>
 <script>
-    // IS auto-calc
+    var initialRetraitements = @Html.Raw(string.IsNullOrWhiteSpace(Model.RetraitementsJson) ? "[]" : Model.RetraitementsJson);
+
+    function syncRetraitementsJson() {
+        var rows = [];
+        document.querySelectorAll('#tbl-retraitements tbody tr').forEach(function(tr){
+            var type = tr.querySelector('.rt-type')?.value || 'Reintegration';
+            var lib = tr.querySelector('.rt-lib')?.value || '';
+            var mont = parseFloat(tr.querySelector('.rt-mont')?.value) || 0;
+            if (lib || mont) rows.push({ type: type, libelle: lib, montant: mont });
+        });
+        var json = JSON.stringify(rows);
+        var el = document.getElementById('RetraitementsJson');
+        if (el) el.value = json;
+        var ri = rows.filter(function(r){ return (r.type||'').toLowerCase() !== 'deduction'; }).reduce(function(s,r){return s+r.montant;},0);
+        var dd = rows.filter(function(r){ return (r.type||'').toLowerCase() === 'deduction'; }).reduce(function(s,r){return s+r.montant;},0);
+        var riEl = document.getElementById('Reintegrations');
+        var ddEl = document.getElementById('Deductions');
+        if (rows.length && riEl) riEl.value = ri.toFixed(2);
+        if (rows.length && ddEl) ddEl.value = dd.toFixed(2);
+        calcIS();
+    }
+
+    function addRetraitementRow(data) {
+        data = data || { type: 'Reintegration', libelle: '', montant: 0 };
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><select class="form-select form-select-sm rt-type"><option value="Reintegration">Réintégration</option><option value="Deduction">Déduction</option></select></td>'
+            + '<td><input class="form-control form-control-sm rt-lib" value="'+(data.libelle||'').replace(/"/g,'&quot;')+'" /></td>'
+            + '<td><input class="form-control form-control-sm text-end rt-mont" type="number" step="0.01" value="'+(data.montant||0)+'" /></td>'
+            + '<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'tr\').remove();syncRetraitementsJson();">&times;</button></td>';
+        document.querySelector('#tbl-retraitements tbody').appendChild(tr);
+        tr.querySelector('.rt-type').value = data.type || 'Reintegration';
+        tr.querySelectorAll('input,select').forEach(function(el){ el.addEventListener('input', syncRetraitementsJson); el.addEventListener('change', syncRetraitementsJson); });
+    }
+
     function calcIS() {
         var r = parseFloat(document.getElementById('ResultatComptable').value)||0;
         var ri = parseFloat(document.getElementById('Reintegrations').value)||0;
@@ -203,23 +185,29 @@
         var df = parseFloat(document.getElementById('DeficitsAnterieurs').value)||0;
         var rf = r + ri - d, bi = Math.max(0, rf - df), is2 = 0, t = 0;
         if(bi<=300000){t=10;is2=bi*0.10;}else if(bi<=1000000){t=20;is2=bi*0.20;}else if(bi<=100000000){t=31;is2=bi*0.31;}else{t=35;is2=bi*0.35;}
+        var cm = Math.max(r * 0.005, 3000);
+        is2 = Math.max(is2, cm);
         var ac = parseFloat(document.getElementById('AcomptesVerses').value)||(parseFloat(document.getElementById('Acompte1').value)||0)+(parseFloat(document.getElementById('Acompte2').value)||0)+(parseFloat(document.getElementById('Acompte3').value)||0)+(parseFloat(document.getElementById('Acompte4').value)||0);
-        var net = Math.max(0, is2 - ac);
+        var net = is2 - ac;
         document.getElementById('resFiscal').textContent=rf.toFixed(2);
         document.getElementById('baseImp').textContent=bi.toFixed(2);
         document.getElementById('tauxIS').textContent=t+'%';
+        document.getElementById('cmMin').textContent=cm.toFixed(2);
         document.getElementById('isDu').textContent=is2.toFixed(2);
         document.getElementById('isNet').innerHTML=net.toFixed(2)+' <small class="fs-6">MAD</small>';
     }
     document.querySelectorAll('.is-input').forEach(function(el){el.addEventListener('input',calcIS);});
-    calcIS();
 
-    // Init Liasse Fiscale
     document.addEventListener('DOMContentLoaded', function(){
-        LiasseFiscale.UI.init(@clientId, @exercice, @Model.DeclarationId);
+        (initialRetraitements || []).forEach(function(r){
+            addRetraitementRow({ type: r.type || r.Type, libelle: r.libelle || r.Libelle, montant: r.montant || r.Montant || 0 });
+        });
+        syncRetraitementsJson();
+        calcIS();
+        var form = document.getElementById('formEditIS');
+        if (form) form.addEventListener('submit', syncRetraitementsJson);
     });
 
-    // Sidebar navigation
     document.querySelectorAll('.lf-nav-btn').forEach(function(btn){
         btn.addEventListener('click', function(){
             document.querySelectorAll('.lf-nav-btn').forEach(function(b){b.classList.remove('active');});
@@ -228,7 +216,6 @@
             document.querySelectorAll('.lf-pane').forEach(function(p){p.style.display='none';});
             var pane = document.getElementById('pane-' + target);
             if(pane) pane.style.display='block';
-            LiasseFiscale.UI.onPaneShown(target);
         });
     });
 </script>

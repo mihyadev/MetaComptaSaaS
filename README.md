@@ -92,6 +92,17 @@ docker-compose logs -f
 | **Admin Plateforme** | `admin@metacompta.ma` | `Admin@2026!` |
 | **Gérant Cabinet** | `gerant@cabinet-demo.ma` | `Gerant@2026!` |
 
+## ⚠️ Wipe données opérationnelles (démo uniquement)
+
+Script **irréversible** : purge déclarations, workflows liés, paie, écritures/rapprochements, `ServiceContrat`, exercices/périodes. Conserve cabinets, users, rôles, référentiels, clients (fiches), plan/journaux.
+
+```powershell
+# Depuis la racine du repo — flag obligatoire
+.\scripts\wipe_demo_ops_data.ps1 -ConfirmWipe
+```
+
+Après le wipe, créez un exercice ouvert par client avant toute déclaration / écriture / paie.
+
 ## 📊 Fonctionnalités Fiscales Marocaines
 
 ### TVA

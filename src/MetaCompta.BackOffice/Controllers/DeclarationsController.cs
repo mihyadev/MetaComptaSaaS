@@ -70,10 +70,12 @@ public class DeclarationsController : BaseController
     private async Task<IActionResult> IndexTyped(string? type, string? statut, int page)
     {
         var clientId = SelectedClientId;
-        var result = await _declarations.GetAllAsync(clientId, type, statut, page);
+        var result = await _declarations.GetAllAsync(clientId, type, statut, page, SelectedExerciceId);
         await LoadReferenceDataToViewBagAsync("TYPE_DECLARATION", "STATUT_DECLARATION");
         ViewBag.Type = type;
         ViewBag.Statut = statut;
+        ViewBag.ExerciceId = SelectedExerciceId;
+        ViewBag.ExerciceAnnee = SelectedExercice;
         PopulateContractAccessViewBag();
         return View("Index", result);
     }
@@ -136,6 +138,12 @@ public class DeclarationsController : BaseController
                 break;
             case "IS":
                 ViewBag.ISData = await _declarations.GetISDataAsync(id);
+                try
+                {
+                    await _declarations.EnsureChecklistAsync(id);
+                    ViewBag.Checklist = await _declarations.GetChecklistAsync(id);
+                }
+                catch { ViewBag.Checklist = new List<DeclarationChecklistItemDto>(); }
                 break;
             case "IR":
                 ViewBag.IRData = await _declarations.GetIRDataAsync(id);
@@ -153,9 +161,11 @@ public class DeclarationsController : BaseController
             var activeWf = wfInstances?.Items?.FirstOrDefault(w => w.Status == "Active" || w.Status == "Paused");
             if (activeWf != null)
             {
-                ViewBag.WorkflowInstance = activeWf;
-                var currentStep = await _workflow.GetCurrentStepAsync(activeWf.Id);
-                ViewBag.WorkflowCurrentStep = currentStep;
+            // Prefer full instance (steps + progress) — list payload is enough for ids, detail is authoritative
+            var full = await _workflow.GetInstanceByIdAsync(activeWf.Id);
+            ViewBag.WorkflowInstance = full ?? activeWf;
+            var currentStep = await _workflow.GetCurrentStepAsync(activeWf.Id);
+            ViewBag.WorkflowCurrentStep = currentStep;
             }
             else if (wfInstances?.Items?.Any() == true)
             {
@@ -291,7 +301,8 @@ public class DeclarationsController : BaseController
         {
             ClientId = clientId,
             Type = normalized,
-            AnneeFiscale = anneeFiscale
+            AnneeFiscale = anneeFiscale ?? SelectedExercice,
+            ExerciceComptableId = SelectedExerciceId
         });
 
         if (result?.Success == true && result.Data != null)
@@ -543,23 +554,9 @@ public class DeclarationsController : BaseController
     [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditCNSS(int id)
     {
-        var declaration = await _declarations.GetByIdAsync(id);
-        if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
-        if (!EditableStatuts.Contains(declaration.Statut ?? "")) { TempData["Error"] = "Modification impossible : la déclaration est dans un statut verrouillé (déjà validée / soumise / clôturée)."; return RedirectToAction("Details", new { id }); }
-        ViewBag.Type = "CNSS";
-        PopulateContractAccessViewBag();
-        if (!(ViewBag.CanEditDeclaration as bool? ?? false))
-        {
-            TempData["Error"] = ViewBag.IsConsultMode == true
-                ? (ViewBag.ContractAccessReasonLabel as string ?? "Modification impossible : mode consultation.")
-                : "Vous n'avez pas la permission de modifier cette déclaration.";
-            return RedirectToAction("Details", new { id });
-        }
-        ViewBag.Declaration = declaration;
-        await LoadWorkflowActionBarAsync(declaration);
-        var cnssData = await _declarations.GetCNSSDataAsync(id);
-        ViewBag.CnssRoster = await _declarations.GetCnssEmployeesAsync(id);
-        return View(cnssData ?? new DeclarationCNSSDto { DeclarationId = id });
+        // TEMP: CNSS saisie (personnel / calcul / DNS) hidden — restore body when re-enabling EditCNSS in catalog.
+        TempData["Success"] = "Saisie CNSS temporairement désactivée. Gérez le statut, les documents et les messages sur la fiche déclaration.";
+        return RedirectToAction("Details", new { id });
     }
 
     [HttpPost]
@@ -567,21 +564,9 @@ public class DeclarationsController : BaseController
     [RequirePermission(ClaimDefinitions.CnssEdit, ClaimDefinitions.DeclarationEdit)]
     public async Task<IActionResult> EditCNSS(int id, DeclarationCNSSDto dto)
     {
-        if (!RequiresManageAccess()) return RedirectToAction("Details", new { id });
-        if (!RequiresPermission(PermissionHelper.Declaration.Edit)) return RedirectToAction("Details", new { id });
-        var declCheck = await _declarations.GetByIdAsync(id);
-        if (declCheck != null && !EditableStatuts.Contains(declCheck.Statut ?? ""))
-        { TempData["Error"] = "Modification interdite dans ce statut."; return RedirectToAction("Details", new { id }); }
-        var result = await _declarations.SaveCNSSDataAsync(id, dto);
-        if (result?.Success == true)
-        {
-            TempData["Success"] = "Données CNSS sauvegardées avec succès.";
-            return RedirectToAction("Details", new { id });
-        }
-        SetApiError(result, "Erreur lors de la sauvegarde CNSS.");
-        ViewBag.Type = "CNSS";
-        ViewBag.Declaration = await _declarations.GetByIdAsync(id);
-        return View(dto);
+        // TEMP: saisie CNSS hidden — restore SaveCNSSDataAsync when re-enabling EditCNSS.
+        TempData["Success"] = "Saisie CNSS temporairement désactivée.";
+        return RedirectToAction("Details", new { id });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -873,6 +858,20 @@ public class DeclarationsController : BaseController
         return RedirectToAction("Details", new { id = declarationId });
     }
 
+    /// <summary>Refuse current workflow step and reopen the previous one (Contrôle → étape précédente).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectWorkflowStep(int declarationId, int workflowInstanceId, string? reason = null, string? comment = null)
+    {
+        var dto = new RejectStepDto { Reason = reason, Comment = comment };
+        var result = await _workflow.RejectStepAsync(workflowInstanceId, dto);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Étape refusée — retour à l'étape précédente.";
+        else
+            TempData["Error"] = result?.Message ?? "Erreur lors du refus de l'étape.";
+        return RedirectToAction("Details", new { id = declarationId });
+    }
+
     /// <summary>Pause the workflow for a declaration.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1126,6 +1125,70 @@ public class DeclarationsController : BaseController
                             new XElement(ns + "TypeOperation", l.TypeOperation)
                         )
                     )
+                )
+            )
+        );
+        return doc.ToString();
+    }
+
+    [HttpGet]
+    [RequirePermission(ClaimDefinitions.DeclarationSubmit)]
+    public async Task<IActionResult> ExportISXml(int id)
+    {
+        var declaration = await _declarations.GetByIdAsync(id);
+        if (declaration == null) { TempData["Error"] = "Déclaration introuvable."; return RedirectToAction("Index"); }
+        var isData = await _declarations.GetISDataAsync(id);
+        if (isData == null) { TempData["Error"] = "Données IS introuvables."; return RedirectToAction("Details", new { id }); }
+        ClientDto? client = null;
+        if (declaration.ClientId > 0)
+            client = await _clients.GetByIdAsync(declaration.ClientId);
+        var cabinetName = CabinetName ?? "Cabinet Comptable";
+        var xml = BuildISXml(declaration, isData, client, cabinetName);
+        var bytes = Encoding.UTF8.GetBytes(xml);
+        var fileName = $"IS_Liasse_{declaration.Periode}_{client?.ICE ?? "UNKNOWN"}_{DateTime.Now:yyyyMMdd}.xml";
+        return File(bytes, "application/xml", fileName);
+    }
+
+    private static string BuildISXml(DeclarationDto decl, DeclarationISDto isData, ClientDto? client, string cabinetName)
+    {
+        var ns = XNamespace.Get("http://www.tax.gov.ma/simpl/is");
+        var doc = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"),
+            new XElement(ns + "DeclarationIS",
+                new XAttribute("version", "1.0"),
+                new XAttribute("stub", "true"),
+                new XElement(ns + "Identifiant",
+                    new XElement(ns + "ICE", client?.ICE ?? ""),
+                    new XElement(ns + "IdentifiantFiscal", client?.IF ?? ""),
+                    new XElement(ns + "RC", client?.RC ?? ""),
+                    new XElement(ns + "RaisonSociale", client?.RaisonSociale ?? "")
+                ),
+                new XElement(ns + "Cabinet",
+                    new XElement(ns + "NomCabinet", cabinetName)
+                ),
+                new XElement(ns + "Exercice",
+                    new XElement(ns + "AnneeFiscale", isData.AnneeFiscale),
+                    new XElement(ns + "DateDebut", decl.DateDebut.ToString("yyyy-MM-dd")),
+                    new XElement(ns + "DateFin", decl.DateFin.ToString("yyyy-MM-dd")),
+                    new XElement(ns + "DateLimite", decl.DateLimite.ToString("yyyy-MM-dd"))
+                ),
+                new XElement(ns + "ResultatFiscal",
+                    new XElement(ns + "ResultatComptable", isData.ResultatComptable),
+                    new XElement(ns + "Reintegrations", isData.Reintegrations),
+                    new XElement(ns + "Deductions", isData.Deductions),
+                    new XElement(ns + "ResultatFiscal", isData.ResultatFiscal),
+                    new XElement(ns + "DeficitsAnterieurs", isData.DeficitsAnterieurs),
+                    new XElement(ns + "BaseImposable", isData.BaseImposable)
+                ),
+                new XElement(ns + "Impot",
+                    new XElement(ns + "TauxIS", isData.TauxIS),
+                    new XElement(ns + "ISDu", isData.ISDu),
+                    new XElement(ns + "CotisationMinimale", isData.CotisationMinimale),
+                    new XElement(ns + "AcomptesVerses", isData.AcomptesVerses),
+                    new XElement(ns + "ISNet", isData.ISNet)
+                ),
+                new XElement(ns + "Ack",
+                    new XElement(ns + "Status", "STUB"),
+                    new XElement(ns + "Message", "SIMPL-IS stub — pas d'appel DGI réel")
                 )
             )
         );

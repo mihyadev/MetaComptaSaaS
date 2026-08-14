@@ -1104,6 +1104,8 @@ public class CommercialService : ICommercialService
             .Include(c => c.Client)
             .Include(c => c.BonCommande)
             .Include(c => c.Devis)
+            .Include(c => c.ParentContrat)
+            .Include(c => c.RemplaceParContrat)
             .Include(c => c.Responsable)
             .Include(c => c.Membres)
                 .ThenInclude(m => m.User)
@@ -1166,8 +1168,13 @@ public class CommercialService : ICommercialService
         if (!await _db.ContratMembres.AnyAsync(m => m.ContratId == contrat.Id))
             return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant validation.");
 
+        // Rectificatif may overlap its parent — parent is superseded on validate
+        var excludeIds = new List<int> { contrat.Id };
+        if (contrat.ParentContratId is int parentExcl)
+            excludeIds.Add(parentExcl);
+
         var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratId: contrat.Id);
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: excludeIds);
         if (overlapRef != null)
             return ApiResponse<ContratCommercialDto>.Fail(
                 $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
@@ -1181,8 +1188,30 @@ public class CommercialService : ICommercialService
 
         AddHistoriqueContrat("Contrat", contrat, "Validation", ancienStatut, RefCodes.StatutContrat.Valide, userId);
 
+        // Supersede original contract when validating a rectificatif
+        if (contrat.ParentContratId is int parentId)
+        {
+            var parent = await _db.ContratsCommerciaux
+                .FirstOrDefaultAsync(c => c.Id == parentId && c.CabinetId == cabinetId);
+            if (parent != null
+                && parent.Statut != RefCodes.StatutContrat.Remplace
+                && parent.Statut != RefCodes.StatutContrat.Termine
+                && parent.Statut != RefCodes.StatutContrat.Annule)
+            {
+                var parentOld = parent.Statut;
+                parent.Statut = RefCodes.StatutContrat.Remplace;
+                parent.RemplaceParContratId = contrat.Id;
+                parent.UpdatedBy = userId;
+                parent.UpdatedAt = DateTime.UtcNow;
+                AddHistoriqueContrat("Contrat", parent, "Remplacé", parentOld, RefCodes.StatutContrat.Remplace, userId,
+                    $"Remplacé par rectificatif {contrat.Reference}");
+            }
+        }
+
         // ⚠️ AUTO-ACTIVATION DES SERVICES : Créer/activer les services du client
-        await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        var activateErr = await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        if (activateErr != null)
+            return ApiResponse<ContratCommercialDto>.Fail(activateErr);
 
         await _db.SaveChangesAsync();
         return await GetContratByIdAsync(id, cabinetId);
@@ -1228,7 +1257,7 @@ public class CommercialService : ICommercialService
             return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant réactivation.");
 
         var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratId: contrat.Id);
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: new[] { contrat.Id });
         if (overlapRef != null)
             return ApiResponse<ContratCommercialDto>.Fail(
                 $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
@@ -1240,7 +1269,9 @@ public class CommercialService : ICommercialService
 
         AddHistoriqueContrat("Contrat", contrat, "Réactivation", ancienStatut, RefCodes.StatutContrat.Valide, userId);
 
-        await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        var activateErr = await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        if (activateErr != null)
+            return ApiResponse<ContratCommercialDto>.Fail(activateErr);
 
         await _db.SaveChangesAsync();
         return await GetContratByIdAsync(id, cabinetId);
@@ -1285,7 +1316,9 @@ public class CommercialService : ICommercialService
             return ApiResponse<int>.Fail("Seul un contrat validé ou actif peut être synchronisé.");
 
         var lignesAvant = contrat.Lignes.Count(l => !string.IsNullOrWhiteSpace(l.TypeService));
-        await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        var activateErr = await ActiverServicesFromContratAsync(contrat, cabinetId, userId);
+        if (activateErr != null)
+            return ApiResponse<int>.Fail(activateErr);
         await _db.SaveChangesAsync();
 
         return ApiResponse<int>.Ok(lignesAvant, $"{lignesAvant} service(s) synchronisé(s) depuis le contrat #{contrat.Reference}.");
@@ -1361,6 +1394,121 @@ public class CommercialService : ICommercialService
         await _db.SaveChangesAsync();
 
         return await GetContratByIdAsync(copie.Id, cabinetId);
+    }
+
+    public async Task<ApiResponse<ContratCommercialDto>> CreateRectificatifContratAsync(
+        int id, int cabinetId, string userId, string? motif = null)
+    {
+        var source = await _db.ContratsCommerciaux
+            .Where(c => c.Id == id && c.CabinetId == cabinetId)
+            .Include(c => c.Lignes.OrderBy(l => l.Ordre))
+            .Include(c => c.Membres)
+            .FirstOrDefaultAsync();
+
+        if (source == null)
+            return ApiResponse<ContratCommercialDto>.Fail("Contrat introuvable.");
+
+        var allowed = source.Statut is RefCodes.StatutContrat.Valide
+            or RefCodes.StatutContrat.Actif
+            or RefCodes.StatutContrat.Signe
+            or RefCodes.StatutContrat.Suspendu;
+        if (!allowed || source.RemplaceParContratId != null)
+            return ApiResponse<ContratCommercialDto>.Fail(
+                "Seul un contrat signé, validé, actif ou suspendu (non déjà remplacé) peut être rectifié.");
+
+        // Reuse open draft rectificatif if one already exists
+        var existingDraft = await _db.ContratsCommerciaux
+            .Where(c => c.ParentContratId == source.Id && c.CabinetId == cabinetId
+                && (c.Statut == RefCodes.StatutContrat.Brouillon
+                    || c.Statut == RefCodes.StatutContrat.EnCours
+                    || c.Statut == RefCodes.StatutContrat.Signe))
+            .OrderByDescending(c => c.Id)
+            .FirstOrDefaultAsync();
+        if (existingDraft != null)
+            return await GetContratByIdAsync(existingDraft.Id, cabinetId);
+
+        var reference = await GenerateReferenceAsync("CTR", cabinetId);
+        var nextVersion = source.Version + 1;
+        var motifClean = string.IsNullOrWhiteSpace(motif) ? null : motif.Trim();
+
+        var rectif = new ContratCommercial
+        {
+            CabinetId = cabinetId,
+            Reference = reference,
+            ClientId = source.ClientId,
+            BonCommandeId = source.BonCommandeId,
+            DevisId = source.DevisId,
+            Objet = source.Objet != null ? $"{source.Objet} (rectificatif)" : "Rectificatif",
+            Description = source.Description,
+            Devise = source.Devise,
+            TauxChange = source.TauxChange,
+            DateEmission = DateTime.UtcNow,
+            DateDebutContrat = source.DateDebutContrat,
+            DateFinContrat = source.DateFinContrat,
+            Statut = RefCodes.StatutContrat.Brouillon,
+            EstSigne = false,
+            ModeleFacturation = source.ModeleFacturation,
+            FrequenceFacturation = source.FrequenceFacturation,
+            ClausesSpecifiques = source.ClausesSpecifiques,
+            ConditionsParticulieres = source.ConditionsParticulieres,
+            Notes = source.Notes,
+            MontantHT = source.MontantHT,
+            MontantTVA = source.MontantTVA,
+            MontantTTC = source.MontantTTC,
+            MontantRemise = source.MontantRemise,
+            ServicesActivesJson = source.ServicesActivesJson,
+            ParentContratId = source.Id,
+            MotifRectificatif = motifClean,
+            Version = nextVersion,
+            ResponsableId = source.ResponsableId,
+            CreatedBy = userId
+        };
+
+        foreach (var l in source.Lignes)
+        {
+            rectif.Lignes.Add(new LigneDocumentCommercial
+            {
+                CabinetId = cabinetId,
+                TypeLigne = l.TypeLigne,
+                TypeService = l.TypeService,
+                CodeService = l.CodeService,
+                ServiceContratId = l.ServiceContratId,
+                Ordre = l.Ordre,
+                Description = l.Description,
+                DescriptionDetaillee = l.DescriptionDetaillee,
+                Quantite = l.Quantite,
+                Unite = l.Unite,
+                PrixUnitaireHT = l.PrixUnitaireHT,
+                RemisePourcentage = l.RemisePourcentage,
+                RemiseMontant = l.RemiseMontant,
+                TauxTVA = l.TauxTVA,
+                MontantHT = l.MontantHT,
+                MontantTVA = l.MontantTVA,
+                MontantTTC = l.MontantTTC,
+                ModeFacturation = l.ModeFacturation,
+                CreatedBy = userId
+            });
+        }
+
+        foreach (var m in source.Membres)
+        {
+            rectif.Membres.Add(new ContratMembre
+            {
+                CabinetId = cabinetId,
+                UserId = m.UserId,
+                RoleLabel = m.RoleLabel,
+                CreatedBy = userId
+            });
+        }
+
+        _db.ContratsCommerciaux.Add(rectif);
+        AddHistoriqueContrat("Contrat", rectif, "Rectificatif", null, RefCodes.StatutContrat.Brouillon, userId,
+            $"Rectificatif de {source.Reference}" + (motifClean != null ? $" — {motifClean}" : ""));
+        AddHistoriqueContrat("Contrat", source, "RectificatifCréé", source.Statut, source.Statut, userId,
+            $"Rectificatif {reference} créé (v{nextVersion})");
+
+        await _db.SaveChangesAsync();
+        return await GetContratByIdAsync(rectif.Id, cabinetId);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1953,11 +2101,12 @@ public class CommercialService : ICommercialService
         }
     }
 
-    private async Task ActiverServicesFromContratAsync(ContratCommercial contrat, int cabinetId, string userId)
+    /// <returns>Error message if activation cannot proceed; null on success/skip.</returns>
+    private async Task<string?> ActiverServicesFromContratAsync(ContratCommercial contrat, int cabinetId, string userId)
     {
         // Deserialize the checked services from the contract JSON
         if (string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
-            return;
+            return null;
 
         List<ContratServiceActiveLine> serviceLines;
         try
@@ -1969,15 +2118,19 @@ public class CommercialService : ICommercialService
         }
         catch
         {
-            return; // Malformed JSON — skip silently
+            return null; // Malformed JSON — skip silently
         }
 
         if (!serviceLines.Any())
-            return;
+            return null;
 
-        var exercice = contrat.DateDebutContrat?.Year ?? DateTime.UtcNow.Year;
+        // Contract validation is independent of exercice. Bind to open exo when present;
+        // otherwise activate services unbound (ExerciceComptableId null) for dossier menu.
+        var openExo = await _db.ExercicesComptables.AsNoTracking()
+            .Where(e => e.ClientId == contrat.ClientId && e.CabinetId == cabinetId && e.Statut == "Ouvert")
+            .OrderByDescending(e => e.Annee)
+            .FirstOrDefaultAsync();
 
-        // Load Client for fiscal configuration
         var client = await _db.Clients.AsNoTracking()
             .Where(c => c.Id == contrat.ClientId)
             .Select(c => new { c.TypeTVA, c.MoisClotureExercice })
@@ -1985,10 +2138,15 @@ public class CommercialService : ICommercialService
 
         var typeTVA = client?.TypeTVA ?? RefCodes.TypeTva.Mensuelle;
         var moisCloture = client?.MoisClotureExercice ?? 12;
+        var exercice = openExo?.Annee ?? (contrat.DateDebutContrat?.Year ?? DateTime.UtcNow.Year);
 
-        // Load existing services for this client
         var servicesExistants = await _db.ServiceContrats
-            .Where(s => s.ClientId == contrat.ClientId && (s.ExerciceFiscal == exercice || s.ExerciceFiscal == null))
+            .Where(s => s.ClientId == contrat.ClientId
+                        && (openExo == null
+                            || s.ExerciceComptableId == openExo.Id
+                            || s.ExerciceComptableId == null
+                            || s.ExerciceFiscal == exercice
+                            || s.ExerciceFiscal == null))
             .ToListAsync();
 
         foreach (var svcLine in serviceLines)
@@ -2000,7 +2158,6 @@ public class CommercialService : ICommercialService
 
             if (serviceExistant != null)
             {
-                // Reactivate and update — honoraires stay on fee lines only (decoupled billing)
                 serviceExistant.Actif = true;
                 serviceExistant.LibelleService = !string.IsNullOrWhiteSpace(svcLine.LibelleService)
                     ? svcLine.LibelleService!
@@ -2010,6 +2167,9 @@ public class CommercialService : ICommercialService
                 serviceExistant.DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow;
                 serviceExistant.DateFin = contrat.DateFinContrat;
                 serviceExistant.AutoGenererDeclarations = svcLine.AutoGenererDeclarations;
+                if (openExo != null)
+                    serviceExistant.ExerciceComptableId = openExo.Id;
+                serviceExistant.ExerciceFiscal = exercice;
                 serviceExistant.UpdatedBy = userId;
                 serviceExistant.UpdatedAt = DateTime.UtcNow;
                 ApplySmartDeadlines(serviceExistant);
@@ -2017,7 +2177,6 @@ public class CommercialService : ICommercialService
             }
             else
             {
-                // Create new service with smart defaults (ops trigger only — no fee copy)
                 var newService = new ServiceContrat
                 {
                     ClientId = contrat.ClientId,
@@ -2028,6 +2187,7 @@ public class CommercialService : ICommercialService
                     Categorie = GetServiceCategory(svcLine.TypeService),
                     Frequence = GetSmartFrequency(svcLine.TypeService, typeTVA),
                     ExerciceFiscal = exercice,
+                    ExerciceComptableId = openExo?.Id,
                     Actif = true,
                     AutoGenererDeclarations = svcLine.AutoGenererDeclarations,
                     DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow,
@@ -2044,6 +2204,7 @@ public class CommercialService : ICommercialService
         // NOTE: We do NOT deactivate services not in this contract.
         // A client may have multiple contracts covering different services.
         // Service deactivation should only happen via explicit contract termination.
+        return null;
     }
 
     /// <summary>
@@ -2140,7 +2301,8 @@ public class CommercialService : ICommercialService
         int cabinetId,
         DateTime? debut,
         DateTime? fin,
-        int? excludeContratId = null)
+        int? excludeContratId = null,
+        IEnumerable<int>? excludeContratIds = null)
     {
         if (!debut.HasValue || !fin.HasValue)
             return null;
@@ -2148,6 +2310,10 @@ public class CommercialService : ICommercialService
         var start = debut.Value.Date;
         var end = fin.Value.Date;
         var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
+        var excludes = new HashSet<int>();
+        if (excludeContratId.HasValue) excludes.Add(excludeContratId.Value);
+        if (excludeContratIds != null)
+            foreach (var x in excludeContratIds) excludes.Add(x);
 
         var query = _db.ContratsCommerciaux
             .AsNoTracking()
@@ -2160,8 +2326,8 @@ public class CommercialService : ICommercialService
                 && c.DateDebutContrat.Value.Date <= end
                 && c.DateFinContrat.Value.Date >= start);
 
-        if (excludeContratId.HasValue)
-            query = query.Where(c => c.Id != excludeContratId.Value);
+        if (excludes.Count > 0)
+            query = query.Where(c => !excludes.Contains(c.Id));
 
         return await query
             .OrderByDescending(c => c.DateValidation)

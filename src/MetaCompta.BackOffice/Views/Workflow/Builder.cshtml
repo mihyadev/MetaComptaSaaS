@@ -10,13 +10,13 @@
     var editId = ViewBag.EditTemplateId as int?;
     var isEditMode = editId.HasValue;
 
-    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "ClotureArchivage" };
+    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "Paiement", "Rapprochement", "ClotureArchivage" };
     var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
     var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
     var roles = new[] { "Gerant", "Manager", "Collaborateur", "Assistant", "Stagiaire" };
     var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" };
-    var declStatuses = new[] { "Brouillon", "ACompleter", "EnCours", "EnPreparation", "Completee", "EnRevision", "Validee", "Soumise", "Payee", "Refusee", "Rejetee" };
-    var actionTypes = new[] { "None", "CreateDeclaration", "CompleteDeclaration", "ValidateDeclaration", "SubmitDeclaration", "SuspendDeclaration", "ArchiveDeclaration", "RelanceClient", "NotifyEmployee", "NotifyClient", "GeneratePDF", "ExportXML", "SendEmail", "CreateTask", "RequestDocuments", "ApproveByClient", "PaymentReminder" };
+    var declStatuses = new[] { "Brouillon", "ACompleter", "EnCours", "EnPreparation", "Completee", "EnRevision", "Validee", "Soumise", "Payee", "Refusee", "Rejetee", "DocumentsDemandes", "DocumentsRecus", "Suspendue", "Archivee" };
+    var actionTypes = new[] { "None", "CreateDeclaration", "CompleteDeclaration", "ValidateDeclaration", "SubmitDeclaration", "SuspendDeclaration", "ArchiveDeclaration", "ClotureDeclaration", "RelanceClient", "NotifyEmployee", "NotifyClient", "GeneratePDF", "ExportXML", "SendEmail", "CreateTask", "RequestDocuments", "ApproveByClient", "PaymentReminder" };
     var routingModes = new[] { "Sequential", "ConditionalBranch", "SkipToStep", "EndWorkflow" };
     var triggerSources = new[] { "Manual", "System", "Employee", "Client", "Extranet", "API", "Schedule" };
     var onMaxRetries = new[] { "NextStep", "Suspend", "Cancel", "SkipStep", "EscalateToManager" };
@@ -37,13 +37,23 @@
     var stepTypeLabels = new Dictionary<string, string> {
         ["Initialisation"] = "Initialisation",
         ["DemandePieces"] = "Demande pièces",
+        ["Relance"] = "Relance documents",
         ["Collecte"] = "Collecte",
         ["Saisie"] = "Saisie",
         ["Controle"] = "Contrôle",
         ["ValidationInterne"] = "Valid. interne",
         ["ValidationClient"] = "Valid. client",
         ["DepotSoumission"] = "Dépôt",
+        ["Paiement"] = "Paiement",
+        ["Rapprochement"] = "Rapprochement",
         ["ClotureArchivage"] = "Clôture"
+    };
+    var onMaxRetriesLabels = new Dictionary<string, string> {
+        ["Suspend"] = "Suspendre la déclaration",
+        ["EscalateToManager"] = "Escalader au manager",
+        ["NextStep"] = "Passer à l'étape suivante",
+        ["SkipStep"] = "Ignorer l'étape",
+        ["Cancel"] = "Annuler le workflow"
     };
 
     var assignLabels = new Dictionary<string, string> {
@@ -92,23 +102,56 @@
     .cron-freq-btn.active, .cron-day-btn.active, .cron-month-btn.active { background: var(--monday-blue); color: #fff; border-color: var(--monday-blue); }
     .cron-day-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.74rem; }
     .cron-preview { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+    .cron-preview-end { background: color-mix(in srgb, #e67e22 12%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.45rem; display: flex; align-items: center; gap: 0.5rem; }
     .cron-preview-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--monday-green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+    .cron-preview-end .cron-preview-icon { background: #e67e22; }
+    .cron-preview-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); margin-bottom: 0.1rem; }
     .cron-preview-text { font-size: 0.78rem; font-weight: 600; color: var(--monday-text); }
     .cron-preview-cron { font-size: 0.68rem; color: var(--monday-muted); font-family: monospace; }
+    .life-panel { background: color-mix(in srgb, var(--monday-blue) 4%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.85rem 1rem; margin-top: 0.35rem; }
+    .life-panel .life-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); margin-bottom: 0.35rem; display: block; }
+    .life-panel .life-offset-row { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: stretch; }
+    .life-panel .life-unit { display: flex; align-items: center; background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 10px; overflow: hidden; min-height: 34px; }
+    .life-panel .life-unit span { font-size: 0.72rem; font-weight: 600; color: var(--monday-muted); padding: 0 0.55rem; white-space: nowrap; }
+    .life-panel .life-unit input { border: 0; width: 3.2rem; text-align: center; font-weight: 700; font-size: 0.85rem; background: transparent; padding: 0.3rem 0; }
+    .life-panel .life-unit input:focus { outline: none; box-shadow: none; }
+    .life-panel .life-plus { color: var(--monday-muted); font-weight: 700; align-self: center; padding: 0 0.15rem; }
+    .period-template-box { margin-top: 0.35rem; border: 1px solid var(--monday-border); border-radius: 10px; overflow: hidden; background: var(--monday-surface); }
+    .period-template-box .pt-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.45rem 0.75rem; background: color-mix(in srgb, var(--monday-blue) 6%, var(--monday-surface)); border-bottom: 1px solid var(--monday-border); }
+    .period-template-box .pt-head span { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); }
+    .period-template-box .pt-head strong { font-size: 0.78rem; color: var(--monday-text); }
+    .period-template-box table { width: 100%; margin: 0; font-size: 0.75rem; }
+    .period-template-box th, .period-template-box td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--monday-border); vertical-align: middle; }
+    .period-template-box th { color: var(--monday-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+    .period-template-box tr:last-child td { border-bottom: 0; }
+    .period-template-box .pt-scroll { max-height: 260px; overflow-y: auto; }
+    .period-template-box input[type="text"], .period-template-box input[type="date"], .period-template-box input[type="number"], .period-template-box select { border: 1px solid var(--monday-border); border-radius: 6px; padding: 0.2rem 0.35rem; font-size: 0.75rem; background: var(--monday-surface); }
+    .period-template-box input[type="text"] { width: 100%; }
+    .period-template-box .pt-md-row { display: flex; align-items: center; gap: 0.25rem; flex-wrap: nowrap; }
+    .period-template-box .pt-md-row input[type="number"] { width: 3.2rem; text-align: center; font-weight: 700; }
+    .period-template-box .pt-md-row select { min-width: 5.5rem; }
+    .period-template-box .pt-sep { color: var(--monday-muted); font-weight: 600; }
+    .period-template-box .pt-yyyy { font-size: 0.72rem; font-weight: 700; color: var(--monday-blue); letter-spacing: .02em; white-space: nowrap; }
+    .period-template-box .pt-del { border: 0; background: transparent; color: var(--monday-muted); padding: 0.15rem 0.35rem; cursor: pointer; }
+    .period-template-box .pt-del:hover { color: #c0392b; }
+    .period-template-box .pt-add { font-size: 0.72rem; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h4 class="fw-bold mb-0"><i class="bi bi-kanban-fill text-primary me-2"></i>@(isEditMode ? "Modifier" : "Créer") un Workflow</h4>
-        <p class="text-muted mb-0" style="font-size:0.82rem;">Configurez les étapes, assignations et automatisations.</p>
+        <h4 class="fw-bold mb-0"><i class="bi bi-kanban-fill text-primary me-2"></i>@(isEditMode ? "Modifier" : "Créer") le workflow cabinet</h4>
+        <p class="text-muted mb-0" style="font-size:0.82rem;">Un modèle de base par type de déclaration. À l’affectation client, personnalisez depuis la fiche client → Workflow.</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="@Url.Action("Templates", "Workflow")" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-list me-1"></i>Modèles</a>
-        @if (!isEditMode && ((ViewBag.CanWorkflowCreate as bool? ?? false) || (ViewBag.CanSystemAdmin as bool? ?? false)))
+        @if ((ViewBag.CanWorkflowCreate as bool? ?? false) || (ViewBag.CanSystemAdmin as bool? ?? false))
         {
             <form asp-action="SeedAllDefaultTemplates" asp-controller="Workflow" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-primary rounded-pill px-3" onclick="return confirm('Créer tous les modèles par défaut ?')"><i class="bi bi-magic me-1"></i>Générer par défaut</button>
+                <input type="hidden" name="forceReset" value="true" />
+                <button type="submit" class="btn btn-outline-danger rounded-pill px-3"
+                        onclick="return confirm('Réinitialiser TOUS les workflows cabinet ?\n\n• Les anciens modèles seront archivés (ancien)\n• Un seul workflow propre sera recréé par type (TVA, IS, IR, CNSS…)\n• Les copies client ne sont pas supprimées')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Réinitialiser &amp; recréer
+                </button>
             </form>
         }
     </div>
@@ -118,10 +161,11 @@
     <div class="col-lg-3">
         <div class="card builder-card">
             <div class="card-body">
-                <h6 class="fw-bold mb-3" style="font-size:0.82rem;"><i class="bi bi-collection text-primary me-1"></i>Modèles existants</h6>
+                <h6 class="fw-bold mb-2" style="font-size:0.82rem;"><i class="bi bi-collection text-primary me-1"></i>Base cabinet</h6>
+                <p class="text-muted mb-3" style="font-size:0.72rem;">1 workflow actif par type</p>
                 @if (allTemplates.Any())
                 {
-                    @foreach (var tpl in allTemplates.Take(15))
+                    @foreach (var tpl in allTemplates)
                     {
                         var tc = typeColors.ContainsKey(tpl.DeclarationType) ? typeColors[tpl.DeclarationType] : typeColors["All"];
                         <a href="@Url.Action("Builder", "Workflow", new { id = tpl.Id })" class="tpl-mini @(editId == tpl.Id ? "active" : "")">
@@ -138,7 +182,7 @@
                 <hr class="my-2"/>
                 @if (ViewBag.CanWorkflowCreate as bool? ?? false)
                 {
-                    <a href="@Url.Action("Builder", "Workflow")" class="btn btn-sm btn-primary w-100 rounded-pill"><i class="bi bi-plus me-1"></i>Nouveau</a>
+                    <a href="@Url.Action("Builder", "Workflow")" class="btn btn-sm btn-primary w-100 rounded-pill"><i class="bi bi-plus me-1"></i>Nouveau type</a>
                 }
             </div>
         </div>
@@ -148,33 +192,34 @@
         <form asp-action="BuilderSave" asp-controller="Workflow" method="post" id="builderForm">
             @Html.AntiForgeryToken()
             @if (isEditMode) { <input type="hidden" name="id" value="@editId" /> }
+            <input type="hidden" name="ClientId" value="" />
+            <input type="hidden" name="IsDefault" value="true" />
 
             <div class="card builder-card mb-3">
                 <div class="card-body">
                     <div class="section-title"><i class="bi bi-gear-fill"></i>Configuration générale</div>
+                    <div class="alert alert-light border py-2 px-3 mb-3" style="font-size:0.78rem;">
+                        <i class="bi bi-info-circle text-primary me-1"></i>
+                        Modèle <strong>cabinet</strong> (base). Après affectation, la personnalisation se fait sur le <strong>client</strong>.
+                    </div>
                     <div class="row g-2">
-                        <div class="col-md-5">
+                        <div class="col-md-6">
                             <label class="form-label-sm">Nom du workflow</label>
                             <input type="text" name="Name" value="@Model.Name" class="form-control form-control-sm" placeholder="Ex: TVA Mensuelle" required />
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-6">
                             <label class="form-label-sm">Type de déclaration</label>
-                            <select name="DeclarationType" class="form-select form-select-sm">
-                                @foreach (var dt in declTypes) { <option value="@dt" selected="@(Model.DeclarationType == dt)">@dt</option> }
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-sm">Client (optionnel)</label>
-                            <select name="ClientId" class="form-select form-select-sm">
-                                <option value="">Tous les clients</option>
-                                @foreach (var c in clients) { <option value="@c.Id" selected="@(Model.ClientId == c.Id)">@c.RaisonSociale</option> }
-                            </select>
-                        </div>
-                        <div class="col-md-1 d-flex align-items-end">
-                            <div class="form-check">
-                                <input type="checkbox" name="IsDefault" value="true" class="form-check-input" id="chkDefault" @(Model.IsDefault ? "checked" : "") />
-                                <label class="form-check-label" style="font-size:0.72rem; font-weight:600;" for="chkDefault">Défaut</label>
-                            </div>
+                            @if (isEditMode)
+                            {
+                                <input type="hidden" name="DeclarationType" value="@Model.DeclarationType" />
+                                <input type="text" class="form-control form-control-sm" value="@Model.DeclarationType" disabled />
+                            }
+                            else
+                            {
+                                <select name="DeclarationType" class="form-select form-select-sm">
+                                    @foreach (var dt in declTypes) { <option value="@dt" selected="@(Model.DeclarationType == dt)">@dt</option> }
+                                </select>
+                            }
                         </div>
                         <div class="col-12">
                             <label class="form-label-sm">Description</label>
@@ -218,15 +263,15 @@
                                                 <label class="form-label-sm">Nom de l'étape</label>
                                                 <input type="text" name="Steps[@i].Name" value="@step.Name" class="form-control form-control-sm step-name-input" />
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-7">
                                                 <label class="form-label-sm">Type d'étape</label>
                                                 <select name="Steps[@i].StepType" class="form-select form-select-sm step-type-select" onchange="onStepTypeOrAssignChange(this)">
                                                     @foreach (var st in stepTypes) { <option value="@st" selected="@(step.StepType == st)">@(stepTypeLabels.ContainsKey(st) ? stepTypeLabels[st] : st)</option> }
+                                                    @if (string.Equals(step.StepType, "Relance", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <option value="Relance" selected>Relance (obsolète → utiliser config ci-dessous)</option>
+                                                    }
                                                 </select>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label-sm">SLA (heures)</label>
-                                                <input type="number" name="Steps[@i].SLAHours" value="@step.SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
                                             </div>
                                             <div class="col-12">
                                                 <label class="form-label-sm">Description</label>
@@ -234,6 +279,56 @@
                                             </div>
                                         </div>
                                     </div>
+                                    @{
+                                        var isClotureStep = step.StepType == "ClotureArchivage";
+                                        var isInitStep = step.StepType == "Initialisation";
+                                        var lifeAction = step.ActionOnLifecycleEnd ?? "ClotureDeclaration";
+                                    }
+                                    <input type="hidden" name="Steps[@i].DeadlineAnchor" value="@(isClotureStep ? "None" : "CalendrierMaroc")" class="deadline-anchor-hidden" />
+                                    <input type="hidden" name="Steps[@i].ApplyDeadlineToDeclaration" value="@(isInitStep ? "true" : "false")" />
+                                    <input type="hidden" name="Steps[@i].LifecycleEndMode" value="@(isInitStep ? "PeriodEnd" : "None")" class="lifecycle-mode-hidden" />
+                                    <!-- Internal processing delay (non-Init, non-Clôture) -->
+                                    <div class="field-section echeance-section @(isClotureStep || isInitStep ? "d-none" : "")">
+                                        <div class="field-section-title"><i class="bi bi-hourglass-split"></i>Délai de traitement</div>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label class="form-label-sm">Délai interne (heures)</label>
+                                                <input type="number" name="Steps[@i].SLAHours" value="@step.SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
+                                                <div class="form-text">Temps imparti au collaborateur pour cette étape.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @{
+                                        var winStart = 1; var winEnd = 1; var winMonths = 1; var winYears = 0;
+                                        var lifeDef = MetaCompta.Domain.Common.MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults("Mensuelle");
+                                        winStart = lifeDef.StartDay; winEnd = lifeDef.EndDay; winMonths = lifeDef.Months; winYears = lifeDef.Years;
+                                        try
+                                        {
+                                            var cfgJson = string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{}" : step.ActionConfigJson!;
+                                            using var cfgDoc = System.Text.Json.JsonDocument.Parse(cfgJson);
+                                            string? pf = null;
+                                            if (cfgDoc.RootElement.TryGetProperty("periodFrequency", out var pfe) && pfe.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                pf = pfe.GetString();
+                                            if (!string.IsNullOrWhiteSpace(pf))
+                                            {
+                                                lifeDef = MetaCompta.Domain.Common.MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(pf);
+                                                winStart = lifeDef.StartDay; winEnd = lifeDef.EndDay; winMonths = lifeDef.Months; winYears = lifeDef.Years;
+                                            }
+                                            if (cfgDoc.RootElement.TryGetProperty("windowStartDay", out var ws) && ws.TryGetInt32(out var sd)) winStart = sd;
+                                            if (cfgDoc.RootElement.TryGetProperty("windowEndDay", out var we) && we.TryGetInt32(out var ed)) winEnd = ed;
+                                            if (cfgDoc.RootElement.TryGetProperty("windowMonthOffset", out var wo) && wo.TryGetInt32(out var mov)) winMonths = Math.Max(0, mov);
+                                            else if (cfgDoc.RootElement.TryGetProperty("deadlineMonth", out var dm) && dm.TryGetInt32(out var dmv) && dmv is >= 1 and <= 12)
+                                                winMonths = dmv;
+                                            if (cfgDoc.RootElement.TryGetProperty("deadlineYearOffset", out var dy) && dy.TryGetInt32(out var dyv))
+                                            {
+                                                if (cfgDoc.RootElement.TryGetProperty("deadlineMonth", out _) && !cfgDoc.RootElement.TryGetProperty("windowMonthOffset", out _))
+                                                    winYears = 0;
+                                                else
+                                                    winYears = Math.Max(0, dyv);
+                                            }
+                                        }
+                                        catch { /* keep defaults */ }
+                                    }
                                     <!-- S2: Assignation -->
                                     <div class="field-section">
                                         <div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div>
@@ -333,14 +428,10 @@
                                             <label class="chk-item"><input type="checkbox" name="Steps[@i].IsScheduled" value="true" class="form-check-input sched-checkbox" @(step.IsScheduled ? "checked" : "") onchange="toggleSchedule(this)" /><span>Planifiée</span></label>
                                         </div>
                                     </div>
-                                    <!-- S6: Planification / Visual Cron Builder -->
-                                    <div class="field-section schedule-section @(showSched ? "" : "d-none")">
-                                        <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification / Initialisation</div>
+                                    <!-- S6: Fréquence & échéance (one block — no duplicate) -->
+                                    <div class="field-section schedule-section @(showSched || isInitStep ? "" : "d-none")">
+                                        <div class="field-section-title"><i class="bi bi-calendar-event"></i><span class="schedule-section-title-text">@(isInitStep ? "Périodes & échéances" : "Planification")</span></div>
                                         <div class="init-schedule-panel mb-2 @(step.StepType == "Initialisation" && step.AssignmentType == "AutoSystem" ? "" : "d-none")">
-                                            <div class="alert alert-light border mb-2 py-2 px-3" style="font-size:0.78rem;">
-                                                <i class="bi bi-info-circle text-primary me-1"></i>
-                                                Étape <strong>Initialisation</strong> automatique : choisissez la fréquence cron et si le démarrage manuel reste autorisé.
-                                            </div>
                                             <label class="form-label-sm mb-1">Mode de déclenchement</label>
                                             <div class="d-flex flex-wrap gap-1 mb-2">
                                                 <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="schedule" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'schedule')"><i class="bi bi-clock-history"></i> Planifié</button>
@@ -348,19 +439,62 @@
                                                 <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
                                             </div>
                                             <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
-                                            <input type="hidden" name="Steps[@i].ActionConfigJson" class="action-config-input" value="@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true}" : step.ActionConfigJson)" />
+                                            <input type="hidden" name="Steps[@i].ActionConfigJson" class="action-config-input" value="@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":10,\"windowMonthOffset\":1}" : step.ActionConfigJson)" />
                                         </div>
                                         <div class="cron-builder cron-freq-panel" data-cron="@step.CronExpression">
-                                            <div class="mb-2">
+                                            <div class="init-freq-echeance mb-2 @(isInitStep ? "" : "d-none")">
+                                                <div class="life-panel">
+                                                    <span class="life-label">Modèle de périodes</span>
+                                                    <div class="d-flex flex-wrap gap-1 mb-2">
+                                                        <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="monthly" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'monthly')"><i class="bi bi-calendar-month"></i> Mensuel (12)</button>
+                                                        <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="quarterly" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel (4)</button>
+                                                        <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="annually" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'annually')"><i class="bi bi-calendar-heart"></i> Annuel (1)</button>
+                                                        <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="periodic" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'periodic')"><i class="bi bi-calendar-range"></i> Périodique</button>
+                                                    </div>
+                                                    <div class="period-template-editor mb-2"></div>
+                                                    <div class="row g-2 align-items-end">
+                                                        <div class="col-md-6">
+                                                            <span class="life-label">Action à la fin</span>
+                                                            <select name="Steps[@i].ActionOnLifecycleEnd" class="form-select form-select-sm" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))">
+                                                                @foreach (var a in actionTypes.Where(x => x != "None" && x != "CreateDeclaration"))
+                                                                {
+                                                                    var aLabel = a switch
+                                                                    {
+                                                                        "ClotureDeclaration" => "Clôturer",
+                                                                        "ArchiveDeclaration" => "Archiver",
+                                                                        "SuspendDeclaration" => "Suspendre",
+                                                                        "CompleteDeclaration" => "Terminer",
+                                                                        "ValidateDeclaration" => "Valider",
+                                                                        "SubmitDeclaration" => "Soumettre",
+                                                                        "NotifyEmployee" => "Notifier collaborateur",
+                                                                        "NotifyClient" => "Notifier client",
+                                                                        "PaymentReminder" => "Rappel paiement",
+                                                                        _ => a
+                                                                    };
+                                                                    <option value="@a" selected="@(lifeAction == a)">@aLabel</option>
+                                                                }
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <input type="hidden" class="period-end-preview" />
+                                                    <input type="hidden" class="window-start-day" value="1" />
+                                                    <input type="hidden" class="window-end-day" value="1" />
+                                                    <input type="hidden" class="window-month-offset" value="1" />
+                                                    <input type="hidden" class="deadline-year-offset" value="0" />
+                                                </div>
+                                            </div>
+                                            <div class="cron-freq-non-init-wrap @(isInitStep ? "d-none" : "")">
+                                            <div class="mb-2 cron-freq-non-init">
                                                 <label class="form-label-sm mb-1">Fréquence</label>
                                                 <div class="d-flex flex-wrap gap-1">
                                                     <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
                                                     <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
                                                     <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
-                                                    <button type="button" class="cron-freq-btn" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
-                                                    <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
-                                                    <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
+                                                    <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
+                                                    <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
+                                                    <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
                                                 </div>
+                                            </div>
                                             </div>
                                             <div class="cron-options-weekly d-none mb-2">
                                                 <label class="form-label-sm mb-1">Jour de la semaine</label>
@@ -374,8 +508,8 @@
                                                     <button type="button" class="cron-day-btn" data-dow="0" onclick="toggleCronDay(this)">Di</button>
                                                 </div>
                                             </div>
-                                            <div class="cron-options-monthly d-none mb-2">
-                                                <label class="form-label-sm mb-1">Jour du mois</label>
+                                            <div class="cron-options-monthly d-none mb-2 cron-options-monthly-extra">
+                                                <label class="form-label-sm mb-1">Jour du mois (cron)</label>
                                                 <div class="d-flex flex-wrap gap-1">
                                                     <button type="button" class="cron-day-btn" data-dom="1" onclick="toggleCronDom(this)">1</button>
                                                     <button type="button" class="cron-day-btn" data-dom="5" onclick="toggleCronDom(this)">5</button>
@@ -447,8 +581,17 @@
                                                 </div>
                                             </div>
                                             <div class="cron-preview d-none">
-                                                <span class="cron-preview-icon"><i class="bi bi-check-lg"></i></span>
+                                                <span class="cron-preview-icon"><i class="bi bi-play-fill"></i></span>
                                                 <div>
+                                                    <div class="cron-preview-label">Ouverture</div>
+                                                    <div class="cron-preview-text"></div>
+                                                    <div class="cron-preview-cron"></div>
+                                                </div>
+                                            </div>
+                                            <div class="cron-preview-end d-none">
+                                                <span class="cron-preview-icon"><i class="bi bi-flag-fill"></i></span>
+                                                <div>
+                                                    <div class="cron-preview-label">Échéance</div>
                                                     <div class="cron-preview-text"></div>
                                                     <div class="cron-preview-cron"></div>
                                                 </div>
@@ -457,17 +600,61 @@
                                         <input type="hidden" name="Steps[@i].CronExpression" class="cron-input" value="@step.CronExpression" />
                                         <input type="hidden" name="Steps[@i].CronDescription" class="cron-desc-input" value="@step.CronDescription" />
                                     </div>
-                                    <!-- S7: Relance -->
-                                    <div class="field-section">
-                                        <details @(step.MaxRetries > 0 ? "open" : "")>
-                                            <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i>Relance / Retry<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
-                                            <div class="row g-2 mt-1">
-                                                <div class="col-md-3"><label class="form-label-sm">Max relances</label><input type="number" name="Steps[@i].MaxRetries" value="@step.MaxRetries" class="form-control form-control-sm" min="0" /></div>
-                                                <div class="col-md-3"><label class="form-label-sm">Intervalle (h)</label><input type="number" name="Steps[@i].RetryIntervalHours" value="@step.RetryIntervalHours" class="form-control form-control-sm" placeholder="24" min="0" /></div>
-                                                <div class="col-md-3"><label class="form-label-sm">Après max relances</label><select name="Steps[@i].OnMaxRetriesAction" class="form-select form-select-sm">@foreach (var om in onMaxRetries) { <option value="@om" selected="@(step.OnMaxRetriesAction == om)">@om</option> }</select></div>
-                                                <div class="col-md-3"><label class="form-label-sm">Priorité tâche</label><select name="Steps[@i].TaskPriority" class="form-select form-select-sm">@foreach (var p in priorities) { <option value="@p" selected="@(step.TaskPriority == p)">@p</option> }</select></div>
+                                    <!-- S7: Relance = config on any step (not a step type) -->
+                                    @{
+                                        var retryDays = step.RetryIntervalHours is > 0
+                                            ? Math.Max(1, (int)Math.Round(step.RetryIntervalHours.Value / 24.0))
+                                            : 15;
+                                        var relanceEnabled = step.MaxRetries > 0
+                                            || string.Equals(step.StepType, "Relance", StringComparison.OrdinalIgnoreCase);
+                                        var hideRelanceForType = string.Equals(step.StepType, "Initialisation", StringComparison.OrdinalIgnoreCase)
+                                            || string.Equals(step.StepType, "ClotureArchivage", StringComparison.OrdinalIgnoreCase);
+                                    }
+                                    <div class="field-section relance-config-section @(hideRelanceForType ? "d-none" : "")" data-relance-panel>
+                                        <div class="field-section-title"><i class="bi bi-arrow-repeat"></i>Relances automatiques</div>
+                                        <label class="chk-item mb-2">
+                                            <input type="checkbox" class="form-check-input relance-enable" @(relanceEnabled ? "checked" : "") onchange="toggleRelanceConfig(this)" />
+                                            <span>Activer les relances si cette étape n'est pas terminée</span>
+                                        </label>
+                                        <div class="relance-fields @(relanceEnabled ? "" : "d-none")">
+                                            <div class="alert alert-info py-2 px-3 small mb-2 mt-1 rounded-3">
+                                                Ex. demande documents reçue par le client → après <strong>N jours</strong> le système renvoie une relance, jusqu'à <strong>N fois</strong>, puis exécute l'action choisie.
                                             </div>
-                                        </details>
+                                            <div class="row g-2 mt-1">
+                                                <div class="col-md-3">
+                                                    <label class="form-label-sm">1ʳᵉ relance après (jours)</label>
+                                                    <input type="number" class="form-control form-control-sm relance-days-input" value="@retryDays" min="1" placeholder="15" @(relanceEnabled ? "" : "disabled") />
+                                                    <input type="hidden" name="Steps[@i].RetryIntervalHours" class="relance-hours-input" value="@(step.RetryIntervalHours ?? retryDays * 24)" />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label-sm">Nombre de relances</label>
+                                                    <input type="number" name="Steps[@i].MaxRetries" value="@(relanceEnabled ? (step.MaxRetries > 0 ? step.MaxRetries : 3) : 0)" class="form-control form-control-sm relance-max-input" min="0" @(relanceEnabled ? "" : "disabled") />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label-sm">Action à chaque relance</label>
+                                                    <select class="form-select form-select-sm relance-action-hint" disabled>
+                                                        <option selected>Renvoyer la relance client</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label-sm">Après N relances</label>
+                                                    <select name="Steps[@i].OnMaxRetriesAction" class="form-select form-select-sm relance-onmax-input" @(relanceEnabled ? "" : "disabled")>
+                                                        @foreach (var om in onMaxRetries)
+                                                        {
+                                                            var omLabel = onMaxRetriesLabels.ContainsKey(om) ? onMaxRetriesLabels[om] : om;
+                                                            var selected = string.IsNullOrEmpty(step.OnMaxRetriesAction)
+                                                                ? om == "Suspend"
+                                                                : step.OnMaxRetriesAction == om;
+                                                            <option value="@om" selected="@selected">@omLabel</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @if (!relanceEnabled)
+                                        {
+                                            <input type="hidden" name="Steps[@i].MaxRetries" value="0" class="relance-max-fallback" />
+                                        }
                                     </div>
                                     <!-- S8: Routage -->
                                     <div class="field-section">
@@ -528,7 +715,7 @@
                         <label class="form-label-sm">Nom de l'étape</label>
                         <input type="text" name="Steps[__IDX__].Name" class="form-control form-control-sm step-name-input" />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-7">
                         <label class="form-label-sm">Type d'étape</label>
                         <select name="Steps[__IDX__].StepType" class="form-select form-select-sm step-type-select" onchange="onStepTypeOrAssignChange(this)">
                             <option value="Initialisation">Initialisation</option>
@@ -539,12 +726,10 @@
                             <option value="ValidationInterne">Valid. interne</option>
                             <option value="ValidationClient">Valid. client</option>
                             <option value="DepotSoumission">Dépôt</option>
+                            <option value="Paiement">Paiement</option>
+                            <option value="Rapprochement">Rapprochement</option>
                             <option value="ClotureArchivage">Clôture</option>
                         </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label-sm">SLA (heures)</label>
-                        <input type="number" name="Steps[__IDX__].SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
                     </div>
                     <div class="col-12">
                         <label class="form-label-sm">Description</label>
@@ -552,6 +737,19 @@
                     </div>
                 </div>
             </div>
+            <input type="hidden" name="Steps[__IDX__].DeadlineAnchor" value="CalendrierMaroc" class="deadline-anchor-hidden" />
+            <input type="hidden" name="Steps[__IDX__].ApplyDeadlineToDeclaration" value="false" class="apply-ddl-hidden" />
+            <div class="field-section echeance-section">
+                <div class="field-section-title"><i class="bi bi-hourglass-split"></i>Délai de traitement</div>
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Délai interne (heures)</label>
+                        <input type="number" name="Steps[__IDX__].SLAHours" class="form-control form-control-sm" placeholder="24" min="0" />
+                        <div class="form-text">Temps imparti au collaborateur pour cette étape.</div>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="Steps[__IDX__].LifecycleEndMode" value="None" class="lifecycle-mode-hidden" />
             <!-- T-S2: Assignation -->
             <div class="field-section">
                 <div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div>
@@ -624,6 +822,7 @@
                             <option value="None">None</option><option value="CreateDeclaration">CreateDeclaration</option><option value="CompleteDeclaration">CompleteDeclaration</option>
                             <option value="ValidateDeclaration">ValidateDeclaration</option><option value="SubmitDeclaration">SubmitDeclaration</option>
                             <option value="SuspendDeclaration">SuspendDeclaration</option><option value="ArchiveDeclaration">ArchiveDeclaration</option>
+                            <option value="ClotureDeclaration">ClotureDeclaration</option>
                             <option value="RelanceClient">RelanceClient</option><option value="NotifyEmployee">NotifyEmployee</option><option value="NotifyClient">NotifyClient</option>
                             <option value="GeneratePDF">GeneratePDF</option><option value="ExportXML">ExportXML</option><option value="SendEmail">SendEmail</option>
                             <option value="CreateTask">CreateTask</option><option value="RequestDocuments">RequestDocuments</option><option value="ApproveByClient">ApproveByClient</option>
@@ -636,6 +835,7 @@
                             <option value="None">None</option><option value="CreateDeclaration">CreateDeclaration</option><option value="CompleteDeclaration">CompleteDeclaration</option>
                             <option value="ValidateDeclaration">ValidateDeclaration</option><option value="SubmitDeclaration">SubmitDeclaration</option>
                             <option value="SuspendDeclaration">SuspendDeclaration</option><option value="ArchiveDeclaration">ArchiveDeclaration</option>
+                            <option value="ClotureDeclaration">ClotureDeclaration</option>
                             <option value="RelanceClient">RelanceClient</option><option value="NotifyEmployee">NotifyEmployee</option><option value="NotifyClient">NotifyClient</option>
                             <option value="GeneratePDF">GeneratePDF</option><option value="ExportXML">ExportXML</option><option value="SendEmail">SendEmail</option>
                             <option value="CreateTask">CreateTask</option><option value="RequestDocuments">RequestDocuments</option><option value="ApproveByClient">ApproveByClient</option>
@@ -656,14 +856,10 @@
                     <label class="chk-item"><input type="checkbox" name="Steps[__IDX__].IsScheduled" value="true" class="form-check-input sched-checkbox" onchange="toggleSchedule(this)" /><span>Planifiée</span></label>
                 </div>
             </div>
-            <!-- T-S6: Planification / Visual Cron Builder -->
+            <!-- T-S6: Fréquence & échéance (one block) -->
             <div class="field-section schedule-section d-none">
-                <div class="field-section-title"><i class="bi bi-calendar-event"></i>Planification / Initialisation</div>
+                <div class="field-section-title"><i class="bi bi-calendar-event"></i><span class="schedule-section-title-text">Périodes &amp; échéances</span></div>
                 <div class="init-schedule-panel mb-2 d-none">
-                    <div class="alert alert-light border mb-2 py-2 px-3" style="font-size:0.78rem;">
-                        <i class="bi bi-info-circle text-primary me-1"></i>
-                        Étape <strong>Initialisation</strong> automatique : choisissez la fréquence cron et si le démarrage manuel reste autorisé.
-                    </div>
                     <label class="form-label-sm mb-1">Mode de déclenchement</label>
                     <div class="d-flex flex-wrap gap-1 mb-2">
                         <button type="button" class="cron-freq-btn init-trigger-btn" data-mode="schedule" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'schedule')"><i class="bi bi-clock-history"></i> Planifié</button>
@@ -671,19 +867,54 @@
                         <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
                     </div>
                     <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
-                    <input type="hidden" name="Steps[__IDX__].ActionConfigJson" class="action-config-input" value='{"initTrigger":"both","allowManualInit":true}' />
+                    <input type="hidden" name="Steps[__IDX__].ActionConfigJson" class="action-config-input" value='{"initTrigger":"both","allowManualInit":true,"periodFrequency":"Mensuelle","windowStartDay":1,"windowEndDay":10,"windowMonthOffset":1}' />
                 </div>
                 <div class="cron-builder cron-freq-panel" data-cron="">
-                    <div class="mb-2">
+                    <div class="init-freq-echeance mb-2 d-none">
+                        <div class="life-panel">
+                            <span class="life-label">Modèle de périodes</span>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="monthly" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'monthly')"><i class="bi bi-calendar-month"></i> Mensuel (12)</button>
+                                <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="quarterly" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel (4)</button>
+                                <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="annually" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'annually')"><i class="bi bi-calendar-heart"></i> Annuel (1)</button>
+                                <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="periodic" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'periodic')"><i class="bi bi-calendar-range"></i> Périodique</button>
+                            </div>
+                            <div class="period-template-editor mb-2"></div>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-6">
+                                    <span class="life-label">Action à la fin</span>
+                                    <select name="Steps[__IDX__].ActionOnLifecycleEnd" class="form-select form-select-sm" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))">
+                                        <option value="ClotureDeclaration" selected>Clôturer</option>
+                                        <option value="ArchiveDeclaration">Archiver</option>
+                                        <option value="SuspendDeclaration">Suspendre</option>
+                                        <option value="CompleteDeclaration">Terminer</option>
+                                        <option value="ValidateDeclaration">Valider</option>
+                                        <option value="SubmitDeclaration">Soumettre</option>
+                                        <option value="NotifyEmployee">Notifier collaborateur</option>
+                                        <option value="NotifyClient">Notifier client</option>
+                                        <option value="PaymentReminder">Rappel paiement</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <input type="hidden" class="period-end-preview" />
+                            <input type="hidden" class="window-start-day" value="1" />
+                            <input type="hidden" class="window-end-day" value="1" />
+                            <input type="hidden" class="window-month-offset" value="1" />
+                            <input type="hidden" class="deadline-year-offset" value="0" />
+                        </div>
+                    </div>
+                    <div class="d-none cron-freq-non-init-wrap">
+                    <div class="mb-2 cron-freq-non-init">
                         <label class="form-label-sm mb-1">Fréquence</label>
                         <div class="d-flex flex-wrap gap-1">
                             <button type="button" class="cron-freq-btn" data-freq="monthly" onclick="setCronFreq(this,'monthly')"><i class="bi bi-calendar-month"></i> Mensuel</button>
                             <button type="button" class="cron-freq-btn" data-freq="quarterly" onclick="setCronFreq(this,'quarterly')"><i class="bi bi-calendar3"></i> Trimestriel</button>
                             <button type="button" class="cron-freq-btn" data-freq="annually" onclick="setCronFreq(this,'annually')"><i class="bi bi-calendar-heart"></i> Annuel</button>
-                            <button type="button" class="cron-freq-btn" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
-                            <button type="button" class="cron-freq-btn" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
-                            <button type="button" class="cron-freq-btn" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
+                            <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="custom" onclick="setCronFreq(this,'custom')"><i class="bi bi-calendar-plus"></i> Personnalisé</button>
+                            <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="weekly" onclick="setCronFreq(this,'weekly')"><i class="bi bi-calendar-week"></i> Hebdo</button>
+                            <button type="button" class="cron-freq-btn cron-freq-extra" data-freq="daily" onclick="setCronFreq(this,'daily')"><i class="bi bi-calendar-day"></i> Quotidien</button>
                         </div>
+                    </div>
                     </div>
                     <div class="cron-options-weekly d-none mb-2">
                         <label class="form-label-sm mb-1">Jour de la semaine</label>
@@ -697,8 +928,8 @@
                             <button type="button" class="cron-day-btn" data-dow="0" onclick="toggleCronDay(this)">Di</button>
                         </div>
                     </div>
-                    <div class="cron-options-monthly d-none mb-2">
-                        <label class="form-label-sm mb-1">Jour du mois</label>
+                    <div class="cron-options-monthly d-none mb-2 cron-options-monthly-extra">
+                        <label class="form-label-sm mb-1">Jour du mois (cron)</label>
                         <div class="d-flex flex-wrap gap-1">
                             <button type="button" class="cron-day-btn" data-dom="1" onclick="toggleCronDom(this)">1</button>
                             <button type="button" class="cron-day-btn" data-dom="5" onclick="toggleCronDom(this)">5</button>
@@ -770,8 +1001,17 @@
                         </div>
                     </div>
                     <div class="cron-preview d-none">
-                        <span class="cron-preview-icon"><i class="bi bi-check-lg"></i></span>
+                        <span class="cron-preview-icon"><i class="bi bi-play-fill"></i></span>
                         <div>
+                            <div class="cron-preview-label">Ouverture</div>
+                            <div class="cron-preview-text"></div>
+                            <div class="cron-preview-cron"></div>
+                        </div>
+                    </div>
+                    <div class="cron-preview-end d-none">
+                        <span class="cron-preview-icon"><i class="bi bi-flag-fill"></i></span>
+                        <div>
+                                                    <div class="cron-preview-label">Échéance</div>
                             <div class="cron-preview-text"></div>
                             <div class="cron-preview-cron"></div>
                         </div>
@@ -780,17 +1020,44 @@
                 <input type="hidden" name="Steps[__IDX__].CronExpression" class="cron-input" value="" />
                 <input type="hidden" name="Steps[__IDX__].CronDescription" class="cron-desc-input" value="" />
             </div>
-            <!-- T-S7: Relance -->
-            <div class="field-section">
-                <details>
-                    <summary class="field-section-title" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i>Relance / Retry<span class="toggle-hint ms-2">(cliquez pour ouvrir)</span></summary>
-                    <div class="row g-2 mt-1">
-                        <div class="col-md-3"><label class="form-label-sm">Max relances</label><input type="number" name="Steps[__IDX__].MaxRetries" class="form-control form-control-sm" min="0" value="0" /></div>
-                        <div class="col-md-3"><label class="form-label-sm">Intervalle (h)</label><input type="number" name="Steps[__IDX__].RetryIntervalHours" class="form-control form-control-sm" placeholder="24" min="0" /></div>
-                        <div class="col-md-3"><label class="form-label-sm">Après max relances</label><select name="Steps[__IDX__].OnMaxRetriesAction" class="form-select form-select-sm"><option value="NextStep">NextStep</option><option value="Suspend">Suspend</option><option value="Cancel">Cancel</option><option value="SkipStep">SkipStep</option><option value="EscalateToManager">EscalateToManager</option></select></div>
-                        <div class="col-md-3"><label class="form-label-sm">Priorité tâche</label><select name="Steps[__IDX__].TaskPriority" class="form-select form-select-sm"><option value="Faible">Faible</option><option value="Moyenne" selected>Moyenne</option><option value="Haute">Haute</option><option value="Urgente">Urgente</option></select></div>
+            <!-- T-S7: Relance = config on any step -->
+            <div class="field-section relance-config-section" data-relance-panel>
+                <div class="field-section-title"><i class="bi bi-arrow-repeat"></i>Relances automatiques</div>
+                <label class="chk-item mb-2">
+                    <input type="checkbox" class="form-check-input relance-enable" onchange="toggleRelanceConfig(this)" />
+                    <span>Activer les relances si cette étape n'est pas terminée</span>
+                </label>
+                <div class="relance-fields d-none">
+                    <div class="alert alert-info py-2 px-3 small mb-2 mt-1 rounded-3">
+                        Ex. demande documents reçue par le client → après <strong>N jours</strong> le système renvoie une relance, jusqu'à <strong>N fois</strong>, puis exécute l'action choisie.
                     </div>
-                </details>
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-3">
+                            <label class="form-label-sm">1ʳᵉ relance après (jours)</label>
+                            <input type="number" class="form-control form-control-sm relance-days-input" value="15" min="1" placeholder="15" disabled />
+                            <input type="hidden" name="Steps[__IDX__].RetryIntervalHours" class="relance-hours-input" value="360" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label-sm">Nombre de relances</label>
+                            <input type="number" class="form-control form-control-sm relance-max-input" min="0" value="3" disabled />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label-sm">Action à chaque relance</label>
+                            <select class="form-select form-select-sm" disabled><option selected>Renvoyer la relance client</option></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label-sm">Après N relances</label>
+                            <select name="Steps[__IDX__].OnMaxRetriesAction" class="form-select form-select-sm relance-onmax-input" disabled>
+                                <option value="Suspend" selected>Suspendre la déclaration</option>
+                                <option value="EscalateToManager">Escalader au manager</option>
+                                <option value="NextStep">Passer à l'étape suivante</option>
+                                <option value="SkipStep">Ignorer l'étape</option>
+                                <option value="Cancel">Annuler le workflow</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" name="Steps[__IDX__].MaxRetries" value="0" class="relance-max-fallback" />
             </div>
             <!-- T-S8: Routage -->
             <div class="field-section">
@@ -888,6 +1155,7 @@
         container.insertAdjacentHTML('beforeend', html);
         const newCard = container.lastElementChild;
         newCard.classList.remove('collapsed-step');
+        syncStepTypePanels(newCard);
         initEmployeeSelect2(newCard);
         updateStepCount();
     }
@@ -944,9 +1212,113 @@
         }
     }
 
+    function syncRelanceDaysToHours(card) {
+        if (!card) return;
+        const days = card.querySelector('.relance-days-input');
+        const hours = card.querySelector('.relance-hours-input');
+        if (!days || !hours || days.disabled) return;
+        const d = Math.max(1, parseInt(days.value || '15', 10) || 15);
+        days.value = d;
+        hours.value = d * 24;
+    }
+
+    function toggleRelanceConfig(chk) {
+        const card = chk.closest('.step-card');
+        if (!card) return;
+        const on = !!chk.checked;
+        const fields = card.querySelector('.relance-fields');
+        const maxIn = card.querySelector('.relance-max-input');
+        const days = card.querySelector('.relance-days-input');
+        const onMax = card.querySelector('.relance-onmax-input');
+        const fallback = card.querySelector('.relance-max-fallback');
+        if (fields) fields.classList.toggle('d-none', !on);
+        [maxIn, days, onMax].forEach(el => { if (el) el.disabled = !on; });
+        if (on) {
+            if (fallback) fallback.remove();
+            if (maxIn) {
+                if (!maxIn.name) {
+                    const idx = card.dataset.index || '0';
+                    maxIn.name = 'Steps[' + idx + '].MaxRetries';
+                }
+                if (!maxIn.value || maxIn.value === '0') maxIn.value = '3';
+            }
+            if (days && (!days.value || days.value === '0')) days.value = '15';
+            syncRelanceDaysToHours(card);
+        } else {
+            if (maxIn) {
+                maxIn.value = '0';
+                maxIn.removeAttribute('name');
+            }
+            const panel = card.querySelector('[data-relance-panel]');
+            const idx = card.dataset.index || '0';
+            let fb = card.querySelector('.relance-max-fallback');
+            if (!fb && panel) {
+                fb = document.createElement('input');
+                fb.type = 'hidden';
+                fb.className = 'relance-max-fallback';
+                panel.appendChild(fb);
+            }
+            if (fb) {
+                fb.name = 'Steps[' + idx + '].MaxRetries';
+                fb.value = '0';
+            }
+            const hours = card.querySelector('.relance-hours-input');
+            if (hours) hours.value = '0';
+        }
+    }
+
+    function syncRelancePanel(card) {
+        if (!card) return;
+        const typeSel = card.querySelector('.step-type-select');
+        const type = typeSel ? typeSel.value : '';
+        const panel = card.querySelector('[data-relance-panel]');
+        const hide = type === 'Initialisation' || type === 'ClotureArchivage';
+        if (panel) panel.classList.toggle('d-none', hide);
+        if (!hide) {
+            const enable = card.querySelector('.relance-enable');
+            if (enable) toggleRelanceConfig(enable);
+        }
+    }
+
+    function syncStepTypePanels(card) {
+        if (!card) return;
+        const typeSel = card.querySelector('.step-type-select');
+        const type = typeSel ? typeSel.value : '';
+        const isInit = type === 'Initialisation';
+        const isCloture = type === 'ClotureArchivage';
+        const echeance = card.querySelector('.echeance-section');
+        const initBlock = card.querySelector('.init-freq-echeance');
+        const schedule = card.querySelector('.schedule-section');
+        const titleEl = card.querySelector('.schedule-section-title-text');
+        const anchorHidden = card.querySelector('.deadline-anchor-hidden');
+        const applyHidden = card.querySelector('input[name$=".ApplyDeadlineToDeclaration"]');
+        const lifeModeHidden = card.querySelector('.lifecycle-mode-hidden');
+        if (anchorHidden) anchorHidden.value = isCloture ? 'None' : 'CalendrierMaroc';
+        if (applyHidden && applyHidden.type === 'hidden') applyHidden.value = isInit ? 'true' : 'false';
+        if (lifeModeHidden) lifeModeHidden.value = isInit ? 'PeriodEnd' : 'None';
+        if (echeance) {
+            const hide = isCloture || isInit;
+            echeance.classList.toggle('d-none', hide);
+            echeance.querySelectorAll('input,select,textarea').forEach(el => { el.disabled = hide; });
+        }
+        if (initBlock) {
+            initBlock.classList.toggle('d-none', !isInit);
+            initBlock.querySelectorAll('input,select,textarea').forEach(el => { el.disabled = !isInit; });
+        }
+        card.querySelectorAll('.cron-freq-extra').forEach(btn => btn.classList.toggle('d-none', isInit));
+        card.querySelectorAll('.cron-options-monthly-extra').forEach(el => {
+            if (isInit) el.classList.add('d-none');
+        });
+        if (titleEl) titleEl.textContent = isInit ? 'Périodes & échéances' : 'Planification';
+        if (schedule && isInit) schedule.classList.remove('d-none');
+        if (isInit && window.WfCron) WfCron.initPeriodEditor(card);
+    }
+
     function onStepTypeOrAssignChange(el) {
         const card = el.closest('.step-card');
         if (card && window.WfCron) WfCron.syncInitScheduleVisibility(card);
+        syncRelancePanel(card);
+        syncStepTypePanels(card);
     }
 
     // === Toggle schedule section visibility ===
@@ -972,15 +1344,29 @@
 
         // Parse existing cron expressions + Init AutoSystem panels
         document.querySelectorAll('.cron-builder').forEach(builder => {
-            if (window.WfCron) WfCron.parseCronToUI(builder);
+            if (window.WfCron) {
+                WfCron.parseCronToUI(builder);
+            }
         });
         document.querySelectorAll('#stepsContainer .step-card').forEach(card => {
             if (window.WfCron) WfCron.syncInitScheduleVisibility(card);
+            syncRelancePanel(card);
+            syncStepTypePanels(card);
+            if (window.WfCron) WfCron.initPeriodEditor(card);
+            const days = card.querySelector('.relance-days-input');
+            if (days) days.addEventListener('change', () => syncRelanceDaysToHours(card));
+            if (days) days.addEventListener('input', () => syncRelanceDaysToHours(card));
         });
 
         const builderForm = document.getElementById('builderForm');
         if (builderForm) {
             builderForm.addEventListener('submit', function (e) {
+                document.querySelectorAll('#stepsContainer .step-card').forEach(card => {
+                    syncRelanceDaysToHours(card);
+                    const enable = card.querySelector('.relance-enable');
+                    if (enable) toggleRelanceConfig(enable);
+                    if (window.WfCron) WfCron.syncPeriodTable(card);
+                });
                 if (!window.WfCron) return;
                 const err = WfCron.validateInitSteps(document.getElementById('stepsContainer'));
                 if (err) {

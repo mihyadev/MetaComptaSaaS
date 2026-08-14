@@ -14,20 +14,23 @@ public class PayrollService : IPayrollService
     private readonly IMapper _mapper;
     private readonly IReferenceDataService _refData;
     private readonly PayrollEngine _engine;
+    private readonly IExerciceContextService _exerciceContext;
 
-    public PayrollService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData)
+    public PayrollService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData, IExerciceContextService exerciceContext)
     {
         _db = db;
         _mapper = mapper;
         _refData = refData;
         _engine = new PayrollEngine(db);
+        _exerciceContext = exerciceContext;
     }
 
     // ═══════════════════════════════════════════════════════════
     //  PÉRIODES
     // ═══════════════════════════════════════════════════════════
 
-    public async Task<ApiResponse<List<PayrollPeriodDto>>> GetAllPeriodsAsync(int cabinetId, int? clientId = null)
+    public async Task<ApiResponse<List<PayrollPeriodDto>>> GetAllPeriodsAsync(
+        int cabinetId, int? clientId = null, int? exerciceComptableId = null)
     {
         var query = _db.PayrollPeriods
             .Include(p => p.Client)
@@ -35,6 +38,25 @@ public class PayrollService : IPayrollService
 
         if (clientId.HasValue)
             query = query.Where(p => p.ClientId == clientId.Value);
+
+        if (exerciceComptableId is > 0)
+        {
+            var exoId = exerciceComptableId.Value;
+            var exo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == exoId && e.CabinetId == cabinetId
+                    && (!clientId.HasValue || e.ClientId == clientId.Value));
+            if (exo != null)
+            {
+                var annee = exo.Annee;
+                query = query.Where(p =>
+                    p.ExerciceComptableId == exoId
+                    || (p.ExerciceComptableId == null && p.Annee == annee));
+            }
+            else
+            {
+                query = query.Where(p => p.ExerciceComptableId == exoId);
+            }
+        }
 
         var periods = await query
             .OrderByDescending(p => p.Annee * 100 + p.Mois)
@@ -65,12 +87,17 @@ public class PayrollService : IPayrollService
         var client = await _db.Clients.FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return ApiResponse<PayrollPeriodDto>.Fail("Client non trouvé.");
 
+        var exoGate = await _exerciceContext.RequireOpenExerciceAsync(clientId, cabinetId);
+        if (!exoGate.Success || exoGate.Data == null)
+            return ApiResponse<PayrollPeriodDto>.Fail(exoGate.Message ?? ExerciceContextService.NoOpenExerciceMessage);
+
         var employees = await _db.Employees.Where(e => e.ClientId == clientId && e.Statut == RefCodes.StatutEmploye.Actif).ToListAsync();
 
         var period = new PayrollPeriod
         {
             ClientId = clientId,
             CabinetId = cabinetId,
+            ExerciceComptableId = exoGate.Data.Id,
             Annee = annee,
             Mois = mois,
             Statut = RefCodes.StatutPaie.Brouillon,

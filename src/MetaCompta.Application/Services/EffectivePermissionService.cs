@@ -45,10 +45,14 @@ public sealed class EffectivePermissionService : IEffectivePermissionService
             return empty;
         }
 
+        // Union direct user claims + role matrix (direct alone must not hide newer role claims like comptabilite.cloture)
         var direct = await GetDirectClaimsAsync(user);
-        IReadOnlyCollection<string> effective = direct.Count > 0
-            ? direct
-            : await GetRoleClaimsAsync(user);
+        var fromRoles = await GetRoleClaimsAsync(user);
+        IReadOnlyCollection<string> effective = direct
+            .Concat(fromRoles)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p)
+            .ToList();
 
         Cache[cacheKey] = (DateTime.UtcNow.Add(CacheTtl), effective);
         return effective;

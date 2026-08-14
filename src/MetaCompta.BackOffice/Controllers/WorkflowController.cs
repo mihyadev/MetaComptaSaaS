@@ -63,8 +63,7 @@ public class WorkflowController : BaseController
     public async Task<IActionResult> Builder(int? id = null)
     {
         await LoadDropdowns();
-        var allTemplates = await _workflow.GetTemplatesAsync(page: 1);
-        ViewBag.AllTemplates = allTemplates?.Items ?? new List<WorkflowTemplateDto>();
+        await LoadBuilderCabinetTemplatesAsync();
 
         if (id.HasValue)
         {
@@ -72,6 +71,17 @@ public class WorkflowController : BaseController
             if (template == null)
             {
                 TempData["Error"] = "Modèle introuvable.";
+                return RedirectToAction("Builder");
+            }
+            // Builder = cabinet base only (client copies are customized on the client page)
+            if (template.ClientId.HasValue)
+            {
+                TempData["Error"] = "Ce modèle est une copie client. Personnalisez-le depuis la fiche client → Workflow.";
+                return RedirectToAction("Details", "Clients", new { id = template.ClientId.Value, tab = "workflow" });
+            }
+            if (template.Name.Contains("(ancien)", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Error"] = "Ce modèle est archivé (ancien). Utilisez le modèle cabinet actif pour ce type.";
                 return RedirectToAction("Builder");
             }
             ViewBag.EditTemplate = template;
@@ -82,8 +92,8 @@ public class WorkflowController : BaseController
                 Name = template.Name,
                 Description = template.Description,
                 DeclarationType = template.DeclarationType,
-                ClientId = template.ClientId,
-                IsDefault = template.IsDefault,
+                ClientId = null,
+                IsDefault = true,
                 Steps = template.Steps?.Select(s => new WorkflowStepTemplateCreateDto
                 {
                     Name = s.Name,
@@ -102,6 +112,16 @@ public class WorkflowController : BaseController
                     IsClientStep = s.IsClientStep,
                     RequiredPermission = s.RequiredPermission,
                     SLAHours = s.SLAHours,
+                    DeadlineAnchor = s.DeadlineAnchor,
+                    DeadlineOffsetDays = s.DeadlineOffsetDays,
+                    DeadlineDay = s.DeadlineDay,
+                    DeadlineMonth = s.DeadlineMonth,
+                    DeadlineMonthOffset = s.DeadlineMonthOffset,
+                    DeadlineYearOffset = s.DeadlineYearOffset,
+                    ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+                    LifecycleEndMode = s.LifecycleEndMode,
+                    LifecycleEndDays = s.LifecycleEndDays,
+                    ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
                     IsRequired = s.IsRequired,
                     IsBlocking = s.IsBlocking,
                     AutoCreateTask = s.AutoCreateTask,
@@ -131,7 +151,7 @@ public class WorkflowController : BaseController
             return View(dto);
         }
 
-        return View(new WorkflowTemplateCreateDto());
+        return View(new WorkflowTemplateCreateDto { ClientId = null, IsDefault = true });
     }
 
     [HttpPost]
@@ -139,37 +159,64 @@ public class WorkflowController : BaseController
     [RequirePermission(ClaimDefinitions.WorkflowCreate, ClaimDefinitions.WorkflowEdit)]
     public async Task<IActionResult> BuilderSave(int? id, WorkflowTemplateCreateDto dto)
     {
+        // Builder = cabinet base only (one per declaration type). Client copies are customized on the client page.
+        dto.ClientId = null;
+        dto.IsDefault = true;
+
         if (!ModelState.IsValid)
         {
             await LoadDropdowns();
-            var allTemplates = await _workflow.GetTemplatesAsync(page: 1);
-            ViewBag.AllTemplates = allTemplates?.Items ?? new List<WorkflowTemplateDto>();
+            await LoadBuilderCabinetTemplatesAsync();
             if (id.HasValue) ViewBag.EditTemplateId = id.Value;
             return View("Builder", dto);
         }
 
         if (id.HasValue)
         {
-            var result = await _workflow.UpdateTemplateAsync(id.Value, dto);
-            SetApiResult(result, "Modèle mis à jour.", "Erreur lors de la mise à jour.");
-            return RedirectToAction("Builder", new { id = id.Value });
-        }
-        else
-        {
-            var result = await _workflow.CreateTemplateAsync(dto);
-            if (result?.Success == true)
+            var existing = await _workflow.GetTemplateByIdAsync(id.Value);
+            if (existing == null)
             {
-                TempData["Success"] = result.Message ?? "Modèle créé avec succès.";
+                TempData["Error"] = "Modèle introuvable.";
                 return RedirectToAction("Builder");
             }
-            TempData["Error"] = result?.Message ?? "Erreur lors de la création.";
-            if (result?.Errors?.Count > 0)
-                TempData["ErrorDetails"] = string.Join("|||", result.Errors);
-            await LoadDropdowns();
-            var allTemplates2 = await _workflow.GetTemplatesAsync(page: 1);
-            ViewBag.AllTemplates = allTemplates2?.Items ?? new List<WorkflowTemplateDto>();
-            return View("Builder", dto);
+            if (existing.ClientId.HasValue)
+            {
+                TempData["Error"] = "Ce modèle est une copie client. Personnalisez-le depuis la fiche client → Workflow.";
+                return RedirectToAction("Details", "Clients", new { id = existing.ClientId.Value, tab = "workflow" });
+            }
+
+            var result = await _workflow.UpdateTemplateAsync(id.Value, dto);
+            SetApiResult(result, "Modèle cabinet mis à jour.", "Erreur lors de la mise à jour.");
+            return RedirectToAction("Builder", new { id = id.Value });
         }
+
+        // Upsert: if a cabinet base already exists for this declaration type, update it
+        var existingForType = await _workflow.GetTemplatesAsync(
+            declarationType: dto.DeclarationType, clientId: null, page: 1, pageSize: 50,
+            cabinetOnly: true, activeOnly: true, excludeAncien: true);
+        var match = existingForType?.Items?.FirstOrDefault();
+        if (match != null)
+        {
+            var updateResult = await _workflow.UpdateTemplateAsync(match.Id, dto);
+            SetApiResult(updateResult, "Modèle cabinet mis à jour (un seul workflow par type de déclaration).", "Erreur lors de la mise à jour.");
+            return RedirectToAction("Builder", new { id = match.Id });
+        }
+
+        var createResult = await _workflow.CreateTemplateAsync(dto);
+        if (createResult?.Success == true)
+        {
+            TempData["Success"] = createResult.Message ?? "Modèle cabinet créé.";
+            var newId = createResult.Data?.Id;
+            return newId.HasValue
+                ? RedirectToAction("Builder", new { id = newId.Value })
+                : RedirectToAction("Builder");
+        }
+        TempData["Error"] = createResult?.Message ?? "Erreur lors de la création.";
+        if (createResult?.Errors?.Count > 0)
+            TempData["ErrorDetails"] = string.Join("|||", createResult.Errors);
+        await LoadDropdowns();
+        await LoadBuilderCabinetTemplatesAsync();
+        return View("Builder", dto);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -260,6 +307,16 @@ public class WorkflowController : BaseController
                 IsClientStep = s.IsClientStep,
                 RequiredPermission = s.RequiredPermission,
                 SLAHours = s.SLAHours,
+                DeadlineAnchor = s.DeadlineAnchor,
+                DeadlineOffsetDays = s.DeadlineOffsetDays,
+                DeadlineDay = s.DeadlineDay,
+                DeadlineMonth = s.DeadlineMonth,
+                DeadlineMonthOffset = s.DeadlineMonthOffset,
+                DeadlineYearOffset = s.DeadlineYearOffset,
+                ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+                LifecycleEndMode = s.LifecycleEndMode,
+                LifecycleEndDays = s.LifecycleEndDays,
+                ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
                 IsRequired = s.IsRequired,
                 IsBlocking = s.IsBlocking,
                 AutoCreateTask = s.AutoCreateTask,
@@ -325,11 +382,15 @@ public class WorkflowController : BaseController
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.WorkflowCreate)]
-    public async Task<IActionResult> SeedAllDefaultTemplates()
+    public async Task<IActionResult> SeedAllDefaultTemplates(bool forceReset = false)
     {
-        var result = await _workflow.SeedAllDefaultTemplatesAsync();
-        SetApiResult(result, "Modèles par défaut créés.", "Erreur lors de la création des modèles par défaut.");
-        return RedirectToAction("Templates");
+        var result = await _workflow.SeedAllDefaultTemplatesAsync(forceReset);
+        SetApiResult(result,
+            forceReset
+                ? "Workflows cabinet réinitialisés : 1 modèle propre par type de déclaration."
+                : "Modèles par défaut créés.",
+            "Erreur lors de la création des modèles par défaut.");
+        return RedirectToAction("Builder");
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -339,7 +400,7 @@ public class WorkflowController : BaseController
     [RequirePermission(ClaimDefinitions.WorkflowMonitor)]
     public async Task<IActionResult> Instances(int? clientId = null, string? status = null, int? declarationId = null, int page = 1)
     {
-        var result = await _workflow.GetInstancesAsync(clientId, status, declarationId, page);
+        var result = await _workflow.GetInstancesAsync(clientId, status, declarationId, page, SelectedExerciceId);
         ViewBag.ClientId = clientId;
         ViewBag.Status = status;
         ViewBag.DeclarationId = declarationId;
@@ -421,34 +482,45 @@ public class WorkflowController : BaseController
         return RedirectToAction("InstanceDetails", new { id = instanceId });
     }
 
+    /// <summary>Refuse current step and reopen previous (assignee-only).</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
-    public async Task<IActionResult> CancelWorkflow(int id, string reason = "")
+    public async Task<IActionResult> RejectStep(int instanceId, string? reason = null, string? comment = null)
     {
-        var result = await _workflow.CancelWorkflowAsync(id, reason);
-        SetApiResult(result, null, "Erreur lors de l'annulation.");
-        return RedirectToAction("InstanceDetails", new { id });
+        var dto = new RejectStepDto { Reason = reason, Comment = comment };
+        var result = await _workflow.RejectStepAsync(instanceId, dto);
+        SetApiResult(result, result?.Message ?? "Étape refusée — retour à la précédente.", "Erreur lors du refus.");
+        return RedirectToAction("InstanceDetails", new { id = instanceId });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.WorkflowCancel)]
-    public async Task<IActionResult> PauseWorkflow(int id)
+    public async Task<IActionResult> CancelWorkflow(int instanceId, string reason = "")
     {
-        var result = await _workflow.PauseWorkflowAsync(id);
+        var result = await _workflow.CancelWorkflowAsync(instanceId, reason);
+        SetApiResult(result, null, "Erreur lors de l'annulation.");
+        return RedirectToAction("InstanceDetails", new { id = instanceId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.WorkflowCancel)]
+    public async Task<IActionResult> PauseWorkflow(int instanceId)
+    {
+        var result = await _workflow.PauseWorkflowAsync(instanceId);
         SetApiResult(result, null, "Erreur lors de la mise en pause.");
-        return RedirectToAction("InstanceDetails", new { id });
+        return RedirectToAction("InstanceDetails", new { id = instanceId });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.WorkflowAdvance)]
-    public async Task<IActionResult> ResumeWorkflow(int id)
+    public async Task<IActionResult> ResumeWorkflow(int instanceId)
     {
-        var result = await _workflow.ResumeWorkflowAsync(id);
+        var result = await _workflow.ResumeWorkflowAsync(instanceId);
         SetApiResult(result, null, "Erreur lors de la reprise.");
-        return RedirectToAction("InstanceDetails", new { id });
+        return RedirectToAction("InstanceDetails", new { id = instanceId });
     }
 
     [HttpPost]
@@ -523,5 +595,25 @@ public class WorkflowController : BaseController
         {
             ViewBag.Employees = new List<CabinetEmployeeDto>();
         }
+    }
+
+    /// <summary>
+    /// Builder sidebar: one active cabinet template per declaration type (no client copies, no anciens).
+    /// </summary>
+    private async Task LoadBuilderCabinetTemplatesAsync()
+    {
+        try { await _workflow.SeedAllDefaultTemplatesAsync(); } catch { /* non-blocking */ }
+
+        var all = await _workflow.GetTemplatesAsync(
+            declarationType: null, clientId: null, page: 1, pageSize: 100,
+            cabinetOnly: true, activeOnly: true, excludeAncien: true);
+
+        var items = (all?.Items ?? new List<WorkflowTemplateDto>())
+            .GroupBy(t => t.DeclarationType)
+            .Select(g => g.OrderByDescending(t => t.IsDefault).ThenBy(t => t.Id).First())
+            .OrderBy(t => t.DeclarationType)
+            .ToList();
+
+        ViewBag.AllTemplates = items;
     }
 }

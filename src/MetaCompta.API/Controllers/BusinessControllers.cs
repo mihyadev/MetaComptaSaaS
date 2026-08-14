@@ -135,17 +135,17 @@ public class ClientsController : ControllerBase
 
     /// <summary>Manage vs Consult context for the dossier client.</summary>
     [HttpGet("{id}/contract-access")]
-    public async Task<IActionResult> GetContractAccess(int id)
+    public async Task<IActionResult> GetContractAccess(int id, [FromQuery] int? exerciceId = null)
     {
-        var ctx = await _clientService.GetContractAccessContextAsync(id, CabinetId);
+        var ctx = await _clientService.GetContractAccessContextAsync(id, CabinetId, exerciceId);
         return Ok(ApiResponse<ContractAccessContextDto>.Ok(ctx));
     }
 
-    /// <summary>Get all service contracts for a client, optionally by exercise year</summary>
+    /// <summary>Get all service contracts for a client, optionally by exercise year / id</summary>
     [HttpGet("{id}/service-contrats")]
-    public async Task<IActionResult> GetServiceContrats(int id, [FromQuery] int? exerciceFiscal = null)
+    public async Task<IActionResult> GetServiceContrats(int id, [FromQuery] int? exerciceFiscal = null, [FromQuery] int? exerciceId = null)
     {
-        var result = await _clientService.GetServiceContratsAsync(id, CabinetId, exerciceFiscal);
+        var result = await _clientService.GetServiceContratsAsync(id, CabinetId, exerciceFiscal, exerciceId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
@@ -240,9 +240,9 @@ public class DeclarationsController : ControllerBase
     private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? clientId, [FromQuery] string? type, [FromQuery] string? statut, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public async Task<IActionResult> GetAll([FromQuery] int? clientId, [FromQuery] string? type, [FromQuery] string? statut, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] int? exerciceId = null)
     {
-        var result = await _service.GetAllAsync(CabinetId, clientId, type, statut, page, pageSize);
+        var result = await _service.GetAllAsync(CabinetId, clientId, type, statut, page, pageSize, exerciceId);
         return Ok(result);
     }
 
@@ -562,9 +562,9 @@ public class PayrollController : ControllerBase
     private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? clientId = null)
+    public async Task<IActionResult> GetAll([FromQuery] int? clientId = null, [FromQuery] int? exerciceId = null)
     {
-        var result = await _service.GetAllPeriodsAsync(CabinetId, clientId);
+        var result = await _service.GetAllPeriodsAsync(CabinetId, clientId, exerciceId);
         return Ok(result);
     }
 
@@ -1582,6 +1582,14 @@ public class ContratsController : ControllerBase
         var result = await _service.DupliquerContratAsync(id, CabinetId, UserId);
         return result.Success ? CreatedAtAction(nameof(Get), new { id = result.Data?.Id }, result) : BadRequest(result);
     }
+
+    [HttpPost("{id}/rectificatif")]
+    [Authorize(Policy = "commercial.create")]
+    public async Task<IActionResult> CreateRectificatif(int id, [FromBody] ContratRectificatifRequestDto? dto = null)
+    {
+        var result = await _service.CreateRectificatifContratAsync(id, CabinetId, UserId, dto?.Motif);
+        return result.Success ? CreatedAtAction(nameof(Get), new { id = result.Data?.Id }, result) : BadRequest(result);
+    }
 }
 
 // ===== Client Contrats (Extranet read-only synthesis) =====
@@ -1764,6 +1772,25 @@ public class ComptabiliteApiController : ControllerBase
     [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
     public async Task<IActionResult> CreateExercice([FromBody] ExerciceCreateDto dto)
         => Ok(await _service.CreateExerciceAsync(dto, CabinetId, UserId));
+
+    [HttpGet("exercices/{id:int}/precheck-cloture")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> PrecheckCloture(int id, [FromServices] IExerciceClotureService cloture)
+        => Ok(await cloture.PrecheckAsync(id, CabinetId));
+
+    [HttpPost("exercices/cloturer")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> CloturerExercice([FromBody] ExerciceClotureRequestDto dto, [FromServices] IExerciceClotureService cloture)
+        => Ok(await cloture.CloturerAsync(dto, CabinetId, UserId));
+
+    [HttpPost("exercices/{id:int}/reouvrir")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> ReouvrirExercice(int id, [FromBody] ExerciceReouvrirDto dto, [FromServices] IExerciceClotureService cloture)
+        => Ok(await cloture.ReouvrirAsync(id, CabinetId, UserId, dto.Reason ?? ""));
+
+    [HttpGet("exercices/has-open")]
+    public async Task<IActionResult> HasOpenExercice([FromQuery] int clientId, [FromServices] IExerciceContextService exoCtx)
+        => Ok(ApiResponse<bool>.Ok(await exoCtx.HasOpenExerciceAsync(clientId, CabinetId)));
 
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard([FromQuery] int clientId, [FromQuery] int? exerciceId = null)

@@ -37,7 +37,8 @@ public abstract class BaseController : Controller
                 var clients = context.HttpContext.RequestServices.GetService<IClientFacade>();
                 if (clients != null)
                 {
-                    var access = await clients.GetContractAccessAsync(cid);
+                    int? exoId = int.TryParse(session.GetString("SelectedExerciceId"), out var eid) ? eid : null;
+                    var access = await clients.GetContractAccessAsync(cid, exoId);
                     session.SetString("ActiveServices", System.Text.Json.JsonSerializer.Serialize(access.ActiveServices));
                     session.SetString("HasActiveContract", access.AllowsManage.ToString());
                     session.SetString("ContractAccessMode", access.Mode);
@@ -62,6 +63,21 @@ public abstract class BaseController : Controller
         catch { /* keep previous session permissions if profile call fails */ }
 
         PopulatePermissionViewBag(session);
+
+        // Open-exercice gate for BO UX (banner / disable creates)
+        ViewBag.HasOpenExercice = true;
+        ViewBag.HasSelectedClient = int.TryParse(session.GetString("SelectedClientId"), out _);
+        if (ViewBag.HasSelectedClient)
+        {
+            try
+            {
+                var compta = context.HttpContext.RequestServices.GetService<IComptabiliteFacade>();
+                if (compta != null && int.TryParse(session.GetString("SelectedClientId"), out var clientIdForExo))
+                    ViewBag.HasOpenExercice = await compta.HasOpenExerciceAsync(clientIdForExo);
+            }
+            catch { /* keep optimistic true if API unavailable */ }
+        }
+
         await next();
     }
 
@@ -112,6 +128,7 @@ public abstract class BaseController : Controller
         ViewBag.CanComptabiliteDetail = Can(ClaimDefinitions.ComptabiliteDetail);
         ViewBag.CanComptabiliteCreate = Can(ClaimDefinitions.ComptabiliteCreate);
         ViewBag.CanComptabiliteEdit = Can(ClaimDefinitions.ComptabiliteEdit);
+        ViewBag.CanComptabiliteCloture = Can(ClaimDefinitions.ComptabiliteCloture);
 
         ViewBag.CanJuridiqueDetail = Can(ClaimDefinitions.JuridiqueDetail);
         ViewBag.CanJuridiqueCreate = Can(ClaimDefinitions.JuridiqueCreate);

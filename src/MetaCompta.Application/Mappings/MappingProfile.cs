@@ -43,7 +43,22 @@ public class MappingProfile : Profile
         CreateMap<TVALigneFacture, TVALigneFactureDto>().ReverseMap();
 
         // Declaration IS
-        CreateMap<DeclarationIS, DeclarationISDto>().ReverseMap();
+        CreateMap<DeclarationIS, DeclarationISDto>()
+            .ForMember(d => d.Retraitements, o => o.Ignore())
+            .AfterMap((src, dest) =>
+            {
+                if (string.IsNullOrWhiteSpace(src.RetraitementsJson)) return;
+                try
+                {
+                    dest.Retraitements = System.Text.Json.JsonSerializer.Deserialize<List<ISRetraitementLineDto>>(src.RetraitementsJson)
+                        ?? new List<ISRetraitementLineDto>();
+                }
+                catch { dest.Retraitements = new List<ISRetraitementLineDto>(); }
+            })
+            .ReverseMap()
+            .ForMember(d => d.Declaration, o => o.Ignore());
+        CreateMap<DeclarationChecklistItem, DeclarationChecklistItemDto>().ReverseMap()
+            .ForMember(d => d.Declaration, o => o.Ignore());
 
         // Declaration CNSS
         CreateMap<DeclarationCNSS, DeclarationCNSSDto>().ReverseMap();
@@ -129,6 +144,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.ClientVille, opt => opt.MapFrom(s => s.Client != null ? s.Client.VilleSiegeSocial : null))
             .ForMember(d => d.BonCommandeReference, opt => opt.MapFrom(s => s.BonCommande != null ? s.BonCommande.Reference : null))
             .ForMember(d => d.DevisReference, opt => opt.MapFrom(s => s.Devis != null ? s.Devis.Reference : null))
+            .ForMember(d => d.ParentContratReference, opt => opt.MapFrom(s => s.ParentContrat != null ? s.ParentContrat.Reference : null))
+            .ForMember(d => d.RemplaceParContratReference, opt => opt.MapFrom(s => s.RemplaceParContrat != null ? s.RemplaceParContrat.Reference : null))
             .ForMember(d => d.NombreFactures, opt => opt.MapFrom(s => s.Factures.Count))
             .ForMember(d => d.TotalFacture, opt => opt.MapFrom(s => s.Factures.Sum(f => f.MontantTTC)))
             .ForMember(d => d.ResponsableNom, opt => opt.MapFrom(s => s.Responsable != null ? (s.Responsable.FirstName + " " + s.Responsable.LastName).Trim() : null))

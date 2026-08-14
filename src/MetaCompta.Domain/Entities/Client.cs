@@ -92,6 +92,10 @@ public class ServiceContrat : BaseEntity
     /// <summary>Exercise fiscal year this service applies to (e.g. 2026). Null for ongoing services.</summary>
     public int? ExerciceFiscal { get; set; }
 
+    /// <summary>Canonical link to ledger exercice (preferred over ExerciceFiscal alone).</summary>
+    public int? ExerciceComptableId { get; set; }
+    public virtual ExerciceComptable? ExerciceComptable { get; set; }
+
     /// <summary>Exercise start date (computed from Client.MoisClotureExercice, e.g. 01/01/2026 for Dec closing)</summary>
     public DateTime? ExerciceDebut { get; set; }
 

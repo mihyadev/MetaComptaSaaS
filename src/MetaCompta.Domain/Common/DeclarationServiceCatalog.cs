@@ -22,16 +22,17 @@ public static class DeclarationServiceCatalog
     public static readonly IReadOnlyList<Entry> All = new List<Entry>
     {
         new("TVA", "TVA", "tva", "EditTVA", "Mensuelle", new[] { "TVA" }, "TVA", "CreateTVA"),
-        new("IS", "IS — Liasse", "is", "EditIS", "Annuelle", new[] { "IS", "DRF", "LIASSEFISCALE" }, "IS", "CreateIS", NeedsAnneeFiscale: true),
+        new("IS", "Déclaration fiscale — Liasse annuelle", "is", "EditIS", "Annuelle", new[] { "IS", "DRF", "LIASSEFISCALE" }, "IS", "CreateIS", NeedsAnneeFiscale: true),
         new("ACOMPTES", "Acomptes IS", "is", "EditGeneric", "Trimestrielle", new[] { "ACOMPTES", "IS" }, "Acomptes", "CreateAcomptes", IsShellOnly: true),
         new("REG_IS", "Régularisation IS", "is", "EditGeneric", "Annuelle", new[] { "REG_IS", "IS" }, "RegIs", "CreateRegIs", NeedsAnneeFiscale: true, IsShellOnly: true),
         new("CM", "Cotisation Minimale", "is", "EditGeneric", "Annuelle", new[] { "CM", "IS" }, "CM", "CreateCM", NeedsAnneeFiscale: true, IsShellOnly: true),
-        new("DRF", "D.R.F — Résultat Fiscal", "is", "EditGeneric", "Annuelle", new[] { "DRF", "LIASSEFISCALE", "IS" }, "DRF", "CreateDRF", NeedsAnneeFiscale: true, IsShellOnly: true),
+        new("DRF", "D.R.F — Résultat Fiscal", "is", "EditGeneric", "Annuelle", new[] { "DRF", "IS" }, "DRF", "CreateDRF", NeedsAnneeFiscale: true, IsShellOnly: true),
         new("IR", "IR — Revenu", "ir", "EditIR", "Annuelle", new[] { "IR", "IR_SAL", "RAS_FONC", "RAS_DIV" }, "IR", "CreateIR", NeedsAnneeFiscale: true),
         new("IR_SAL", "IR / Salaires", "ir", "EditGeneric", "Mensuelle", new[] { "IR_SAL", "IR" }, "IrSalaires", "CreateIrSalaires", IsShellOnly: true),
         new("RAS_FONC", "RAS Foncier", "ir", "EditGeneric", "Ponctuelle", new[] { "RAS_FONC", "IR" }, "RasFoncier", "CreateRasFoncier", IsShellOnly: true),
         new("RAS_DIV", "RAS Dividendes", "ir", "EditGeneric", "Ponctuelle", new[] { "RAS_DIV", "IR" }, "RasDividendes", "CreateRasDividendes", IsShellOnly: true),
-        new("CNSS", "CNSS / DMS", "cnss", "EditCNSS", "Mensuelle", new[] { "CNSS" }, "CNSS", "CreateCNSS"),
+        new("CNSS", "CNSS / DMS", "cnss", "Details", "Mensuelle", new[] { "CNSS" }, "CNSS", "CreateCNSS"),
+        // TEMP: EditAction = Details — saisie CNSS (personnel/calcul) masquée ; remettre "EditCNSS" pour la réactiver.
         // DTS is a separate contrat service — do not unlock it when only CNSS is active
         new("DTS", "D.T.S / État 9421", "cnss", "EditGeneric", "Annuelle", new[] { "DTS" }, "Dts", "CreateDts", NeedsAnneeFiscale: true, IsShellOnly: true),
     };
@@ -77,7 +78,7 @@ public static class DeclarationServiceCatalog
             "REGUL_IS" or "REGULARISATION" or "REGULIS" => "REG_IS",
             "ACOMPTE" or "ACOMPTE_IS" => "ACOMPTES",
             "9421" or "ETAT9421" => "DTS",
-            "LIASSE" or "LIASSEFISCALE" => "DRF",
+            "LIASSE" or "LIASSEFISCALE" or "DECLARATION_FISCALE" => "IS",
             _ => t
         };
     }

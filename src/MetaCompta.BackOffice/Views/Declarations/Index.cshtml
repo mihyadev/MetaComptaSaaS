@@ -149,6 +149,7 @@ else if (!canCreate)
     var validees = Model.Items?.Count(d => d.Statut == RefCodes.StatutDeclaration.Validee
         || d.Statut == RefCodes.StatutDeclaration.Soumise
         || d.Statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+        || d.Statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs
         || d.Statut == RefCodes.StatutDeclaration.Deposee) ?? 0;
     var overdue = Model.Items?.Count(d => d.DateLimite < DateTime.Today
         && d.Statut != RefCodes.StatutDeclaration.Payee

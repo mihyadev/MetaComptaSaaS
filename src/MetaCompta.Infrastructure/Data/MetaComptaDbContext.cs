@@ -166,6 +166,8 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasQueryFilter(s => !s.IsDeleted);
             e.HasOne(s => s.Client).WithMany(c => c.ServiceContrats).HasForeignKey(s => s.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(s => s.Responsable).WithMany().HasForeignKey(s => s.ResponsableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(s => s.ExerciceComptable).WithMany().HasForeignKey(s => s.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(s => s.ExerciceComptableId);
         });
 
         // ===== Employee =====
@@ -187,10 +189,14 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
         // ===== Declaration =====
         builder.Entity<Declaration>(e =>
         {
+            e.Property(d => d.Type).HasMaxLength(50);
+            e.Property(d => d.Periode).HasMaxLength(20);
             e.Property(d => d.MontantDu).HasPrecision(18, 2);
             e.Property(d => d.MontantCredit).HasPrecision(18, 2);
             e.HasQueryFilter(d => !d.IsDeleted);
             e.HasOne(d => d.Client).WithMany(c => c.Declarations).HasForeignKey(d => d.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(d => d.Exercice).WithMany().HasForeignKey(d => d.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(d => new { d.ClientId, d.ExerciceComptableId });
         });
 
         // ===== Declaration TVA =====
@@ -368,6 +374,8 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             var decimalProps = e.Metadata.GetProperties().Where(p => p.ClrType == typeof(decimal));
             foreach (var prop in decimalProps) { prop.SetPrecision(18); prop.SetScale(2); }
             e.HasOne(pp => pp.Client).WithMany(c => c.PayrollPeriods).HasForeignKey(pp => pp.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(pp => pp.Exercice).WithMany().HasForeignKey(pp => pp.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(pp => pp.ExerciceComptableId);
         });
 
         // ===== Document =====
@@ -470,6 +478,8 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasQueryFilter(x => !x.IsDeleted);
             e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.CompteBancaireNav).WithMany().HasForeignKey(x => x.CompteBancaireId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Exercice).WithMany().HasForeignKey(x => x.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.ExerciceComptableId);
         });
         builder.Entity<RapprochementLigne>(e =>
         {
@@ -551,9 +561,10 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasOne(wi => wi.Declaration).WithMany().HasForeignKey(wi => wi.DeclarationId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(wi => wi.Client).WithMany().HasForeignKey(wi => wi.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(wi => wi.StartedByUser).WithMany().HasForeignKey(wi => wi.StartedByUserId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(wi => wi.Exercice).WithMany().HasForeignKey(wi => wi.ExerciceComptableId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(wi => wi.ExerciceComptableId);
             e.HasQueryFilter(wi => !wi.IsDeleted);
         });
-
         builder.Entity<WorkflowStepInstance>(e =>
         {
             e.HasIndex(wsi => new { wsi.WorkflowInstanceId, wsi.StepOrder }).IsUnique();
@@ -683,6 +694,11 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasOne(c => c.Devis).WithOne(d => d.ContratDirect).HasForeignKey<ContratCommercial>(c => c.DevisId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.Responsable).WithMany().HasForeignKey(c => c.ResponsableId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(c => c.ValidateurUser).WithMany().HasForeignKey(c => c.ValidateurId).OnDelete(DeleteBehavior.NoAction);
+            e.Property(c => c.MotifRectificatif).HasMaxLength(1000);
+            e.HasOne(c => c.ParentContrat).WithMany(c => c.Rectificatifs)
+                .HasForeignKey(c => c.ParentContratId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(c => c.RemplaceParContrat).WithMany()
+                .HasForeignKey(c => c.RemplaceParContratId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ContratMembre>(e =>
@@ -940,6 +956,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             new ReferenceData { Id = 352, Category = "STATUT_DECLARATION", Code = "Rapprochee", Label = "Rapprochée", SortOrder = 32, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#0f766e", CssClass = "badge-validee", Icone = "bi-link-45deg" },
             new ReferenceData { Id = 353, Category = "STATUT_DECLARATION", Code = "Archivee", Label = "Archivée", SortOrder = 33, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#475569", CssClass = "badge-brouillon", Icone = "bi-archive" },
             new ReferenceData { Id = 354, Category = "STATUT_DECLARATION", Code = "Cloturee", Label = "Clôturée", SortOrder = 34, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#334155", CssClass = "badge-soumise", Icone = "bi-lock" },
+            new ReferenceData { Id = 356, Category = "STATUT_DECLARATION", Code = "Suspendue", Label = "Suspendue", SortOrder = 35, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#dc2626", CssClass = "badge-refusee", Icone = "bi-pause-circle" },
 
             // Type TVA (régime)
             new ReferenceData { Id = 61, Category = "TYPE_TVA", Code = "Mensuelle", Label = "Mensuelle", SortOrder = 1, IsActive = true, EffectiveFrom = new DateTime(2026, 1, 1), Couleur = "#2563eb", CssClass = "bg-primary-subtle text-primary" },

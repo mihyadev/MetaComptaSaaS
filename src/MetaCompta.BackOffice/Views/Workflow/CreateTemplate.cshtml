@@ -7,7 +7,7 @@
     var isEdit = ViewBag.TemplateId != null;
     var formAction = isEdit ? "EditTemplate" : "CreateTemplate";
     var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne",
-"ValidationClient", "DepotSoumission", "ClotureArchivage" };
+        "ValidationClient", "DepotSoumission", "Paiement", "Rapprochement", "ClotureArchivage" };
     var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
     var taskTypes = new[] { "Standard", "DocumentRequest", "DataEntry", "Review", "Validation", "Submission", "Archiving",
 "ClientAction" };

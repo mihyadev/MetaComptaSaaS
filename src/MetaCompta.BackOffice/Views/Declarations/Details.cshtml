@@ -26,6 +26,7 @@
         }
         catch { /* ignore bad json */ }
     }
+    var checklist = ViewBag.Checklist as List<DeclarationChecklistItemDto> ?? new List<DeclarationChecklistItemDto>();
     var wfInstance = ViewBag.WorkflowInstance as WorkflowInstanceDto;
     var wfCurrentStep = ViewBag.WorkflowCurrentStep as WorkflowStepInstanceDto;
     var wfTemplates = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
@@ -219,8 +220,9 @@
 @if (isData != null)
 {
     <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-header bg-transparent border-0 px-4 pt-3">
-            <h6 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>Données IS</h6>
+        <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0"><i class="bi bi-bank text-primary me-2"></i>Déclaration fiscale — Liasse</h6>
+            <a asp-action="ExportISXml" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-success rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>Export SIMPL-IS</a>
         </div>
         <div class="card-body">
             <div class="row g-3">
@@ -230,11 +232,42 @@
                 <div class="col-md-3"><label class="form-label text-muted small">Résultat Fiscal</label><div class="fw-bold">@isData.ResultatFiscal.ToString("N2")</div></div>
                 <div class="col-md-3"><label class="form-label text-muted small">Base Imposable</label><div class="fw-bold">@isData.BaseImposable.ToString("N2")</div></div>
                 <div class="col-md-3"><label class="form-label text-muted small">Taux IS</label><div class="fw-bold">@isData.TauxIS.ToString("N0")%</div></div>
-                <div class="col-md-3"><label class="form-label text-muted small">IS Dû</label><div class="fw-bold text-danger">@isData.ISDu.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">Cotisation minimale</label><div class="fw-semibold">@isData.CotisationMinimale.ToString("N2") MAD</div></div>
+                <div class="col-md-3"><label class="form-label text-muted small">IS Dû (max IS/CM)</label><div class="fw-bold text-danger">@isData.ISDu.ToString("N2") MAD</div></div>
                 <div class="col-md-3"><label class="form-label text-muted small">IS Net</label><div class="fw-bold text-primary fs-5">@isData.ISNet.ToString("N2") MAD</div></div>
             </div>
         </div>
     </div>
+    @if (checklist.Any())
+    {
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-transparent border-0 px-4 pt-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-ui-checks text-primary me-2"></i>Checklist pièces annuelles (@checklist.Count(c => c.IsReceived)/@checklist.Count)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light"><tr><th class="ps-3">Pièce</th><th>Catégorie</th><th>Statut</th></tr></thead>
+                        <tbody>
+                        @foreach (var item in checklist.OrderBy(c => c.SortOrder))
+                        {
+                            <tr>
+                                <td class="ps-3">@item.Label</td>
+                                <td><span class="badge bg-secondary-subtle text-secondary rounded-pill">@item.Categorie</span></td>
+                                <td>
+                                    @if (item.IsReceived)
+                                    { <span class="badge bg-success-subtle text-success rounded-pill">Reçu</span> }
+                                    else
+                                    { <span class="badge bg-warning-subtle text-warning rounded-pill">Manquant</span> }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @if (irData != null)
@@ -254,168 +287,22 @@
     </div>
 }
 
-@if (cnssData != null || cnssRoster != null || string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
+@if (string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase))
 {
-    <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-header bg-transparent border-0 px-4 pt-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
-            <div>
-                <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-warning me-2"></i>Données CNSS — @Model.Periode</h6>
-                <small class="text-muted">Cotisations et état du personnel client pour cette déclaration</small>
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-                <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="btn btn-sm btn-warning rounded-pill px-3">
-                    <i class="bi bi-pencil me-1"></i>Saisie / Calcul
-                </a>
-                <a asp-action="ExportCnssDns" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-                    <i class="bi bi-download me-1"></i>Export DNS
-                </a>
-            </div>
-        </div>
-        <div class="card-body px-4 pb-4">
-            <div class="d-flex gap-2 flex-wrap mb-3">
-                <span class="badge rounded-pill text-bg-primary px-3 py-2">Présents : @(cnssRoster?.PresentCount ?? cnssData?.NombreEmployes ?? 0)</span>
-                <span class="badge rounded-pill text-bg-success px-3 py-2">Entrants : @(cnssRoster?.EntrantCount ?? 0)</span>
-                <span class="badge rounded-pill text-bg-danger px-3 py-2">Sortants : @(cnssRoster?.SortantCount ?? 0)</span>
-                @if (cnssData != null)
-                {
-                    <span class="badge rounded-pill text-bg-dark px-3 py-2">Total : @cnssData.MontantTotal.ToString("N2") MAD</span>
-                }
-            </div>
-
-            @if (cnssData != null)
-            {
-                <div class="row g-2 mb-4">
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">Employés</div>
-                            <div class="fw-bold fs-5">@cnssData.NombreEmployes</div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">Salaires bruts</div>
-                            <div class="fw-bold">@cnssData.TotalSalairesBruts.ToString("N2")</div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">Cot. salariale</div>
-                            <div class="fw-bold">@cnssData.TotalCotisationSalariale.ToString("N2")</div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">Cot. patronale</div>
-                            <div class="fw-bold">@cnssData.TotalCotisationPatronale.ToString("N2")</div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">AMO (sal. + pat.)</div>
-                            <div class="fw-bold">@((cnssData.TotalAMOSalariale + cnssData.TotalAMOPatronale).ToString("N2"))</div>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-4 col-xl-2">
-                        <div class="rounded-3 border p-3 h-100">
-                            <div class="text-muted small text-uppercase">Formation pro.</div>
-                            <div class="fw-bold">@cnssData.TotalFormationProfessionnelle.ToString("N2")</div>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="rounded-3 border border-warning-subtle bg-warning-subtle p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <div>
-                                <div class="text-muted small text-uppercase">Montant total CNSS</div>
-                                <div class="fw-bold text-danger fs-4 mb-0">@cnssData.MontantTotal.ToString("N2") MAD</div>
-                            </div>
-                            <div class="small text-muted">
-                                AMO salariale @cnssData.TotalAMOSalariale.ToString("N2") · AMO patronale @cnssData.TotalAMOPatronale.ToString("N2")
-                            </div>
-                        </div>
-                    </div>
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 4px solid #f59e0b !important;">
+        <div class="card-body px-4 py-3">
+            <div class="d-flex align-items-start gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                     style="width:42px;height:42px;background:rgba(245,158,11,.12);color:#d97706;">
+                    <i class="bi bi-shield-check"></i>
                 </div>
-            }
-            else
-            {
-                <div class="alert alert-light border mb-4 mb-md-4">
-                    Aucun calcul CNSS enregistré. Lancez la saisie / calcul pour générer les cotisations.
+                <div>
+                    <h6 class="fw-bold mb-1">CNSS — mode opérationnel simplifié</h6>
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">
+                        Pour l’instant : <strong>statut</strong>, <strong>documents</strong> et <strong>commentaires / messages</strong> uniquement.
+                        La saisie du personnel, le calcul des cotisations et l’export DNS sont temporairement masqués.
+                    </p>
                 </div>
-            }
-
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="fw-bold mb-0"><i class="bi bi-people-fill text-success me-2"></i>État du personnel</h6>
-                <span class="text-muted small">@(cnssRoster?.Employees?.Count ?? 0) ligne(s)</span>
-            </div>
-            <div class="cnss-emp-scroll">
-                <table class="table table-hover cnss-emp-table">
-                    <colgroup>
-                        <col class="cnss-col-mov" />
-                        <col class="cnss-col-emp" />
-                        <col class="cnss-col-dates" />
-                        <col class="cnss-col-jours" />
-                        <col class="cnss-col-salary" />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>Mvt</th>
-                            <th>Salarié</th>
-                            <th>Dates</th>
-                            <th class="text-center">Jours</th>
-                            <th class="text-end">Salaire</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @if (cnssRoster?.Employees == null || cnssRoster.Employees.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
-                                Aucun salarié pour cette période.
-                                <a asp-action="EditCNSS" asp-route-id="@Model.Id" class="d-block mt-2">Ajouter / importer le personnel</a>
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        foreach (var e in cnssRoster.Employees)
-                        {
-                            var badge = e.IsEntrant && e.IsSortant ? "text-bg-warning"
-                                : e.IsEntrant ? "text-bg-success"
-                                : e.IsSortant ? "text-bg-danger"
-                                : "text-bg-primary";
-                            var mvtShort = e.IsEntrant && e.IsSortant ? "E+S"
-                                : e.IsEntrant ? "E"
-                                : e.IsSortant ? "S"
-                                : "P";
-                            <tr title="@e.Movement — @e.Prenom @e.Nom">
-                                <td><span class="badge @badge" title="@e.Movement">@mvtShort</span></td>
-                                <td>
-                                    <div class="cnss-emp-name">@e.Prenom @e.Nom</div>
-                                    <div class="cnss-emp-meta">
-                                        @(string.IsNullOrWhiteSpace(e.MatriculeEmployeur) ? "—" : e.MatriculeEmployeur)
-                                        · @e.CIN
-                                        · @(string.IsNullOrWhiteSpace(e.NumeroCNSS) ? "—" : e.NumeroCNSS)
-                                    </div>
-                                </td>
-                                <td class="cnss-emp-dates">
-                                    <div>@e.DateEmbauche.ToString("dd/MM/yy")</div>
-                                    <div class="text-muted">
-                                        @(e.DateSortie.HasValue ? e.DateSortie.Value.ToString("dd/MM/yy") : "—")
-                                        @if (!string.IsNullOrEmpty(e.MotifSortie))
-                                        {
-                                            <span title="@e.MotifSortie">· @e.MotifSortie</span>
-                                        }
-                                    </div>
-                                </td>
-                                <td class="text-center cnss-emp-jours">@e.JoursTravailles</td>
-                                <td class="text-end cnss-emp-salary fw-semibold">@e.SalaireBrut.ToString("N2")</td>
-                            </tr>
-                        }
-                    }
-                    </tbody>
-                </table>
-            </div>
-            <div class="small text-muted mt-2">
-                <i class="bi bi-info-circle me-1"></i>
-                P = Présent · E = Entrant · S = Sortant · E+S = les deux sur la période.
             </div>
         </div>
     </div>
@@ -524,7 +411,15 @@
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="declarationId" value="@Model.Id" />
                                     <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
-                                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-arrow-right-circle me-1"></i>Avancer</button>
+                                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-arrow-right-circle me-1"></i>Terminer</button>
+                                </form>
+                                <form asp-action="RejectWorkflowStep" method="post" class="d-inline"
+                                      onsubmit="return confirm('Refuser cette étape ?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="declarationId" value="@Model.Id" />
+                                    <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                                    <input type="text" name="reason" class="form-control form-control-sm mb-1" placeholder="Motif *" required style="font-size:0.72rem;width:140px;" maxlength="500" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3" style="font-size:0.78rem;"><i class="bi bi-arrow-return-left me-1"></i>Refuser</button>
                                 </form>
                             }
                         </div>
@@ -882,7 +777,7 @@ else if (!hasActiveWorkflow)
             </div>
         }
         <div class="d-flex flex-wrap gap-2">
-            @if (canEditDecl && (
+            @if (canEditDecl && !string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase) && (
                 Model.Statut == RefCodes.StatutDeclaration.Brouillon
                 || Model.Statut == RefCodes.StatutDeclaration.ACompleter
                 || Model.Statut == RefCodes.StatutDeclaration.EnCours

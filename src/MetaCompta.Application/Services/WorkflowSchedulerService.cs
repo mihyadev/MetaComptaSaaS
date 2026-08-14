@@ -187,4 +187,18 @@ public class WorkflowSchedulerService : IWorkflowSchedulerService
             _logger.LogError(ex, "WorkflowScheduler: ProcessDueRelances failed.");
         }
     }
+
+    public async Task ProcessDueLifecycleEndsAsync()
+    {
+        try
+        {
+            var count = await _workflowService.ProcessDueLifecycleEndsAsync();
+            if (count > 0)
+                _logger.LogInformation("WorkflowScheduler: Processed {Count} lifecycle end(s).", count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WorkflowScheduler: ProcessDueLifecycleEnds failed.");
+        }
+    }
 }

@@ -9,6 +9,10 @@ public class PayrollPeriod : TenantEntity
 {
     public int ClientId { get; set; }
     public virtual Client? Client { get; set; }
+
+    public int? ExerciceComptableId { get; set; }
+    public virtual ExerciceComptable? Exercice { get; set; }
+
     public int Annee { get; set; }
     public int Mois { get; set; }
     public string Statut { get; set; } = RefCodes.StatutPaie.Brouillon; // Brouillon, EnCours, EnAttenteValidation, Validee, Cloturee

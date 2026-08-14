@@ -77,7 +77,7 @@ public class DocumentService : IDocumentService
     public async Task<ApiResponse<DocumentDto>> UploadAsync(
         Stream fileStream, string fileName, string contentType, long size,
         string titre, string categorie, int? clientId, int cabinetId, string userId,
-        int? declarationId = null)
+        int? declarationId = null, int? checklistItemId = null)
     {
         // Validate file size (max 20MB)
         if (size > 20 * 1024 * 1024)
@@ -114,6 +114,22 @@ public class DocumentService : IDocumentService
 
         _db.Documents.Add(doc);
         await _db.SaveChangesAsync();
+
+        if (checklistItemId.HasValue && declarationId.HasValue)
+        {
+            var item = await _db.DeclarationChecklistItems.FirstOrDefaultAsync(c =>
+                c.Id == checklistItemId.Value && c.DeclarationId == declarationId.Value
+                && c.CabinetId == cabinetId && !c.IsDeleted);
+            if (item != null)
+            {
+                item.IsReceived = true;
+                item.DocumentId = doc.Id;
+                item.ReceivedAt = DateTime.UtcNow;
+                item.UpdatedBy = userId;
+                item.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+        }
 
         _logger.LogInformation("Document uploaded: {DocId} ({FileName}) for declaration {DeclId}",
             doc.Id, safeName, declarationId);

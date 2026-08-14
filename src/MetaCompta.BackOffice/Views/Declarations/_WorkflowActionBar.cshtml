@@ -1,4 +1,4 @@
-﻿@using MetaCompta.Application.DTOs
+@using MetaCompta.Application.DTOs
 @using MetaCompta.Domain.Common
 @{
     // --- GENERIC WORKFLOW ACTION BAR ---
@@ -104,14 +104,16 @@
     var canValidate = permValidate && (statut == RefCodes.StatutDeclaration.Completee
                     || statut == RefCodes.StatutDeclaration.EnRevision
                     || statut == RefCodes.StatutDeclaration.EnRevueSuperviseur
-                    || statut == RefCodes.StatutDeclaration.CalculTVA)
+                    || statut == RefCodes.StatutDeclaration.CalculTVA
+                    || statut == RefCodes.StatutDeclaration.CalculIS)
                     && (!hasWorkflow || !wfActive
                         || stepType == "Controle"
                         || stepType == "ValidationInterne");
 
     // Submit SIMPL stub
     var canSubmit = permSubmit && (statut == RefCodes.StatutDeclaration.Validee
-                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva)
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs)
                   && (!hasWorkflow || !wfActive
                       || stepType == "DepotSoumission");
 
@@ -126,11 +128,14 @@
 
     var canStartControle = permEdit && statut == RefCodes.StatutDeclaration.DocumentsRecus;
     var canAskCorrection = permEdit && (statut == RefCodes.StatutDeclaration.ControleEnCours
-                    || statut == RefCodes.StatutDeclaration.CalculTVA);
+                    || statut == RefCodes.StatutDeclaration.CalculTVA
+                    || statut == RefCodes.StatutDeclaration.CalculIS);
     var canRejectReview = permValidate && (statut == RefCodes.StatutDeclaration.EnRevueSuperviseur
                     || statut == RefCodes.StatutDeclaration.EnRevision);
-    var canConfirmDeposit = permSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
-    var canRejectSimpl = permSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+    var canConfirmDeposit = permSubmit && (statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs);
+    var canRejectSimpl = permSubmit && (statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs);
     var canMarkToPay = permEdit && statut == RefCodes.StatutDeclaration.Deposee;
     var canConfirmPay = permSubmit && (statut == RefCodes.StatutDeclaration.APayer || statut == RefCodes.StatutDeclaration.Deposee);
     var canReconcile = permEdit && (statut == RefCodes.StatutDeclaration.Payee || statut == RefCodes.StatutDeclaration.Deposee);
@@ -141,6 +146,7 @@
     var canDelete = permDelete && !wfActive
                   && statut != RefCodes.StatutDeclaration.Soumise
                   && statut != RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                  && statut != RefCodes.StatutDeclaration.EnvoyeeSimplIs
                   && statut != RefCodes.StatutDeclaration.Deposee
                   && statut != RefCodes.StatutDeclaration.Validee
                   && statut != RefCodes.StatutDeclaration.Payee
@@ -203,7 +209,7 @@
         "Completee" or "ControleEnCours" or "CalculTVA" => "#2563eb",
         "EnRevision" or "EnRevueSuperviseur" => "#a855f7",
         "Validee" or "Deposee" or "Rapprochee" => "#059669",
-        "Soumise" or "EnvoyeeSimplTva" or "Payee" or "Cloturee" => "#166534",
+        "Soumise" or "EnvoyeeSimplTva" or "EnvoyeeSimplIs" or "Payee" or "Cloturee" => "#166534",
         "Rejetee" => "#ef4444",
         _ => "#64748b"
     };
@@ -215,7 +221,7 @@
         "Completee" or "CalculTVA" => "bi-check",
         "EnRevision" or "EnRevueSuperviseur" => "bi-search",
         "Validee" => "bi-check-circle",
-        "Soumise" or "EnvoyeeSimplTva" or "Deposee" => "bi-send-fill",
+        "Soumise" or "EnvoyeeSimplTva" or "EnvoyeeSimplIs" or "Deposee" => "bi-send-fill",
         "Payee" or "APayer" => "bi-cash-coin",
         "Refusee" or "Rejetee" or "ACorriger" => "bi-x-circle",
         "Rapprochee" => "bi-link-45deg",

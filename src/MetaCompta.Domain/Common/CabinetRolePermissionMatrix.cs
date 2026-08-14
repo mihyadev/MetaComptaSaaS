@@ -27,7 +27,7 @@ public static class CabinetRolePermissionMatrix
         ["Comptable"] = new[]
         {
             ClaimDefinitions.ClientList, ClaimDefinitions.ClientDetail,
-            ClaimDefinitions.ComptabiliteCreate, ClaimDefinitions.ComptabiliteEdit, ClaimDefinitions.ComptabiliteDetail,
+            ClaimDefinitions.ComptabiliteCreate, ClaimDefinitions.ComptabiliteEdit, ClaimDefinitions.ComptabiliteDetail, ClaimDefinitions.ComptabiliteCloture,
             ClaimDefinitions.DeclarationView, ClaimDefinitions.DeclarationEdit,
             ClaimDefinitions.TvaDetail, ClaimDefinitions.TvaEdit,
             ClaimDefinitions.DocumentUpload, ClaimDefinitions.DocumentDetail, ClaimDefinitions.DocumentShare,
@@ -98,7 +98,7 @@ public static class CabinetRolePermissionMatrix
             ClaimDefinitions.IrCreate, ClaimDefinitions.IrEdit, ClaimDefinitions.IrDetail,
             ClaimDefinitions.CnssCreate, ClaimDefinitions.CnssEdit, ClaimDefinitions.CnssDetail,
             ClaimDefinitions.PayrollCreate, ClaimDefinitions.PayrollEdit, ClaimDefinitions.PayrollDetail,
-            ClaimDefinitions.ComptabiliteCreate, ClaimDefinitions.ComptabiliteEdit, ClaimDefinitions.ComptabiliteDetail,
+            ClaimDefinitions.ComptabiliteCreate, ClaimDefinitions.ComptabiliteEdit, ClaimDefinitions.ComptabiliteDetail, ClaimDefinitions.ComptabiliteCloture,
             ClaimDefinitions.JuridiqueCreate, ClaimDefinitions.JuridiqueEdit, ClaimDefinitions.JuridiqueDetail,
             ClaimDefinitions.CommercialCreate, ClaimDefinitions.CommercialEdit, ClaimDefinitions.CommercialDetail,
             ClaimDefinitions.FactureCreate, ClaimDefinitions.FactureDetail,

@@ -15,9 +15,13 @@
     var wfPendingSteps = ViewBag.WorkflowPendingSteps as List<WorkflowStepInstanceDto> ?? new();
     var wfConfigs = ViewBag.WorkflowConfigs as List<ClientWorkflowConfigDto> ?? new();
     var activeTemplates = wfTemplates.Where(t => t.IsActive).OrderBy(t => t.DeclarationType).ThenBy(t => t.Name).ToList();
-    var cabinetTemplates = activeTemplates.Where(t => t.ClientId == null).ToList();
+    var cabinetTemplates = activeTemplates
+        .Where(t => t.ClientId == null && !t.Name.Contains("(ancien)", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(t => t.DeclarationType).ThenBy(t => t.Name)
+        .ToList();
     var canWfConfigure = ViewBag.CanWorkflowConfigure as bool? ?? false;
     var cabinetEmployees = ViewBag.CabinetEmployees as List<CabinetEmployeeDto> ?? new();
+    var departments = ViewBag.Departments as List<DepartmentDto> ?? new();
     var wfInProgress = wfInstances.Count(i => string.Equals(i.Status, "InProgress", StringComparison.OrdinalIgnoreCase)
         || string.Equals(i.Status, "Active", StringComparison.OrdinalIgnoreCase));
     var wfCompleted = wfInstances.Count(i => string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase));
@@ -403,9 +407,36 @@
             #wfCustomizePanel .cron-freq-btn, #wfCustomizePanel .cron-day-btn, #wfCustomizePanel .cron-month-btn { border: 1px solid var(--monday-border); border-radius: 10px; cursor: pointer; font-size: 0.76rem; font-weight: 600; color: var(--monday-text); background: var(--monday-surface); padding: 0.35rem 0.65rem; }
             #wfCustomizePanel .cron-freq-btn.active, #wfCustomizePanel .cron-day-btn.active, #wfCustomizePanel .cron-month-btn.active { background: var(--monday-blue); color: #fff; border-color: var(--monday-blue); }
             #wfCustomizePanel .cron-preview { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+            #wfCustomizePanel .cron-preview-end { background: color-mix(in srgb, #e67e22 12%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 10px; padding: 0.5rem 0.85rem; margin-top: 0.45rem; display: flex; align-items: center; gap: 0.5rem; }
             #wfCustomizePanel .cron-preview-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--monday-green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+            #wfCustomizePanel .cron-preview-end .cron-preview-icon { background: #e67e22; }
+            #wfCustomizePanel .cron-preview-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); margin-bottom: 0.1rem; }
             #wfCustomizePanel .cron-preview-text { font-size: 0.78rem; font-weight: 600; color: var(--monday-text); }
             #wfCustomizePanel .cron-preview-cron { font-size: 0.68rem; color: var(--monday-muted); font-family: monospace; }
+            #wfCustomizePanel .life-panel { background: color-mix(in srgb, var(--monday-blue) 4%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.85rem 1rem; margin-top: 0.35rem; }
+            #wfCustomizePanel .life-panel .life-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); margin-bottom: 0.35rem; display: block; }
+            #wfCustomizePanel .life-panel .life-offset-row { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: stretch; }
+            #wfCustomizePanel .life-panel .life-unit { display: flex; align-items: center; background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 10px; overflow: hidden; min-height: 34px; }
+            #wfCustomizePanel .life-panel .life-unit span { font-size: 0.72rem; font-weight: 600; color: var(--monday-muted); padding: 0 0.55rem; white-space: nowrap; }
+            #wfCustomizePanel .employee-multi + .select2-container { width: 100% !important; }
+            #wfCustomizePanel .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
+            #wfCustomizePanel .life-panel .life-unit input { border: 0; width: 3.2rem; text-align: center; font-weight: 700; font-size: 0.85rem; background: transparent; padding: 0.3rem 0; }
+            #wfCustomizePanel .life-panel .life-unit input:focus { outline: none; box-shadow: none; }
+            #wfCustomizePanel .life-panel .life-plus { color: var(--monday-muted); font-weight: 700; align-self: center; padding: 0 0.15rem; }
+            #wfCustomizePanel .period-template-box { margin-top: 0.35rem; border: 1px solid var(--monday-border); border-radius: 10px; overflow: hidden; background: var(--monday-surface); }
+            #wfCustomizePanel .period-template-box .pt-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.45rem 0.75rem; background: color-mix(in srgb, var(--monday-blue) 6%, var(--monday-surface)); border-bottom: 1px solid var(--monday-border); }
+            #wfCustomizePanel .period-template-box .pt-head span { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); }
+            #wfCustomizePanel .period-template-box .pt-head strong { font-size: 0.78rem; color: var(--monday-text); }
+            #wfCustomizePanel .period-template-box table { width: 100%; margin: 0; font-size: 0.75rem; }
+            #wfCustomizePanel .period-template-box th, #wfCustomizePanel .period-template-box td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--monday-border); vertical-align: middle; }
+            #wfCustomizePanel .period-template-box th { color: var(--monday-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+            #wfCustomizePanel .period-template-box .pt-scroll { max-height: 260px; overflow-y: auto; }
+            #wfCustomizePanel .period-template-box input[type="text"], #wfCustomizePanel .period-template-box input[type="number"], #wfCustomizePanel .period-template-box select { border: 1px solid var(--monday-border); border-radius: 6px; padding: 0.2rem 0.35rem; font-size: 0.75rem; background: var(--monday-surface); }
+            #wfCustomizePanel .period-template-box input[type="text"] { width: 100%; }
+            #wfCustomizePanel .period-template-box .pt-md-row { display: flex; align-items: center; gap: 0.25rem; }
+            #wfCustomizePanel .period-template-box .pt-md-row input[type="number"] { width: 3.2rem; text-align: center; font-weight: 700; }
+            #wfCustomizePanel .period-template-box .pt-yyyy { font-size: 0.72rem; font-weight: 700; color: var(--monday-blue); white-space: nowrap; }
+            #wfCustomizePanel .period-template-box .pt-del { border: 0; background: transparent; color: var(--monday-muted); padding: 0.15rem 0.35rem; cursor: pointer; }
         </style>
 
         <!-- 1) Affectation / personnaliser (FORM FIRST) -->
@@ -742,6 +773,20 @@
                                                             style="font-size:0.7rem;"
                                                             onclick="return confirm('Démarrer le workflow \'@(cfg.WorkflowTemplateName ?? "sélectionné")\' pour ce client ?')">
                                                         <i class="bi bi-play-fill me-1"></i>Démarrer
+                                                    </button>
+                                                </form>
+                                            }
+                                            @if (canWfConfigure)
+                                            {
+                                                <form asp-action="DeleteWorkflowAffectation" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="configId" value="@cfg.Id" />
+                                                    <input type="hidden" name="clientId" value="@Model.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-2"
+                                                            style="font-size:0.7rem;"
+                                                            title="Retirer cette affectation"
+                                                            onclick="return confirm('Retirer le workflow \'@(cfg.WorkflowTemplateName ?? typeLabel)\' de ce client ?\nLes instances déjà lancées ne seront pas annulées.')">
+                                                        <i class="bi bi-trash3 me-1"></i>Supprimer
                                                     </button>
                                                 </form>
                                             }
@@ -1096,6 +1141,9 @@
 </div>
 
 @section Scripts {
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="~/js/workflow-cron.js" asp-append-version="true"></script>
     <script>
         document.querySelectorAll('.btn-sync-services').forEach(btn => {
@@ -1184,7 +1232,13 @@
             var employees = [
 @foreach (var emp in cabinetEmployees)
 {
-                @: { id: '@emp.Id', name: '@Html.Raw((emp.FullName ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))' },
+                @: { id: '@emp.Id', name: '@Html.Raw((emp.FullName ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))', first: '@Html.Raw((emp.FirstName ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))', last: '@Html.Raw((emp.LastName ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))', role: '@Html.Raw((emp.Role ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))' },
+}
+            ];
+            var departments = [
+@foreach (var d in departments)
+{
+                @: { id: @d.Id, name: '@Html.Raw((d.Name ?? "").Replace("\\", "\\\\").Replace("'", "\\'"))' },
 }
             ];
             var stepTypes = [
@@ -1196,6 +1250,8 @@
                 { v: 'ValidationInterne', l: 'Valid. interne' },
                 { v: 'ValidationClient', l: 'Valid. client' },
                 { v: 'DepotSoumission', l: 'Dépôt' },
+                { v: 'Paiement', l: 'Paiement' },
+                { v: 'Rapprochement', l: 'Rapprochement' },
                 { v: 'ClotureArchivage', l: 'Clôture' }
             ];
             var assignTypes = [
@@ -1218,6 +1274,32 @@
                     .replace(/"/g, '&quot;');
             }
 
+            window._wfCustSyncStepPanels = function (card) {
+                if (!card) return;
+                var typeSel = card.querySelector('.step-type-select');
+                var type = typeSel ? typeSel.value : '';
+                var isInit = type === 'Initialisation';
+                var isCloture = type === 'ClotureArchivage';
+                var echeance = card.querySelector('.echeance-section');
+                var lifecycle = card.querySelector('.lifecycle-section');
+                var anchorHidden = card.querySelector('.deadline-anchor-hidden');
+                var applyHidden = card.querySelector('.apply-ddl-hidden');
+                var lifeModeHidden = card.querySelector('.lifecycle-mode-hidden');
+                if (anchorHidden) anchorHidden.value = isCloture ? 'None' : 'CalendrierMaroc';
+                if (applyHidden) applyHidden.value = isInit ? 'true' : 'false';
+                if (lifeModeHidden) lifeModeHidden.value = isInit ? 'PeriodEnd' : 'None';
+                if (echeance) {
+                    var hide = isCloture || isInit;
+                    echeance.style.display = hide ? 'none' : '';
+                    echeance.querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = hide; });
+                }
+                if (lifecycle) {
+                    lifecycle.style.display = isInit ? '' : 'none';
+                    lifecycle.querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = !isInit; });
+                }
+                syncRelancePanel(card);
+            };
+
             function optList(items, selected, valueKey, labelKey) {
                 valueKey = valueKey || 'v';
                 labelKey = labelKey || 'l';
@@ -1228,12 +1310,44 @@
                 }).join('');
             }
 
-            function empOpts(selected) {
-                var html = '<option value="">— Non défini —</option>';
-                employees.forEach(function (e) {
-                    html += '<option value="' + esc(e.id) + '"' + (e.id === (selected || '') ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+            function empMultiOpts(selectedIds) {
+                var selected = {};
+                (selectedIds || []).forEach(function (id) { if (id) selected[String(id)] = true; });
+                return employees.map(function (e) {
+                    var label = e.name + (e.role ? (' — ' + e.role) : '');
+                    return '<option value="' + esc(e.id) + '" data-first="' + esc(e.first) + '" data-last="' + esc(e.last) + '" data-role="' + esc(e.role) + '"'
+                        + (selected[e.id] ? ' selected' : '') + '>' + esc(label) + '</option>';
+                }).join('');
+            }
+
+            function deptOpts(selected) {
+                var html = '<option value="">--</option>';
+                departments.forEach(function (d) {
+                    html += '<option value="' + d.id + '"' + (String(d.id) === String(selected || '') ? ' selected' : '') + '>' + esc(d.name) + '</option>';
                 });
                 return html;
+            }
+
+            function destroyEmployeeSelect2(root) {
+                if (!window.jQuery) return;
+                jQuery(root || document).find('select.employee-multi').each(function () {
+                    if (jQuery(this).hasClass('select2-hidden-accessible')) jQuery(this).select2('destroy');
+                });
+            }
+
+            function initEmployeeSelect2(root) {
+                if (!window.jQuery || !jQuery.fn.select2) return;
+                jQuery(root || document).find('select.employee-multi').each(function () {
+                    var $el = jQuery(this);
+                    if ($el.hasClass('select2-hidden-accessible')) return;
+                    $el.select2({
+                        theme: 'bootstrap-5',
+                        width: '100%',
+                        placeholder: $el.data('placeholder') || 'Rechercher par prénom ou nom...',
+                        allowClear: true,
+                        closeOnSelect: false
+                    });
+                });
             }
 
             function labelOf(list, v) {
@@ -1300,6 +1414,8 @@
                 var v = sel.value;
                 card.querySelectorAll('.assign-employee-field').forEach(function (el) { el.classList.toggle('d-none', v !== 'Employee'); });
                 card.querySelectorAll('.assign-role-field').forEach(function (el) { el.classList.toggle('d-none', v !== 'Role'); });
+                card.querySelectorAll('.assign-dept-field').forEach(function (el) { el.classList.toggle('d-none', v !== 'Department'); });
+                if (v === 'Employee') initEmployeeSelect2(card);
                 if (window.WfCron) WfCron.syncInitScheduleVisibility(card);
             }
 
@@ -1346,7 +1462,20 @@
                     });
                     var order = card.querySelector('.step-order-input');
                     if (order) order.value = String(i);
+                    card.dataset.index = String(i);
                 });
+            }
+
+            function selectedUserIds(s) {
+                var list = s.assignedToUserIdList || s.AssignedToUserIdList || [];
+                if (list && list.length) return list.map(String);
+                var csv = s.assignedToUserIds || s.AssignedToUserIds || '';
+                if (typeof csv === 'string' && csv) {
+                    return csv.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+                }
+                if (Array.isArray(csv) && csv.length) return csv.map(String);
+                var one = s.assignedToUserId || s.AssignedToUserId || '';
+                return one ? [String(one)] : [];
             }
 
             function buildStepCard(s, index) {
@@ -1356,9 +1485,14 @@
                 var assign = s.assignmentType || s.AssignmentType || 'Employee';
                 var sla = s.slaHours != null ? s.slaHours : (s.SLAHours != null ? s.SLAHours : '');
                 var desc = s.description || s.Description || '';
-                var userId = s.assignedToUserId || s.AssignedToUserId || '';
+                var lifeAction = s.actionOnLifecycleEnd || s.ActionOnLifecycleEnd || 'ClotureDeclaration';
+                var isCloture = stepType === 'ClotureArchivage';
+                var isInit = stepType === 'Initialisation';
+                var hideEcheance = isCloture || isInit;
+                var userIds = selectedUserIds(s);
                 var role = s.assignedToRoleName || s.AssignedToRoleName || '';
-                var isClient = !!(s.isClientStep || s.IsClientStep);
+                var deptId = s.assignedToDepartmentId != null ? s.assignedToDepartmentId : (s.AssignedToDepartmentId != null ? s.AssignedToDepartmentId : '');
+                var isClient = !!(s.isClientStep || s.IsClientStep) || assign === 'Client';
                 var isRequired = s.isRequired != null ? s.isRequired : (s.IsRequired != null ? s.IsRequired : true);
                 var isBlocking = s.isBlocking != null ? s.isBlocking : (s.IsBlocking != null ? s.IsBlocking : true);
                 var cronExpr = s.cronExpression || s.CronExpression || '';
@@ -1366,14 +1500,25 @@
                 var actionCfg = s.actionConfigJson || s.ActionConfigJson || '';
                 var isScheduled = !!(s.isScheduled || s.IsScheduled);
                 var triggerSource = s.triggerSource || s.TriggerSource || '';
+                var maxRetries = s.maxRetries != null ? s.maxRetries : (s.MaxRetries != null ? s.MaxRetries : 0);
+                var retryHours = s.retryIntervalHours != null ? s.retryIntervalHours : (s.RetryIntervalHours != null ? s.RetryIntervalHours : null);
+                var onMax = s.onMaxRetriesAction || s.OnMaxRetriesAction || 'Suspend';
+                var retryDays = retryHours > 0 ? Math.max(1, Math.round(retryHours / 24)) : 15;
+                var isRelanceType = stepType === 'Relance';
+                var relanceEnabled = maxRetries > 0 || isRelanceType;
+                var hideRelance = isInit || isCloture;
                 var p = 'Steps[' + index + ']';
                 var isInitAuto = stepType === 'Initialisation' && assign === 'AutoSystem';
+                var stepTypeOpts = optList(stepTypes, stepType);
+                if (isRelanceType) {
+                    stepTypeOpts += '<option value="Relance" selected>Relance (obsolète → utiliser config ci-dessous)</option>';
+                }
 
                 var html = '<div class="step-card collapsed-step" data-index="' + index + '">'
                     + '<div class="step-header" onclick="if(!event.target.closest(\'.btn-delete-step\')) this.parentElement.classList.toggle(\'collapsed-step\')">'
                     + '<span class="step-num">' + (index + 1) + '</span>'
                     + '<h6>' + esc(name) + '</h6>'
-                    + '<span class="step-type-badge">' + esc(labelOf(stepTypes, stepType)) + '</span>'
+                    + '<span class="step-type-badge">' + esc(labelOf(stepTypes, stepType) || stepType) + '</span>'
                     + '<span class="assign-badge"><i class="bi bi-person-fill me-1"></i>' + esc(labelOf(assignTypes, assign)) + '</span>'
                     + '<span class="sla-badge"' + (sla === '' ? ' style="display:none"' : '') + '><i class="bi bi-clock me-1"></i>' + esc(sla) + ' h</span>'
                     + '<span class="ms-auto d-flex align-items-center gap-2">'
@@ -1384,31 +1529,60 @@
                     + '<div class="field-section"><div class="field-section-title"><i class="bi bi-tag-fill"></i>Identification</div><div class="row g-2">'
                     + '<div class="col-md-5"><label class="form-label-sm">Nom de l\'étape</label>'
                     + '<input type="text" name="' + p + '.Name" value="' + esc(name) + '" class="form-control form-control-sm step-name-input" /></div>'
-                    + '<div class="col-md-4"><label class="form-label-sm">Type d\'étape</label>'
-                    + '<select name="' + p + '.StepType" class="form-select form-select-sm step-type-select">' + optList(stepTypes, stepType) + '</select></div>'
-                    + '<div class="col-md-3"><label class="form-label-sm">SLA (heures)</label>'
-                    + '<input type="number" name="' + p + '.SLAHours" value="' + esc(sla) + '" class="form-control form-control-sm step-sla-input" min="0" placeholder="24" /></div>'
+                    + '<div class="col-md-7"><label class="form-label-sm">Type d\'étape</label>'
+                    + '<select name="' + p + '.StepType" class="form-select form-select-sm step-type-select" onchange="window._wfCustSyncStepPanels && window._wfCustSyncStepPanels(this.closest(\'.step-card\'))">' + stepTypeOpts + '</select></div>'
                     + '<div class="col-12"><label class="form-label-sm">Description</label>'
                     + '<input type="text" name="' + p + '.Description" value="' + esc(desc) + '" class="form-control form-control-sm" placeholder="Description de l\'étape…" /></div>'
                     + '</div></div>'
-                    + '<div class="field-section"><div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation</div><div class="row g-2">'
+                    + '<input type="hidden" name="' + p + '.DeadlineAnchor" value="' + (isCloture ? 'None' : 'CalendrierMaroc') + '" class="deadline-anchor-hidden" />'
+                    + '<input type="hidden" name="' + p + '.ApplyDeadlineToDeclaration" value="' + (isInit ? 'true' : 'false') + '" class="apply-ddl-hidden" />'
+                    + '<input type="hidden" name="' + p + '.LifecycleEndMode" value="' + (isInit ? 'PeriodEnd' : 'None') + '" class="lifecycle-mode-hidden" />'
+                    + '<div class="field-section echeance-section"' + (hideEcheance ? ' style="display:none"' : '') + '><div class="field-section-title"><i class="bi bi-hourglass-split"></i>Délai de traitement</div><div class="row g-2">'
+                    + '<div class="col-md-4"><label class="form-label-sm">Délai interne (heures)</label>'
+                    + '<input type="number" name="' + p + '.SLAHours" value="' + esc(sla) + '" class="form-control form-control-sm step-sla-input" min="0" placeholder="24"' + (hideEcheance ? ' disabled' : '') + ' />'
+                    + '<div class="form-text">Temps imparti pour cette étape (ex. réception documents client).</div></div></div></div>'
+                    + '<div class="field-section"><div class="field-section-title"><i class="bi bi-person-fill-gear"></i>Assignation / partie</div><div class="row g-2">'
                     + '<div class="col-md-4"><label class="form-label-sm">Type d\'assignation</label>'
                     + '<select name="' + p + '.AssignmentType" class="form-select form-select-sm assign-select">' + optList(assignTypes, assign) + '</select></div>'
-                    + '<div class="col-md-8 assign-employee-field' + (assign !== 'Employee' ? ' d-none' : '') + '"><label class="form-label-sm">Employé</label>'
-                    + '<select name="' + p + '.AssignedToUserId" class="form-select form-select-sm">' + empOpts(userId) + '</select></div>'
+                    + '<div class="col-md-8 assign-employee-field' + (assign !== 'Employee' ? ' d-none' : '') + '"><label class="form-label-sm">Employés (partie)</label>'
+                    + '<select name="' + p + '.AssignedToUserIds" class="form-select form-select-sm employee-multi" multiple data-placeholder="Rechercher par prénom ou nom...">' + empMultiOpts(userIds) + '</select></div>'
                     + '<div class="col-md-4 assign-role-field' + (assign !== 'Role' ? ' d-none' : '') + '"><label class="form-label-sm">Rôle</label>'
                     + '<select name="' + p + '.AssignedToRoleName" class="form-select form-select-sm"><option value="">--</option>' + optList(roles, role) + '</select></div>'
+                    + '<div class="col-md-4 assign-dept-field' + (assign !== 'Department' ? ' d-none' : '') + '"><label class="form-label-sm">Département</label>'
+                    + '<select name="' + p + '.AssignedToDepartmentId" class="form-select form-select-sm">' + deptOpts(deptId) + '</select></div>'
                     + '<div class="col-12"><div class="chk-grid" style="grid-template-columns:repeat(3,1fr);">'
                     + '<label class="chk-item"><input type="hidden" name="' + p + '.IsClientStep" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsClientStep" value="true"' + (isClient ? ' checked' : '') + ' /><span>Étape client</span></label>'
                     + '<label class="chk-item"><input type="hidden" name="' + p + '.IsRequired" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsRequired" value="true"' + (isRequired ? ' checked' : '') + ' /><span>Obligatoire</span></label>'
                     + '<label class="chk-item"><input type="hidden" name="' + p + '.IsBlocking" value="false" /><input type="checkbox" class="form-check-input" name="' + p + '.IsBlocking" value="true"' + (isBlocking ? ' checked' : '') + ' /><span>Bloquant</span></label>'
                     + '</div></div></div></div>'
-                    + '<div class="init-cron-slot" data-cron="' + esc(cronExpr) + '" data-cron-desc="' + esc(cronDesc) + '" data-action-cfg="' + esc(actionCfg) + '" data-scheduled="' + (isScheduled ? '1' : '0') + '" data-trigger="' + esc(triggerSource) + '"></div>';
+                    + '<div class="init-cron-slot" data-cron="' + esc(cronExpr) + '" data-cron-desc="' + esc(cronDesc) + '" data-action-cfg="' + esc(actionCfg) + '" data-scheduled="' + (isScheduled ? '1' : '0') + '" data-trigger="' + esc(triggerSource) + '"></div>'
+                    + '<div class="field-section relance-config-section' + (hideRelance ? ' d-none' : '') + '" data-relance-panel>'
+                    + '<div class="field-section-title"><i class="bi bi-arrow-repeat"></i>Relances automatiques / échéance client</div>'
+                    + '<label class="chk-item mb-2"><input type="checkbox" class="form-check-input relance-enable"' + (relanceEnabled ? ' checked' : '') + ' />'
+                    + '<span>Activer les relances si cette étape n\'est pas terminée</span></label>'
+                    + '<div class="relance-fields' + (relanceEnabled ? '' : ' d-none') + '">'
+                    + '<div class="alert alert-info py-2 px-3 small mb-2 mt-1 rounded-3">Ex. réception documents client → après <strong>N jours</strong> une relance, jusqu\'à <strong>N fois</strong>, puis action.</div>'
+                    + '<div class="row g-2 mt-1">'
+                    + '<div class="col-md-3"><label class="form-label-sm">1ʳᵉ relance après (jours)</label>'
+                    + '<input type="number" class="form-control form-control-sm relance-days-input" value="' + retryDays + '" min="1" placeholder="15"' + (relanceEnabled ? '' : ' disabled') + ' />'
+                    + '<input type="hidden" name="' + p + '.RetryIntervalHours" class="relance-hours-input" value="' + (retryHours > 0 ? retryHours : retryDays * 24) + '" /></div>'
+                    + '<div class="col-md-3"><label class="form-label-sm">Nombre de relances</label>'
+                    + '<input type="number" ' + (relanceEnabled ? 'name="' + p + '.MaxRetries" ' : '') + 'class="form-control form-control-sm relance-max-input" min="0" value="' + (relanceEnabled ? (maxRetries > 0 ? maxRetries : 3) : 0) + '"' + (relanceEnabled ? '' : ' disabled') + ' /></div>'
+                    + '<div class="col-md-3"><label class="form-label-sm">Action à chaque relance</label>'
+                    + '<select class="form-select form-select-sm" disabled><option selected>Renvoyer la relance client</option></select></div>'
+                    + '<div class="col-md-3"><label class="form-label-sm">Après N relances</label>'
+                    + '<select name="' + p + '.OnMaxRetriesAction" class="form-select form-select-sm relance-onmax-input"' + (relanceEnabled ? '' : ' disabled') + '>'
+                    + '<option value="Suspend"' + (onMax === 'Suspend' ? ' selected' : '') + '>Suspendre la déclaration</option>'
+                    + '<option value="EscalateToManager"' + (onMax === 'EscalateToManager' ? ' selected' : '') + '>Escalader au manager</option>'
+                    + '<option value="NextStep"' + (onMax === 'NextStep' ? ' selected' : '') + '>Passer à l\'étape suivante</option>'
+                    + '<option value="Cancel"' + (onMax === 'Cancel' ? ' selected' : '') + '>Annuler le workflow</option>'
+                    + '</select></div></div></div>'
+                    + (relanceEnabled ? '' : '<input type="hidden" name="' + p + '.MaxRetries" value="0" class="relance-max-fallback" />')
+                    + '</div>';
 
                 if (isInitAuto && window.WfCron) {
                     // placeholder filled after insert via syncInitCronSlot
                 } else if (!isInitAuto && (cronExpr || isScheduled)) {
-                    // Preserve cron fields for non-init scheduled steps
                     html += '<input type="hidden" name="' + p + '.CronExpression" class="cron-input" value="' + esc(cronExpr) + '" />'
                         + '<input type="hidden" name="' + p + '.CronDescription" class="cron-desc-input" value="' + esc(cronDesc) + '" />'
                         + '<input type="hidden" name="' + p + '.IsScheduled" value="' + (isScheduled ? 'true' : 'false') + '" />'
@@ -1420,6 +1594,74 @@
                 return html;
             }
 
+            function syncRelanceDaysToHours(card) {
+                if (!card) return;
+                var days = card.querySelector('.relance-days-input');
+                var hours = card.querySelector('.relance-hours-input');
+                if (!days || !hours || days.disabled) return;
+                var d = Math.max(1, parseInt(days.value || '15', 10) || 15);
+                days.value = d;
+                hours.value = d * 24;
+            }
+
+            function toggleRelanceConfig(chk) {
+                var card = chk.closest('.step-card');
+                if (!card) return;
+                var on = !!chk.checked;
+                var fields = card.querySelector('.relance-fields');
+                var maxIn = card.querySelector('.relance-max-input');
+                var days = card.querySelector('.relance-days-input');
+                var onMax = card.querySelector('.relance-onmax-input');
+                var fallback = card.querySelector('.relance-max-fallback');
+                if (fields) fields.classList.toggle('d-none', !on);
+                [maxIn, days, onMax].forEach(function (el) { if (el) el.disabled = !on; });
+                if (on) {
+                    if (fallback) fallback.remove();
+                    if (maxIn) {
+                        if (!maxIn.name) {
+                            var idx = card.dataset.index || '0';
+                            maxIn.name = 'Steps[' + idx + '].MaxRetries';
+                        }
+                        if (!maxIn.value || maxIn.value === '0') maxIn.value = '3';
+                    }
+                    if (days && (!days.value || days.value === '0')) days.value = '15';
+                    syncRelanceDaysToHours(card);
+                } else {
+                    if (maxIn) {
+                        maxIn.value = '0';
+                        maxIn.removeAttribute('name');
+                    }
+                    var panel = card.querySelector('[data-relance-panel]');
+                    var idx2 = card.dataset.index || '0';
+                    var fb = card.querySelector('.relance-max-fallback');
+                    if (!fb && panel) {
+                        fb = document.createElement('input');
+                        fb.type = 'hidden';
+                        fb.className = 'relance-max-fallback';
+                        panel.appendChild(fb);
+                    }
+                    if (fb) {
+                        fb.name = 'Steps[' + idx2 + '].MaxRetries';
+                        fb.value = '0';
+                    }
+                    var hours = card.querySelector('.relance-hours-input');
+                    if (hours) hours.value = '0';
+                }
+            }
+
+            function syncRelancePanel(card) {
+                if (!card) return;
+                var typeSel = card.querySelector('.step-type-select');
+                var type = typeSel ? typeSel.value : '';
+                var panel = card.querySelector('[data-relance-panel]');
+                var hide = type === 'Initialisation' || type === 'ClotureArchivage';
+                if (panel) panel.classList.toggle('d-none', hide);
+                if (!hide) {
+                    var enable = card.querySelector('.relance-enable');
+                    if (enable) toggleRelanceConfig(enable);
+                }
+            }
+
             function renderEditableSteps(steps) {
                 var list = steps || [];
                 if (!list.length) {
@@ -1427,11 +1669,13 @@
                     if (stepCountBadge) stepCountBadge.textContent = '0 étapes';
                     return;
                 }
+                destroyEmployeeSelect2(stepsEl);
                 var html = '';
                 list.forEach(function (s, i) { html += buildStepCard(s, i); });
                 stepsEl.innerHTML = html;
                 bindStepCardEvents();
                 reindexSteps();
+                initEmployeeSelect2(stepsEl);
             }
 
             function bindStepCardEvents() {
@@ -1441,16 +1685,31 @@
                         el.addEventListener('change', function () { syncStepHeaders(card); });
                     });
                     var as = card.querySelector('.assign-select');
-                    if (as) as.addEventListener('change', function () { toggleAssignFields(as); syncInitCronSlot(card); });
+                    if (as) as.addEventListener('change', function () { toggleAssignFields(as); syncInitCronSlot(card); syncStepHeaders(card); });
                     var ts = card.querySelector('.step-type-select');
-                    if (ts) ts.addEventListener('change', function () { syncInitCronSlot(card); });
+                    if (ts) ts.addEventListener('change', function () {
+                        window._wfCustSyncStepPanels(card);
+                        syncInitCronSlot(card);
+                        syncStepHeaders(card);
+                    });
+                    var enable = card.querySelector('.relance-enable');
+                    if (enable) enable.addEventListener('change', function () { toggleRelanceConfig(enable); });
+                    var days = card.querySelector('.relance-days-input');
+                    if (days) {
+                        days.addEventListener('change', function () { syncRelanceDaysToHours(card); });
+                        days.addEventListener('input', function () { syncRelanceDaysToHours(card); });
+                    }
                     syncInitCronSlot(card);
+                    syncRelancePanel(card);
                 });
             }
 
             window._wfCustRemoveStep = function (btn) {
                 var card = btn.closest('.step-card');
-                if (card) card.remove();
+                if (card) {
+                    destroyEmployeeSelect2(card);
+                    card.remove();
+                }
                 reindexSteps();
             };
 
@@ -1569,6 +1828,7 @@
             var custForm = document.getElementById('wfCustomizeForm');
             if (custForm) {
                 custForm.addEventListener('submit', function (e) {
+                    stepsEl.querySelectorAll('.step-card').forEach(syncRelanceDaysToHours);
                     if (!window.WfCron) return;
                     var err = WfCron.validateInitSteps(stepsEl);
                     if (err) {

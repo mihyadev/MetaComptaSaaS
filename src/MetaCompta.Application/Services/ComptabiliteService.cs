@@ -110,11 +110,7 @@ public class ComptabiliteService : IComptabiliteService
             .FirstOrDefaultAsync(c => c.Id == clientId && c.CabinetId == cabinetId);
         if (client == null) return;
 
-        var year = DateTime.UtcNow.Year;
-        var exercice = await _db.ExercicesComptables
-            .FirstOrDefaultAsync(e => e.ClientId == clientId && e.CabinetId == cabinetId && e.Annee == year);
-        if (exercice == null)
-            await CreateExerciceInternalAsync(clientId, cabinetId, year, new DateTime(year, 1, 1), new DateTime(year, 12, 31), userId);
+        // Do NOT auto-create exercices — user must create an open exercice explicitly (Sage-like gate).
 
         if (!await _db.ComptesComptables.AnyAsync(c => c.ClientId == clientId && c.CabinetId == cabinetId))
         {
@@ -309,18 +305,39 @@ public class ComptabiliteService : IComptabiliteService
         if (await _db.ExercicesComptables.AnyAsync(e => e.ClientId == dto.ClientId && e.CabinetId == cabinetId && e.Annee == dto.Annee))
             return ApiResponse<ExerciceComptableDto>.Fail($"Un exercice {dto.Annee} existe déjà pour ce client.");
 
-        var dateDebut = (dto.DateDebut ?? new DateTime(dto.Annee, 1, 1)).Date;
-        var dateFin = (dto.DateFin ?? new DateTime(dto.Annee, 12, 31)).Date;
+        // Multiple open exercices are allowed (new year can open before previous is clôturé).
+
+        DateTime dateDebut, dateFin;
+        if (dto.DateDebut.HasValue && dto.DateFin.HasValue)
+        {
+            dateDebut = dto.DateDebut.Value.Date;
+            dateFin = dto.DateFin.Value.Date;
+        }
+        else
+        {
+            (dateDebut, dateFin) = ExerciceClotureService.ComputeExerciceDates(dto.Annee, client.MoisClotureExercice);
+        }
         if (dateFin <= dateDebut)
             return ApiResponse<ExerciceComptableDto>.Fail("La date de fin doit être postérieure à la date de début.");
 
         await EnsureClientLedgerAsync(dto.ClientId, cabinetId, userId);
 
-        // Ensure may have created current year — re-check
-        if (await _db.ExercicesComptables.AnyAsync(e => e.ClientId == dto.ClientId && e.CabinetId == cabinetId && e.Annee == dto.Annee))
-            return ApiResponse<ExerciceComptableDto>.Fail($"Un exercice {dto.Annee} existe déjà pour ce client.");
-
         var exercice = await CreateExerciceInternalAsync(dto.ClientId, cabinetId, dto.Annee, dateDebut, dateFin, userId);
+
+        // Attach contract services activated before any exercice existed
+        var unbound = await _db.ServiceContrats
+            .Where(s => s.ClientId == dto.ClientId && s.Actif && s.ExerciceComptableId == null)
+            .ToListAsync();
+        foreach (var s in unbound)
+        {
+            s.ExerciceComptableId = exercice.Id;
+            s.ExerciceFiscal = exercice.Annee;
+            s.UpdatedAt = DateTime.UtcNow;
+            s.UpdatedBy = userId;
+        }
+        if (unbound.Count > 0)
+            await _db.SaveChangesAsync();
+
         return ApiResponse<ExerciceComptableDto>.Ok(MapExercice(exercice), $"Exercice {dto.Annee} créé.");
     }
 
@@ -595,6 +612,8 @@ public class ComptabiliteService : IComptabiliteService
         if (e == null) return ApiResponse<EcritureComptableDto>.Fail("Écriture introuvable.");
         if (e.Statut == "Validee")
             return ApiResponse<EcritureComptableDto>.Fail("Écriture déjà validée.");
+        var exoBlock = await EnsureExerciceOpenForMutationAsync(e.ExerciceComptableId, e.ClientId, cabinetId);
+        if (exoBlock != null) return ApiResponse<EcritureComptableDto>.Fail(exoBlock);
 
         if (e.Lignes.Count < 2)
             return ApiResponse<EcritureComptableDto>.Fail("Au moins deux lignes requises.");
@@ -752,6 +771,13 @@ public class ComptabiliteService : IComptabiliteService
 
         await EnsureClientLedgerAsync(dto.ClientId, cabinetId, userId);
 
+        var openExo = await _db.ExercicesComptables.AsNoTracking()
+            .Where(e => e.ClientId == dto.ClientId && e.CabinetId == cabinetId && e.Statut == "Ouvert")
+            .OrderByDescending(e => e.Annee)
+            .FirstOrDefaultAsync();
+        if (openExo == null)
+            return ApiResponse<RapprochementBancaireDto>.Fail(ExerciceContextService.NoOpenExerciceMessage);
+
         var compteLabel = string.IsNullOrWhiteSpace(dto.CompteBancaire) ? "5141 - Banque" : dto.CompteBancaire.Trim();
         var compteNum = "5141";
         if (compteLabel.Contains("5141")) compteNum = "5141";
@@ -779,6 +805,7 @@ public class ComptabiliteService : IComptabiliteService
         {
             CabinetId = cabinetId,
             ClientId = dto.ClientId,
+            ExerciceComptableId = openExo.Id,
             CompteBancaireId = bank?.Id,
             CompteBancaire = compteLabel,
             Periode = dto.Periode.Trim(),
@@ -1524,6 +1551,8 @@ public class ComptabiliteService : IComptabiliteService
         if (entity == null) return ApiResponse<EcritureComptableDto>.Fail("Écriture introuvable.");
         if (entity.Statut == "Validee")
             return ApiResponse<EcritureComptableDto>.Fail("Impossible de modifier une écriture validée.");
+        var exoBlock = await EnsureExerciceOpenForMutationAsync(entity.ExerciceComptableId, entity.ClientId, cabinetId);
+        if (exoBlock != null) return ApiResponse<EcritureComptableDto>.Fail(exoBlock);
 
         var lignes = (dto.Lignes ?? new())
             .Where(l => !string.IsNullOrWhiteSpace(l.NumCompte) && (l.Debit > 0 || l.Credit > 0))
@@ -1609,6 +1638,8 @@ public class ComptabiliteService : IComptabiliteService
         if (entity == null) return ApiResponse<bool>.Fail("Écriture introuvable.");
         if (entity.Statut == "Validee")
             return ApiResponse<bool>.Fail("Impossible de supprimer une écriture validée. Annulez-la d'abord (non supporté en Phase 1).");
+        var exoBlock = await EnsureExerciceOpenForMutationAsync(entity.ExerciceComptableId, entity.ClientId, cabinetId);
+        if (exoBlock != null) return ApiResponse<bool>.Fail(exoBlock);
 
         entity.IsDeleted = true;
         entity.DeletedAt = DateTime.UtcNow;
@@ -1707,4 +1738,20 @@ public class ComptabiliteService : IComptabiliteService
         "Brouillon" => "Brouillon",
         _ => statut ?? "Brouillon"
     };
+
+    private async Task<string?> EnsureExerciceOpenForMutationAsync(int? exerciceId, int clientId, int cabinetId)
+    {
+        if (exerciceId is > 0)
+        {
+            var exo = await _db.ExercicesComptables.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == exerciceId && e.ClientId == clientId && e.CabinetId == cabinetId);
+            if (exo == null) return "Exercice introuvable.";
+            if (!string.Equals(exo.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase))
+                return ExerciceContextService.ClosedExerciceMessage;
+            return null;
+        }
+        var hasOpen = await _db.ExercicesComptables.AnyAsync(e =>
+            e.ClientId == clientId && e.CabinetId == cabinetId && e.Statut == "Ouvert");
+        return hasOpen ? null : ExerciceContextService.NoOpenExerciceMessage;
+    }
 }

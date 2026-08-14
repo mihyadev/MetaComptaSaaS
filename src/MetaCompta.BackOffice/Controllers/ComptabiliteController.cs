@@ -12,16 +12,19 @@ public class ComptabiliteController : BaseController
 {
     private readonly IComptabiliteFacade _compta;
     private readonly IClientFacade _clients;
+    private readonly ICommercialFacade _commercial;
 
     public ComptabiliteController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IComptabiliteFacade compta,
-        IClientFacade clients)
+        IClientFacade clients,
+        ICommercialFacade commercial)
         : base(referenceData, contextAccessor)
     {
         _compta = compta;
         _clients = clients;
+        _commercial = commercial;
     }
 
     private async Task LoadClientAsync(int? clientId)
@@ -551,5 +554,171 @@ public class ComptabiliteController : BaseController
         if (result?.Success == true) TempData["Success"] = result.Message;
         else SetApiError(result, "Erreur mise à jour rapprochement.");
         return RedirectToAction("Rapprochements");
+    }
+
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
+    public async Task<IActionResult> Exercices()
+    {
+        var clientId = SelectedClientId;
+        if (!clientId.HasValue)
+        {
+            TempData["Error"] = "Sélectionnez un client pour gérer les exercices.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        await LoadClientAsync(clientId);
+        await EnsureLedgerAsync(clientId);
+        var list = await _compta.GetExercicesAsync(clientId.Value);
+        var hasOpen = list.Any(e => string.Equals(e.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase));
+
+        // Rehydrate ServiceContrats from contract JSON when an open exercice exists (restores dossier menu modules)
+        if (hasOpen)
+        {
+            try
+            {
+                var page = await _commercial.GetContratsAsync(clientId.Value, page: 1);
+                foreach (var c in (page?.Items ?? Enumerable.Empty<ContratCommercialDto>()).Where(x =>
+                             string.Equals(x.Statut, "Valide", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(x.Statut, "Actif", StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _commercial.SyncServicesFromContratAsync(c.Id);
+                }
+            }
+            catch { /* best-effort */ }
+        }
+
+        ViewBag.SelectedExerciceId = SelectedExerciceId;
+        ViewBag.HasOpenExercice = hasOpen;
+        ViewBag.SuggestedAnnee = list.Count == 0
+            ? DateTime.Now.Year
+            : list.Max(e => e.Annee) + 1;
+        return View(list.OrderByDescending(e => e.Annee).ToList());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]
+    public async Task<IActionResult> SelectExercice(int exerciceId)
+    {
+        var clientId = SelectedClientId;
+        if (!clientId.HasValue)
+            return RedirectToAction("Index", "Home");
+
+        var list = await _compta.GetExercicesAsync(clientId.Value);
+        var exo = list.FirstOrDefault(e => e.Id == exerciceId);
+        if (exo == null)
+        {
+            TempData["Error"] = "Exercice introuvable.";
+            return RedirectToAction("Exercices");
+        }
+
+        SetExerciceSession(exo);
+        TempData["Success"] = $"Exercice {exo.Annee} sélectionné ({exo.Statut}).";
+        return RedirectToAction("Exercices");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> CreateExerciceForm(int annee, DateTime? dateDebut = null, DateTime? dateFin = null)
+    {
+        var clientId = SelectedClientId;
+        if (!clientId.HasValue)
+            return RedirectToAction("Index", "Home");
+
+        var result = await _compta.CreateExerciceAsync(new ExerciceCreateDto
+        {
+            ClientId = clientId.Value,
+            Annee = annee,
+            DateDebut = dateDebut,
+            DateFin = dateFin
+        });
+
+        if (result?.Success == true && result.Data != null)
+        {
+            SetExerciceSession(result.Data);
+            TempData["Success"] = result.Message ?? $"Exercice {result.Data.Annee} ouvert.";
+        }
+        else
+            SetApiError(result, "Impossible de créer l'exercice.");
+
+        return RedirectToAction("Exercices");
+    }
+
+    [RequirePermission(ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> Cloture(int? exerciceId = null)
+    {
+        var clientId = SelectedClientId;
+        if (!clientId.HasValue)
+        {
+            TempData["Error"] = "Sélectionnez un client avant de clôturer un exercice.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        await LoadClientAsync(clientId);
+        await EnsureExerciceContextAsync(clientId);
+        exerciceId ??= SelectedExerciceId;
+        if (!exerciceId.HasValue)
+        {
+            TempData["Error"] = "Aucun exercice sélectionné.";
+            return RedirectToAction("Exercices");
+        }
+
+        var precheck = await _compta.PrecheckClotureAsync(exerciceId.Value);
+        if (precheck?.Success != true || precheck.Data == null)
+        {
+            SetApiError(precheck, "Impossible de préparer la clôture.");
+            return RedirectToAction("Exercices");
+        }
+
+        ViewBag.ExerciceId = exerciceId.Value;
+        return View(precheck.Data);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> Cloturer(ExerciceClotureRequestDto dto)
+    {
+        if (SelectedClientId is null)
+        {
+            TempData["Error"] = "Sélectionnez un client.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        dto.ApprouverANouveaux = true;
+        var result = await _compta.CloturerExerciceAsync(dto);
+        if (result?.Success == true)
+        {
+            TempData["Success"] = result.Message ?? "Exercice clôturé.";
+            if (result.Data?.NextExerciceId is int nextId)
+            {
+                HttpContext.Session.SetString("SelectedExerciceId", nextId.ToString());
+                if (result.Data.NextExerciceAnnee is int annee)
+                    HttpContext.Session.SetString("SelectedExercice", annee.ToString());
+                HttpContext.Session.SetString("SelectedExerciceStatut", "Ouvert");
+            }
+            return RedirectToAction("Exercices");
+        }
+
+        SetApiError(result, "Échec de la clôture.");
+        return RedirectToAction("Cloture", new { exerciceId = dto.ExerciceId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCloture)]
+    public async Task<IActionResult> Reouvrir(int exerciceId, string reason)
+    {
+        var result = await _compta.ReouvrirExerciceAsync(exerciceId, reason);
+        if (result?.Success == true)
+        {
+            TempData["Success"] = result.Message ?? "Exercice réouvert.";
+            if (result.Data != null)
+                SetExerciceSession(result.Data);
+        }
+        else
+            SetApiError(result, "Échec de la réouverture.");
+        return RedirectToAction("Exercices");
     }
 }

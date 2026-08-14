@@ -16,6 +16,7 @@
         RefCodes.StatutContrat.Valide => "bg-success-subtle text-success-emphasis",
         RefCodes.StatutContrat.Actif => "bg-success-subtle text-success-emphasis",
         RefCodes.StatutContrat.Suspendu => "bg-warning-subtle text-warning-emphasis",
+        RefCodes.StatutContrat.Remplace => "bg-dark-subtle text-dark-emphasis",
         "Termine" => "bg-dark-subtle text-dark-emphasis",
         RefCodes.StatutContrat.Resilie => "bg-danger-subtle text-danger-emphasis",
         _ => "bg-secondary-subtle text-secondary-emphasis"
@@ -27,6 +28,7 @@
         RefCodes.StatutContrat.Signe => "border-primary",
         RefCodes.StatutContrat.EnCours => "border-info",
         RefCodes.StatutContrat.Suspendu => "border-warning",
+        RefCodes.StatutContrat.Remplace => "border-dark",
         RefCodes.StatutContrat.Resilie => "border-danger",
         _ => "border-secondary"
     };
@@ -135,6 +137,12 @@
                     <button type="submit" class="btn btn-light border rounded-pill px-3">Dupliquer</button>
                 </form>
             }
+            @if (Model.PeutRectifier && canCommercialCreate)
+            {
+                <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#rectificatifModal">
+                    <i class="bi bi-file-earmark-diff me-1"></i>Créer un rectificatif
+                </button>
+            }
             @if (canEditEquipe)
             {
                 <a href="#equipe-form" class="btn btn-outline-secondary rounded-pill px-3">
@@ -144,6 +152,32 @@
         </div>
     </div>
 </div>
+
+@if (Model.EstRectificatif)
+{
+    <div class="alert alert-info border-0 shadow-sm rounded-4 mb-4">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>Rectificatif</strong> du contrat
+        @if (Model.ParentContratId is int pid)
+        {
+            <a asp-action="ContratDetails" asp-route-id="@pid" class="fw-semibold">@(Model.ParentContratReference ?? $"#{pid}")</a>
+        }
+        (v@(Model.Version)). Éditez, signez puis validez pour remplacer l'original.
+        @if (!string.IsNullOrWhiteSpace(Model.MotifRectificatif))
+        {
+            <div class="small mt-1">Motif : @Model.MotifRectificatif</div>
+        }
+    </div>
+}
+else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParContratId is int rid)
+{
+    <div class="alert alert-secondary border-0 shadow-sm rounded-4 mb-4">
+        <i class="bi bi-archive me-1"></i>
+        Contrat <strong>remplacé</strong> par le rectificatif
+        <a asp-action="ContratDetails" asp-route-id="@rid" class="fw-semibold">@(Model.RemplaceParContratReference ?? $"#{rid}")</a>
+        — conservé pour l'historique.
+    </div>
+}
 
 <div class="row g-4 mb-4">
     <div class="col-6 col-md-3">
@@ -506,6 +540,38 @@
         </div>
     </div>
 </div>
+
+@if (Model.PeutRectifier && canCommercialCreate)
+{
+    <div class="modal fade" id="rectificatifModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <form asp-action="ContratRectificatif" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header border-0">
+                        <h1 class="modal-title fs-5 fw-bold">Créer un rectificatif</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-body-secondary small mb-3">
+                            Une nouvelle version brouillon sera créée (services, lignes, équipe repris).
+                            L'original <strong>@Model.Reference</strong> reste en place jusqu'à la validation du rectificatif.
+                        </p>
+                        <div class="mb-0">
+                            <label class="form-label fw-semibold" for="motifRectif">Motif (optionnel)</label>
+                            <textarea name="motif" id="motifRectif" class="form-control rounded-3" rows="3"
+                                      placeholder="Ex. Ajout service TVA, modification honoraires…"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-light border rounded-pill" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-warning rounded-pill px-4">Créer &amp; éditer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
 
 @if (isManageStatut && canFactureCreate)
 {

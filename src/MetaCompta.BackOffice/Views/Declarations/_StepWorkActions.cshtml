@@ -10,6 +10,7 @@
     var isClientPortal = (bool)(ViewBag.ActionBarIsClientPortal ?? false);
     var claimController = ViewBag.StepWorkClaimController as string ?? "Declarations";
     var claimRedirectId = ViewBag.StepWorkClaimRedirectId as int?;
+    var stepActionController = claimController; // Tasks or Declarations — same host for claim/advance/reject
 
     if (declaration == null) { return; }
 
@@ -69,6 +70,7 @@
                || statut == RefCodes.StatutDeclaration.ControleEnCours
                || statut == RefCodes.StatutDeclaration.EnAttenteCorrection
                || statut == RefCodes.StatutDeclaration.CalculTVA
+               || statut == RefCodes.StatutDeclaration.CalculIS
                || statut == RefCodes.StatutDeclaration.ACorriger);
 
     var canComplete = permEdit && (statut == RefCodes.StatutDeclaration.Brouillon
@@ -79,9 +81,12 @@
     var canValidate = canStatusValidate && (statut == RefCodes.StatutDeclaration.Completee
                     || statut == RefCodes.StatutDeclaration.EnRevision
                     || statut == RefCodes.StatutDeclaration.EnRevueSuperviseur
-                    || statut == RefCodes.StatutDeclaration.CalculTVA)
+                    || statut == RefCodes.StatutDeclaration.CalculTVA
+                    || statut == RefCodes.StatutDeclaration.CalculIS)
                     && (!hasWorkflow || !wfActive || stepType is "Controle" or "ValidationInterne");
-    var canSubmit = canStatusPayOrSubmit && (statut == RefCodes.StatutDeclaration.Validee || statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva)
+    var canSubmit = canStatusPayOrSubmit && (statut == RefCodes.StatutDeclaration.Validee
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva
+                    || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs)
                   && (!hasWorkflow || !wfActive || stepType == "DepotSoumission");
     var canRequestDocs = permEdit && (statut == RefCodes.StatutDeclaration.CreeeParSysteme
                     || statut == RefCodes.StatutDeclaration.Brouillon
@@ -90,10 +95,12 @@
                     || statut == RefCodes.StatutDeclaration.EnAttenteCorrection);
     var canMarkDocsReceived = permEdit && (statut == RefCodes.StatutDeclaration.DocumentsDemandes || statut == RefCodes.StatutDeclaration.ACompleter);
     var canStartControle = permEdit && statut == RefCodes.StatutDeclaration.DocumentsRecus;
-    var canAskCorrection = permEdit && (statut == RefCodes.StatutDeclaration.ControleEnCours || statut == RefCodes.StatutDeclaration.CalculTVA);
+    var canAskCorrection = permEdit && (statut == RefCodes.StatutDeclaration.ControleEnCours
+                    || statut == RefCodes.StatutDeclaration.CalculTVA
+                    || statut == RefCodes.StatutDeclaration.CalculIS);
     var canRejectReview = canStatusValidate && (statut == RefCodes.StatutDeclaration.EnRevueSuperviseur || statut == RefCodes.StatutDeclaration.EnRevision);
-    var canConfirmDeposit = canStatusPayOrSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
-    var canRejectSimpl = canStatusPayOrSubmit && statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+    var canConfirmDeposit = canStatusPayOrSubmit && (statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs);
+    var canRejectSimpl = canStatusPayOrSubmit && (statut == RefCodes.StatutDeclaration.EnvoyeeSimplTva || statut == RefCodes.StatutDeclaration.EnvoyeeSimplIs);
     var canMarkToPay = permEdit && statut == RefCodes.StatutDeclaration.Deposee;
     var canConfirmPay = canStatusPayOrSubmit && (statut == RefCodes.StatutDeclaration.APayer || statut == RefCodes.StatutDeclaration.Deposee);
     var canReconcile = permEdit && (statut == RefCodes.StatutDeclaration.Payee || statut == RefCodes.StatutDeclaration.Deposee);
@@ -109,6 +116,9 @@
     }
 
     var canAdvanceWf = canActOnStep && (permWfAdvance || isMyStep) && stepStatus != "Completed" && stepStatus != "Skipped";
+    // Refuse is always available with Terminer (engine sends back or asks correction on first step)
+    var canRejectWf = canAdvanceWf && wfActive && hasCurrentStep
+                      && stepAssignment != "AutoSystem" && !isClientStep;
     var claimId = claimRedirectId ?? declId;
     var holderName = wfStep?.AssignedToUserName ?? "un autre collaborateur";
 }
@@ -173,7 +183,7 @@
         </form>
     }
 
-    @if (canEdit)
+    @if (canEdit && !string.Equals(type, "CNSS", StringComparison.OrdinalIgnoreCase))
     {
         var editAction = DeclarationServiceCatalog.GetEditAction(type);
         <a href="@Url.Action(editAction, "Declarations", new { id = declId })" class="wf-btn wf-btn-edit" title="Modifier / saisie">
@@ -239,10 +249,14 @@
     }
     @if (canSubmit && statut == RefCodes.StatutDeclaration.Validee)
     {
+        var simplStatut = string.Equals(type, "IS", StringComparison.OrdinalIgnoreCase)
+            ? RefCodes.StatutDeclaration.EnvoyeeSimplIs
+            : RefCodes.StatutDeclaration.EnvoyeeSimplTva;
+        var simplLabel = string.Equals(type, "IS", StringComparison.OrdinalIgnoreCase) ? "SIMPL-IS" : "SIMPL-TVA";
         <form asp-action="ChangeStatus" asp-controller="Declarations" asp-route-id="@declId" method="post" class="d-inline">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="newStatut" value="@RefCodes.StatutDeclaration.EnvoyeeSimplTva" />
-            <button type="submit" class="wf-btn wf-btn-submit"><i class="bi bi-cloud-upload"></i> <span>SIMPL-TVA</span></button>
+            <input type="hidden" name="newStatut" value="@simplStatut" />
+            <button type="submit" class="wf-btn wf-btn-submit"><i class="bi bi-cloud-upload"></i> <span>@simplLabel</span></button>
         </form>
     }
     @if (canConfirmDeposit)
@@ -304,13 +318,58 @@
 
     @if (canAdvanceWf && wfInstance != null)
     {
-        <form asp-action="AdvanceWorkflowStep" asp-controller="Declarations" method="post" class="d-inline">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="declarationId" value="@declId" />
-            <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
-            <button type="submit" class="wf-btn wf-btn-advance" title="Terminer l'étape et avancer">
-                <i class="bi bi-skip-forward-fill"></i> <span>Avancer l'étape</span>
-            </button>
-        </form>
+        @if (stepActionController == "Tasks")
+        {
+            <form asp-action="ValidateWorkflowStep" asp-controller="Tasks" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="taskId" value="@claimId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-advance" title="Terminer l'étape et avancer">
+                    <i class="bi bi-skip-forward-fill"></i> <span>Terminer / Avancer</span>
+                </button>
+            </form>
+        }
+        else
+        {
+            <form asp-action="AdvanceWorkflowStep" asp-controller="Declarations" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <button type="submit" class="wf-btn wf-btn-advance" title="Terminer l'étape et avancer">
+                    <i class="bi bi-skip-forward-fill"></i> <span>Terminer / Avancer</span>
+                </button>
+            </form>
+        }
+    }
+    @if (canRejectWf && wfInstance != null)
+    {
+        @if (stepActionController == "Tasks")
+        {
+            <form asp-action="RejectWorkflowStep" asp-controller="Tasks" method="post" class="d-inline-flex gap-1 align-items-center"
+                  onsubmit="return confirm('Refuser cette étape et renvoyer à l’étape précédente ?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="taskId" value="@claimId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Motif du refus *" required
+                       style="width:160px;font-size:0.72rem;" maxlength="500" />
+                <button type="submit" class="wf-btn wf-btn-skip" title="Refuser et renvoyer à l'étape précédente">
+                    <i class="bi bi-arrow-return-left"></i> <span>Refuser</span>
+                </button>
+            </form>
+        }
+        else
+        {
+            <form asp-action="RejectWorkflowStep" asp-controller="Declarations" method="post" class="d-inline-flex gap-1 align-items-center"
+                  onsubmit="return confirm('Refuser cette étape et renvoyer à l’étape précédente ?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="declarationId" value="@declId" />
+                <input type="hidden" name="workflowInstanceId" value="@wfInstance.Id" />
+                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Motif du refus *" required
+                       style="width:160px;font-size:0.72rem;" maxlength="500" />
+                <button type="submit" class="wf-btn wf-btn-skip" title="Refuser et renvoyer à l'étape précédente">
+                    <i class="bi bi-arrow-return-left"></i> <span>Refuser</span>
+                </button>
+            </form>
+        }
     }
 </div>

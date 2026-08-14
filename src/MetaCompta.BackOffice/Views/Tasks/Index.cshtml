@@ -132,8 +132,15 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small text-muted mb-1">Client</label>
-                <select name="clientId" class="form-select form-select-sm">
-                    <option value="">Tous les clients</option>
+                @if (ViewBag.IsClientSpace == true && ViewBag.ClientId != null)
+                {
+                    <input type="hidden" name="clientId" value="@ViewBag.ClientId" />
+                }
+                <select name="@(ViewBag.IsClientSpace == true ? null : "clientId")" class="form-select form-select-sm" @(ViewBag.IsClientSpace == true ? "disabled" : null)>
+                    @if (ViewBag.IsClientSpace != true)
+                    {
+                        <option value="">Tous les clients</option>
+                    }
                     @if (clients != null)
                     {
                         foreach (var c in clients)

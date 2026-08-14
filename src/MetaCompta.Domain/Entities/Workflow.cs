@@ -129,6 +129,7 @@ public enum WorkflowActionType
     RequestDocuments = 14,      // Send document request to client
     ApproveByClient = 15,       // Wait for client approval on extranet
     PaymentReminder = 16,       // Send payment reminder
+    ClotureDeclaration = 17,    // Mark declaration as Clôturée (terminal)
     Custom = 99                 // Custom action defined in ActionConfigJson
 }
 
@@ -291,6 +292,56 @@ public class WorkflowStepTemplate : TenantEntity
     /// <summary>SLA in hours (time limit to complete this step).</summary>
     public int? SLAHours { get; set; }
 
+    /// <summary>
+    /// How the step DueDate (échéance) is computed when the step opens.
+    /// OnStepOpen | OnDeclarationOpen | ExactCalendar | PeriodStart | PeriodEnd | DeclarationDateLimite | None
+    /// </summary>
+    public string? DeadlineAnchor { get; set; }
+
+    /// <summary>Days added to the deadline anchor (can be negative). Used with OnStepOpen / period anchors.</summary>
+    public int? DeadlineOffsetDays { get; set; }
+
+    /// <summary>
+    /// Exact calendar day of month (1–31) for ExactCalendar rules.
+    /// Mensuel: jour N du mois cible; Trimestriel/Annuel: jour du mois choisi.
+    /// </summary>
+    public int? DeadlineDay { get; set; }
+
+    /// <summary>
+    /// Exact calendar month (1–12) for ExactCalendar when annuel or trimestriel (date fixe).
+    /// Null for mensuel (uses MonthOffset after period end).
+    /// </summary>
+    public int? DeadlineMonth { get; set; }
+
+    /// <summary>
+    /// Months after period end for ExactCalendar mensuel (default 1 = mois suivant).
+    /// Also used for trimestriel when DeadlineMonth is null.
+    /// </summary>
+    public int? DeadlineMonthOffset { get; set; }
+
+    /// <summary>
+    /// Years added to the period end year for ExactCalendar annuel (default 1 → 31/03 N+1).
+    /// </summary>
+    public int? DeadlineYearOffset { get; set; }
+
+    /// <summary>
+    /// When true, on step activation also set Declaration.DateLimite to the computed DueDate
+    /// (useful on Init for any declaration type). Cleared for Clôture steps.
+    /// </summary>
+    public bool ApplyDeadlineToDeclaration { get; set; }
+
+    /// <summary>
+    /// Init only: how declaration lifecycle end is computed.
+    /// CalendrierMaroc | PeriodEnd | DaysFromOpen | None
+    /// </summary>
+    public string? LifecycleEndMode { get; set; }
+
+    /// <summary>Init only: days from open when LifecycleEndMode = DaysFromOpen.</summary>
+    public int? LifecycleEndDays { get; set; }
+
+    /// <summary>Init only: WorkflowActionType name to run at lifecycle end (default ClotureDeclaration).</summary>
+    public string? ActionOnLifecycleEnd { get; set; }
+
     /// <summary>Is this step mandatory? If false, it can be skipped.</summary>
     public bool IsRequired { get; set; } = true;
 
@@ -412,6 +463,10 @@ public class WorkflowInstance : TenantEntity
     /// <summary>The client this workflow relates to.</summary>
     public int ClientId { get; set; }
     public virtual Client? Client { get; set; }
+
+    /// <summary>Exercice scoping (copied from declaration when linked).</summary>
+    public int? ExerciceComptableId { get; set; }
+    public virtual ExerciceComptable? Exercice { get; set; }
 
     /// <summary>Current step order (tracks progression).</summary>
     public int CurrentStepOrder { get; set; } = 0;

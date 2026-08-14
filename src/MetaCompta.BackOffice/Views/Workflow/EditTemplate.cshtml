@@ -4,7 +4,7 @@
     ViewData["Title"] = "Modifier le modèle de workflow";
     var clients = ViewBag.Clients as List<ClientDto> ?? new List<ClientDto>();
     var departments = ViewBag.Departments as List<DepartmentDto> ?? new List<DepartmentDto>();
-    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "ClotureArchivage" };
+    var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "Paiement", "Rapprochement", "ClotureArchivage" };
     var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
     var taskTypes = new[] { "Standard", "DocumentRequest", "DataEntry", "Review", "Validation", "Submission", "Archiving", "ClientAction" };
     var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
