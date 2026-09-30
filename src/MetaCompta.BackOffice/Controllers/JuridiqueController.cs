@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,6 +11,7 @@ namespace MetaCompta.BackOffice.Controllers;
 /// Controller for Juridique — Dossiers juridiques (création société, modification statuts, PV AG, dépôt légal).
 /// </summary>
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Juridique)]
 public class JuridiqueController : BaseController
 {
     private readonly IJuridiqueFacade _juridique;
@@ -62,6 +64,8 @@ public class JuridiqueController : BaseController
     [RequirePermission(ClaimDefinitions.JuridiqueCreate)]
     public async Task<IActionResult> Create(DossierJuridiqueCreateDto dto)
     {
+        if (SelectedClientId.HasValue)
+            dto.ClientId = SelectedClientId.Value;
         if (!ModelState.IsValid)
         {
             await LoadReferenceDataToViewBagAsync("TYPE_DOSSIER_JURIDIQUE");

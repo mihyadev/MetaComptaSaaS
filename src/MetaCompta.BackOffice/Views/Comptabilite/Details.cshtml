@@ -25,6 +25,14 @@
                 <button type="submit" class="btn btn-success rounded-pill"><i class="bi bi-check-lg me-1"></i> Valider</button>
             </form>
         }
+        @if (!isDraft && canCreate)
+        {
+            <form method="post" asp-action="ContrepasserEcriture" class="d-inline" onsubmit="return confirm('Générer une écriture de contrepassation ?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-outline-danger rounded-pill"><i class="bi bi-arrow-counterclockwise me-1"></i> Contrepasser</button>
+            </form>
+        }
         @if (isDraft && canEdit)
         {
             <a href="@Url.Action("EditEcriture", new { id = Model.Id })" class="btn btn-primary rounded-pill"><i class="bi bi-pencil me-1"></i> Modifier</a>

@@ -2,12 +2,14 @@ using System.Text;
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
 
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Erp)]
 public class ComptabiliteController : BaseController
 {
     private readonly IComptabiliteFacade _compta;
@@ -294,6 +296,22 @@ public class ComptabiliteController : BaseController
         if (result?.Success == true) TempData["Success"] = result.Message;
         else SetApiError(result, "Erreur lors de la validation.");
         return RedirectToAction("Ecritures");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ContrepasserEcriture(int id)
+    {
+        var result = await _compta.ContrepasserEcritureAsync(id);
+        if (result?.Success == true)
+        {
+            TempData["Success"] = result.Message;
+            if (result.Data != null)
+                return RedirectToAction("Details", new { id = result.Data.Id });
+        }
+        else SetApiError(result, "Contrepassation impossible.");
+        return RedirectToAction("Details", new { id });
     }
 
     [RequirePermission(ClaimDefinitions.ComptabiliteDetail)]

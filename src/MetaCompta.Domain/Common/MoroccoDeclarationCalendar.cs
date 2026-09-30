@@ -94,8 +94,8 @@ public static class MoroccoDeclarationCalendar
     }
 
     /// <summary>
-    /// End of declaration cycle for auto-clôture:
-    /// CNSS/TVA/… → DateLimite (fin fenêtre dépôt) ; sinon → DateFin période.
+    /// Legacy Maroc dépôt-window end (CNSS 10, TVA 20…). Prefer Init LifecycleEndMode=PeriodEnd
+    /// which uses Fin/échéance from Modèle de périodes instead.
     /// </summary>
     public static DateTime GetLifecycleEndDate(string? declarationType, DateTime periodEnd, DateTime filingDeadline)
         => UsesPostPeriodFilingWindow(declarationType) ? filingDeadline.Date : periodEnd.Date;

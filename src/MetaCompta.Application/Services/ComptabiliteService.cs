@@ -1,5 +1,6 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.Application.Interfaces;
+using MetaCompta.Domain.Common;
 using MetaCompta.Domain.Entities;
 using MetaCompta.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -650,6 +651,156 @@ public class ComptabiliteService : IComptabiliteService
         }, "Écriture validée.");
     }
 
+    public async Task<ApiResponse<EcritureComptableDto>> ContrepasserEcritureAsync(int id, int cabinetId, string userId)
+    {
+        var source = await _db.EcrituresComptables
+            .Include(x => x.Lignes)
+            .FirstOrDefaultAsync(x => x.Id == id && x.CabinetId == cabinetId);
+        if (source == null) return ApiResponse<EcritureComptableDto>.Fail("Écriture introuvable.");
+        if (source.Statut != "Validee")
+            return ApiResponse<EcritureComptableDto>.Fail("Seules les écritures validées peuvent être contrepassées.");
+        if (!string.IsNullOrEmpty(source.Reference) && source.Reference.StartsWith("CP-OF-", StringComparison.OrdinalIgnoreCase))
+            return ApiResponse<EcritureComptableDto>.Fail("Impossible de contrepasser une contrepassation.");
+
+        var already = await _db.EcrituresComptables.AnyAsync(e =>
+            e.CabinetId == cabinetId && e.ClientId == source.ClientId
+            && e.Reference == $"CP-OF-{source.Id}" && !e.IsDeleted);
+        if (already)
+            return ApiResponse<EcritureComptableDto>.Fail("Cette écriture a déjà été contrepassée.");
+
+        var exoBlock = await EnsureExerciceOpenForMutationAsync(source.ExerciceComptableId, source.ClientId, cabinetId);
+        if (exoBlock != null) return ApiResponse<EcritureComptableDto>.Fail(exoBlock);
+
+        return await CreateEcritureAsync(new EcritureCreateDto
+        {
+            ClientId = source.ClientId,
+            ExerciceComptableId = source.ExerciceComptableId,
+            Journal = source.JournalCode,
+            DateEcriture = DateTime.UtcNow.Date,
+            Libelle = $"Contrepassation — {source.Libelle ?? source.NumeroPiece}",
+            Reference = $"CP-OF-{source.Id}",
+            Valider = true,
+            Lignes = source.Lignes.OrderBy(l => l.SortOrder).Select(l => new LigneEcritureDto
+            {
+                NumCompte = l.NumCompte,
+                LibelleCompte = l.LibelleCompte,
+                Debit = l.Credit,
+                Credit = l.Debit
+            }).ToList()
+        }, cabinetId, userId);
+    }
+
+    public async Task<ApiResponse<bool>> SetLettrageAsync(int cabinetId, string userId, IReadOnlyList<int> ligneIds, string? lettrageCode)
+    {
+        if (ligneIds == null || ligneIds.Count == 0)
+            return ApiResponse<bool>.Fail("Aucune ligne sélectionnée.");
+
+        var lignes = await _db.LignesEcritures
+            .Where(l => ligneIds.Contains(l.Id) && l.CabinetId == cabinetId && !l.IsDeleted)
+            .ToListAsync();
+        if (lignes.Count == 0) return ApiResponse<bool>.Fail("Lignes introuvables.");
+
+        if (lignes.Select(l => l.NumCompte).Distinct().Count() > 1)
+            return ApiResponse<bool>.Fail("Le lettrage doit porter sur un seul compte.");
+
+        var code = string.IsNullOrWhiteSpace(lettrageCode) ? null : lettrageCode.Trim().ToUpperInvariant();
+        if (code != null && code.Length > 20) code = code[..20];
+
+        foreach (var l in lignes)
+        {
+            l.LettrageCode = code;
+            l.UpdatedAt = DateTime.UtcNow;
+            l.UpdatedBy = userId;
+        }
+        await _db.SaveChangesAsync();
+        return ApiResponse<bool>.Ok(true, code == null ? "Lettrage annulé." : $"Lettrage « {code} » appliqué.");
+    }
+
+    public async Task<ApiResponse<EcritureComptableDto>> PostPayrollPeriodAsync(int payrollPeriodId, int cabinetId, string userId)
+    {
+        var period = await _db.PayrollPeriods
+            .FirstOrDefaultAsync(p => p.Id == payrollPeriodId && p.CabinetId == cabinetId);
+        if (period == null) return ApiResponse<EcritureComptableDto>.Fail("Période de paie introuvable.");
+        if (period.Statut != RefCodes.StatutPaie.Validee)
+            return ApiResponse<EcritureComptableDto>.Fail("Validez la paie avant de générer l'écriture comptable.");
+
+        var refKey = $"PAIE-{period.Id}";
+        var existing = await _db.EcrituresComptables
+            .FirstOrDefaultAsync(e => e.CabinetId == cabinetId && e.ClientId == period.ClientId
+                && e.Reference == refKey && !e.IsDeleted);
+        if (existing != null)
+        {
+            var first = await _db.LignesEcritures.AsNoTracking()
+                .Where(l => l.EcritureComptableId == existing.Id)
+                .OrderBy(l => l.SortOrder)
+                .FirstOrDefaultAsync();
+            return ApiResponse<EcritureComptableDto>.Ok(new EcritureComptableDto
+            {
+                Id = existing.Id,
+                ClientId = existing.ClientId,
+                Journal = existing.JournalCode,
+                NumeroPiece = existing.NumeroPiece,
+                DateEcriture = existing.DateEcriture,
+                NumCompte = first?.NumCompte ?? "",
+                LibelleCompte = first?.LibelleCompte,
+                Libelle = existing.Libelle,
+                Debit = existing.TotalDebit,
+                Credit = existing.TotalCredit,
+                Reference = existing.Reference,
+                Statut = MapStatutDisplay(existing.Statut),
+                CreatedAt = existing.CreatedAt
+            }, "Écriture paie déjà générée.");
+        }
+
+        await EnsureClientLedgerAsync(period.ClientId, cabinetId, userId);
+        var brut = period.TotalSalairesBruts;
+        var cotSal = period.TotalCotisationsSalariales;
+        var cotPat = period.TotalCotisationsPatronales;
+        var ir = period.TotalIRRetenu;
+        var net = period.TotalNetAPayer;
+        if (brut <= 0 && net <= 0)
+            return ApiResponse<EcritureComptableDto>.Fail("Totaux de paie nuls — calculez la période d'abord.");
+
+        var creditCot = Math.Round(cotSal + cotPat, 2);
+        var creditIr = Math.Round(ir, 2);
+        var creditNet = Math.Round(net, 2);
+        var dateEcriture = new DateTime(period.Annee, period.Mois, DateTime.DaysInMonth(period.Annee, period.Mois));
+        var lignes = new List<LigneEcritureDto>
+        {
+            new() { NumCompte = "6171", LibelleCompte = "Rémunérations du personnel", Debit = Math.Round(brut, 2), Credit = 0 }
+        };
+        if (cotPat > 0)
+            lignes.Add(new LigneEcritureDto { NumCompte = "6174", LibelleCompte = "Charges sociales", Debit = Math.Round(cotPat, 2), Credit = 0 });
+        if (creditCot > 0)
+            lignes.Add(new LigneEcritureDto { NumCompte = "4441", LibelleCompte = "CNSS", Debit = 0, Credit = creditCot });
+        if (creditIr > 0)
+            lignes.Add(new LigneEcritureDto { NumCompte = "4456", LibelleCompte = "État — IR / taxes", Debit = 0, Credit = creditIr });
+        if (creditNet > 0)
+            lignes.Add(new LigneEcritureDto { NumCompte = "4432", LibelleCompte = "Rémunérations dues au personnel", Debit = 0, Credit = creditNet });
+
+        var td = Math.Round(lignes.Sum(l => l.Debit), 2);
+        var tc = Math.Round(lignes.Sum(l => l.Credit), 2);
+        if (td != tc && lignes.Count > 0)
+        {
+            var delta = td - tc;
+            var last = lignes[^1];
+            if (delta > 0) last.Credit += delta;
+            else last.Debit += -delta;
+        }
+
+        return await CreateEcritureAsync(new EcritureCreateDto
+        {
+            ClientId = period.ClientId,
+            ExerciceComptableId = period.ExerciceComptableId,
+            Journal = "SA",
+            DateEcriture = dateEcriture,
+            Libelle = $"Paie {period.Mois:D2}/{period.Annee}",
+            Reference = refKey,
+            Valider = true,
+            Lignes = lignes
+        }, cabinetId, userId);
+    }
+
     public async Task<ApiResponse<List<GrandLivreDto>>> GetGrandLivreAsync(
         int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, string? numCompte = null, int? exerciceId = null)
     {
@@ -725,9 +876,50 @@ public class ComptabiliteService : IComptabiliteService
     public async Task<ApiResponse<List<BalanceAgeeDto>>> GetBalanceAgeeAsync(int clientId, int cabinetId)
     {
         await EnsureClientLedgerAsync(clientId, cabinetId);
-        // Phase 1: stub empty — auxiliaires come in Phase 2
-        var empty = new List<BalanceAgeeDto>();
-        return ApiResponse<List<BalanceAgeeDto>>.Ok(empty);
+        var asOf = DateTime.UtcNow.Date;
+        var lines = await _db.LignesEcritures.AsNoTracking()
+            .Include(l => l.Ecriture)
+            .Where(l => l.ClientId == clientId && l.CabinetId == cabinetId && !l.IsDeleted
+                && l.Ecriture != null && l.Ecriture.Statut == "Validee"
+                && string.IsNullOrEmpty(l.LettrageCode)
+                && (l.NumCompte.StartsWith("3") || l.NumCompte.StartsWith("4")))
+            .Select(l => new
+            {
+                l.NumCompte,
+                Tiers = l.CompteAuxiliaire ?? l.LibelleCompte,
+                Solde = l.Debit - l.Credit,
+                Date = l.Ecriture!.DateEcriture
+            })
+            .ToListAsync();
+
+        var result = new List<BalanceAgeeDto>();
+        foreach (var g in lines.GroupBy(l => new { l.NumCompte, l.Tiers }))
+        {
+            decimal t0 = 0, t30 = 0, t60 = 0, t90 = 0, total = 0;
+            foreach (var row in g)
+            {
+                var age = (asOf - row.Date.Date).TotalDays;
+                var amt = row.Solde;
+                total += amt;
+                if (age <= 30) t0 += amt;
+                else if (age <= 60) t30 += amt;
+                else if (age <= 90) t60 += amt;
+                else t90 += amt;
+            }
+            if (Math.Abs(total) < 0.01m) continue;
+            result.Add(new BalanceAgeeDto
+            {
+                NumeroCompte = g.Key.NumCompte,
+                NomTiers = g.Key.Tiers,
+                Total = total,
+                Tranche0_30 = t0,
+                Tranche30_60 = t30,
+                Tranche60_90 = t60,
+                TrancheSuperieur90 = t90
+            });
+        }
+
+        return ApiResponse<List<BalanceAgeeDto>>.Ok(result.OrderBy(r => r.NumeroCompte).ThenBy(r => r.NomTiers).ToList());
     }
 
     public async Task<ApiResponse<List<RapprochementBancaireDto>>> GetRapprochementsAsync(int cabinetId, int? clientId)

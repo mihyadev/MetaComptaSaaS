@@ -10,6 +10,7 @@ using System.Xml.Linq;
 namespace MetaCompta.BackOffice.Controllers;
 
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Fiscal)]
 public class DeclarationsController : BaseController
 {
     // Statuts dans lesquels la déclaration est modifiable (inclut étapes WF TVA: contrôle / calcul)

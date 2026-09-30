@@ -669,6 +669,16 @@ public class PayrollController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpGet("{id}/livre-paie")]
+    [Authorize(Policy = ClaimDefinitions.PayrollDetail)]
+    public async Task<IActionResult> LivrePaie(int id)
+    {
+        var result = await _service.GetLivrePaieCsvAsync(id, CabinetId);
+        if (!result.Success || result.Data == null) return BadRequest(result);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(result.Data);
+        return File(bytes, "text/csv", $"livre-paie-{id}.csv");
+    }
+
     // Ã¢â€â‚¬Ã¢â€â‚¬ Bulletin Ã¢â€â‚¬Ã¢â€â‚¬
     [HttpGet("bulletin/{paySlipId}")]
     public async Task<IActionResult> GetBulletin(int paySlipId)
@@ -1863,6 +1873,21 @@ public class ComptabiliteApiController : ControllerBase
     public async Task<IActionResult> ValidateEcriture(int id)
         => Ok(await _service.ValidateEcritureAsync(id, CabinetId, UserId));
 
+    [HttpPost("ecritures/{id:int}/contrepasser")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> ContrepasserEcriture(int id)
+        => Ok(await _service.ContrepasserEcritureAsync(id, CabinetId, UserId));
+
+    [HttpPost("lettrage")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteEdit)]
+    public async Task<IActionResult> SetLettrage([FromBody] LettrageRequestDto dto)
+        => Ok(await _service.SetLettrageAsync(CabinetId, UserId, dto.LigneIds ?? new List<int>(), dto.LettrageCode));
+
+    [HttpPost("payroll/{periodId:int}/post")]
+    [Authorize(Policy = ClaimDefinitions.ComptabiliteCreate)]
+    public async Task<IActionResult> PostPayroll(int periodId)
+        => Ok(await _service.PostPayrollPeriodAsync(periodId, CabinetId, UserId));
+
     [HttpGet("journaux")]
     public async Task<IActionResult> GetJournaux([FromQuery] int clientId)
         => Ok(await _service.GetJournauxAsync(clientId, CabinetId));
@@ -2194,4 +2219,41 @@ public class GenerateEtatFiscalRequest
     public int ClientId { get; set; }
     public string Type { get; set; } = string.Empty;
     public int Exercice { get; set; }
+}
+
+[ApiController]
+[Route("api/juridique")]
+[Authorize(Policy = "BackOfficeAccess")]
+public class JuridiqueApiController : ControllerBase
+{
+    private readonly IJuridiqueService _service;
+    public JuridiqueApiController(IJuridiqueService service) => _service = service;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+    [HttpGet]
+    [Authorize(Policy = ClaimDefinitions.JuridiqueDetail)]
+    public async Task<IActionResult> GetAll([FromQuery] int? clientId, [FromQuery] string? type, [FromQuery] string? statut, [FromQuery] int page = 1, [FromQuery] string? search = null)
+        => Ok(await _service.GetAllAsync(CabinetId, clientId, type, statut, page, search));
+
+    [HttpGet("{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.JuridiqueDetail)]
+    public async Task<IActionResult> GetById(int id)
+        => Ok(await _service.GetByIdAsync(id, CabinetId));
+
+    [HttpPost]
+    [Authorize(Policy = ClaimDefinitions.JuridiqueCreate)]
+    public async Task<IActionResult> Create([FromBody] DossierJuridiqueCreateDto dto)
+        => Ok(await _service.CreateAsync(dto, CabinetId, UserId));
+
+    [HttpPut("{id:int}")]
+    [Authorize(Policy = ClaimDefinitions.JuridiqueEdit)]
+    public async Task<IActionResult> Update(int id, [FromBody] DossierJuridiqueCreateDto dto)
+        => Ok(await _service.UpdateAsync(id, dto, CabinetId, UserId));
+
+    [HttpPut("{id:int}/status")]
+    [Authorize(Policy = ClaimDefinitions.JuridiqueEdit)]
+    public async Task<IActionResult> ChangeStatus(int id, [FromBody] ChangeStatusRequest req)
+        => Ok(await _service.ChangeStatusAsync(id, req.NewStatut, CabinetId, UserId));
 }

@@ -1,0 +1,9 @@
+# Caddy reverse proxy for MetaCompta production
+# Default domain → BackOffice
+# Automatic HTTPS via Let's Encrypt
+# Add api/extranet/admin blocks after DNS A records exist
+
+metacompta.ma, www.metacompta.ma {
+	encode gzip
+	reverse_proxy backoffice:8080
+}

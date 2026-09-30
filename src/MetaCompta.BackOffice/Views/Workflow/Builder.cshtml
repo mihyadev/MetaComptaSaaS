@@ -72,6 +72,22 @@
     .step-card.collapsed-step .step-header { border-bottom: 0; }
     .step-card.collapsed-step .chevron-icon { transform: rotate(-90deg); }
     .step-num { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.82rem; color: #fff; background: var(--monday-blue); flex-shrink: 0; }
+    .step-order-controls { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+    .step-drag-handle { width: 28px; height: 34px; border: 0; background: transparent; color: var(--monday-muted); cursor: grab; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 1.1rem; padding: 0; }
+    .step-drag-handle:hover { color: var(--monday-blue); background: color-mix(in srgb, var(--monday-blue) 10%, transparent); }
+    .step-drag-handle:active { cursor: grabbing; }
+    .step-num-input { width: 42px; height: 34px; border-radius: 10px; border: 1px solid var(--monday-border); background: var(--monday-blue); color: #fff; font-weight: 800; font-size: 0.82rem; text-align: center; padding: 0; -moz-appearance: textfield; appearance: textfield; }
+    .step-num-input::-webkit-outer-spin-button, .step-num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .step-num-input:focus { outline: 2px solid color-mix(in srgb, var(--monday-blue) 45%, #fff); outline-offset: 1px; }
+    .step-move-btns { display: flex; flex-direction: column; gap: 1px; }
+    .btn-move-step { width: 22px; height: 16px; border: 1px solid var(--monday-border); background: var(--monday-surface); color: var(--monday-muted); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; padding: 0; line-height: 1; cursor: pointer; }
+    .btn-move-step:hover:not(:disabled) { color: var(--monday-blue); border-color: var(--monday-blue); }
+    .btn-move-step:disabled { opacity: 0.35; cursor: not-allowed; }
+    .step-card.step-ghost { opacity: 0.45; border: 2px dashed var(--monday-blue); background: color-mix(in srgb, var(--monday-blue) 6%, var(--monday-surface)); }
+    .step-card.step-chosen { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
+    .step-card.step-dragging { opacity: 0.95; }
+    #stepsContainer.is-reordering .step-body { pointer-events: none; }
+    .step-reorder-hint { font-size: 0.72rem; font-weight: 500; color: var(--monday-muted); text-transform: none; letter-spacing: 0; }
     .step-header { display: flex; align-items: center; gap: 0.7rem; cursor: pointer; padding: 0.9rem 1.1rem; background: var(--monday-bg); border-bottom: 1px solid var(--monday-border); }
     .step-header h6 { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--monday-text); }
     .step-type-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); color: var(--monday-blue); border: 1px solid var(--monday-border); }
@@ -231,8 +247,11 @@
 
             <div class="card builder-card mb-3">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="section-title mb-0"><i class="bi bi-list-ol"></i>Étapes du workflow</div>
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <div class="section-title mb-0"><i class="bi bi-list-ol"></i>Étapes du workflow</div>
+                            <div class="step-reorder-hint mt-1"><i class="bi bi-grip-vertical me-1"></i>Glissez, utilisez ↑↓ ou changez le n° pour réordonner</div>
+                        </div>
                         <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2" id="stepCountBadge" style="font-size:0.78rem;">@Model.Steps.Count étapes</span>
                     </div>
                     <div id="stepsContainer">
@@ -244,7 +263,14 @@
                             var showSched = step.IsScheduled || step.AssignmentType == "AutoSystem";
                             <div class="step-card" data-index="@i">
                                 <div class="step-header" onclick="toggleStep(this)">
-                                    <span class="step-num">@(i + 1)</span>
+                                    <div class="step-order-controls" onclick="event.stopPropagation()">
+                                        <button type="button" class="step-drag-handle" title="Glisser pour réordonner" aria-label="Glisser"><i class="bi bi-grip-vertical"></i></button>
+                                        <input type="number" class="step-num step-num-input" value="@(i + 1)" min="1" max="@Model.Steps.Count" title="Changer le numéro d'ordre" aria-label="Ordre de l'étape" onchange="onStepNumberChange(this)" onclick="event.stopPropagation()" />
+                                        <div class="step-move-btns">
+                                            <button type="button" class="btn-move-step btn-move-up" title="Monter" aria-label="Monter" onclick="event.stopPropagation();moveStep(this,-1)"><i class="bi bi-chevron-up"></i></button>
+                                            <button type="button" class="btn-move-step btn-move-down" title="Descendre" aria-label="Descendre" onclick="event.stopPropagation();moveStep(this,1)"><i class="bi bi-chevron-down"></i></button>
+                                        </div>
+                                    </div>
                                     <h6>@(string.IsNullOrEmpty(step.Name) ? $"Étape {i+1}" : step.Name)</h6>
                                     <span class="step-type-badge">@stLabel</span>
                                     <span class="assign-badge"><i class="bi bi-person-fill me-1"></i>@asLabel</span>
@@ -697,7 +723,14 @@
 <template id="stepTemplate">
     <div class="step-card collapsed-step" data-index="__IDX__">
         <div class="step-header" onclick="toggleStep(this)">
-            <span class="step-num">__NUM__</span>
+            <div class="step-order-controls" onclick="event.stopPropagation()">
+                <button type="button" class="step-drag-handle" title="Glisser pour réordonner" aria-label="Glisser"><i class="bi bi-grip-vertical"></i></button>
+                <input type="number" class="step-num step-num-input" value="__NUM__" min="1" title="Changer le numéro d'ordre" aria-label="Ordre de l'étape" onchange="onStepNumberChange(this)" onclick="event.stopPropagation()" />
+                <div class="step-move-btns">
+                    <button type="button" class="btn-move-step btn-move-up" title="Monter" aria-label="Monter" onclick="event.stopPropagation();moveStep(this,-1)"><i class="bi bi-chevron-up"></i></button>
+                    <button type="button" class="btn-move-step btn-move-down" title="Descendre" aria-label="Descendre" onclick="event.stopPropagation();moveStep(this,1)"><i class="bi bi-chevron-down"></i></button>
+                </div>
+            </div>
             <h6>Étape __NUM__</h6>
             <span class="step-type-badge">Initialisation</span>
             <span class="assign-badge"><i class="bi bi-person-fill me-1"></i>Employé</span>
@@ -1079,7 +1112,9 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script src="~/js/workflow-cron.js" asp-append-version="true"></script>
+<script src="~/js/workflow-step-reorder.js" asp-append-version="true"></script>
 <style>
     .employee-multi + .select2-container { width: 100% !important; }
     .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
@@ -1157,7 +1192,8 @@
         newCard.classList.remove('collapsed-step');
         syncStepTypePanels(newCard);
         initEmployeeSelect2(newCard);
-        updateStepCount();
+        reindexSteps();
+        newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     // === Remove step ===
@@ -1170,25 +1206,37 @@
         updateStepCount();
     }
 
-    // === Reindex all steps ===
+    function getReorderOpts() {
+        return {
+            beforeReindex: function (container) { destroyEmployeeSelect2(container); },
+            afterReindex: function (container) { initEmployeeSelect2(container); },
+            onCountChange: function (n) {
+                const badge = document.getElementById('stepCountBadge');
+                if (badge) badge.textContent = n + ' étape' + (n !== 1 ? 's' : '');
+            }
+        };
+    }
+
+    // === Reindex all steps (names, StepOrder, numbers, GotoStepOrder) ===
     function reindexSteps() {
-        destroyEmployeeSelect2(document.getElementById('stepsContainer'));
-        document.querySelectorAll('#stepsContainer .step-card').forEach((card, i) => {
-            card.dataset.index = i;
-            card.querySelector('.step-num').textContent = i + 1;
-            card.querySelectorAll('[name]').forEach(el => {
-                el.name = el.name.replace(/Steps\[\d+\]/, 'Steps[' + i + ']');
-            });
-            const orderInput = card.querySelector('.step-order-input');
-            if (orderInput) orderInput.value = i;
-        });
-        initEmployeeSelect2(document.getElementById('stepsContainer'));
+        const container = document.getElementById('stepsContainer');
+        if (window.WfStepReorder) WfStepReorder.reindex(container, getReorderOpts());
+    }
+
+    function moveStep(btn, delta) {
+        const container = document.getElementById('stepsContainer');
+        if (window.WfStepReorder) WfStepReorder.moveByDelta(btn, delta, getReorderOpts());
+    }
+
+    function onStepNumberChange(input) {
+        if (window.WfStepReorder) WfStepReorder.onNumberChange(input, getReorderOpts());
     }
 
     // === Update step count badge ===
     function updateStepCount() {
         const count = document.querySelectorAll('#stepsContainer .step-card').length;
-        document.getElementById('stepCountBadge').textContent = count + ' étapes';
+        document.getElementById('stepCountBadge').textContent = count + ' étape' + (count !== 1 ? 's' : '');
+        if (window.WfStepReorder) WfStepReorder.updateMoveButtons(document.getElementById('stepsContainer'));
     }
 
     // === Toggle assignment fields + auto-show schedule for AutoSystem ===
@@ -1335,6 +1383,11 @@
         document.querySelectorAll('#stepsContainer .step-card').forEach((card, i) => {
             if (i > 0) card.classList.add('collapsed-step');
         });
+
+        const stepsContainer = document.getElementById('stepsContainer');
+        if (window.WfStepReorder && stepsContainer) {
+            WfStepReorder.bindContainer(stepsContainer, getReorderOpts());
+        }
 
         // Init existing assign fields
         document.querySelectorAll('.assign-select').forEach(sel => {

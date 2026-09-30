@@ -1,0 +1,2 @@
+Sqlcmd : erreur : Microsoft ODBC Driver 17 for SQL Server : Login failed for user 'DELL\delli'..
+Sqlcmd : erreur : Microsoft ODBC Driver 17 for SQL Server : Cannot open database "MetaCompta" requested by the login. The login failed..

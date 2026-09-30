@@ -1,6 +1,7 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,8 +9,10 @@ namespace MetaCompta.BackOffice.Controllers;
 
 /// <summary>
 /// Controller for Document management — Pièces justificatives, Contrats, Formulaires.
+/// Shared across métier spaces.
 /// </summary>
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Fiscal, WorkspaceModes.Erp, WorkspaceModes.Paie, WorkspaceModes.Juridique)]
 public class DocumentsController : BaseController
 {
     private readonly IDocumentFacade _documents;

@@ -232,13 +232,72 @@ public abstract class BaseController : Controller
 
     protected void SetApiError<T>(ApiResponse<T>? result, string? fallbackMessage = null)
     {
-        var message = result?.Message ?? fallbackMessage ?? "Une erreur inattendue s'est produite.";
-        TempData["Error"] = message;
+        var errors = result?.Errors?
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
 
-        if (result?.Errors?.Count > 0)
+        var message = result?.Message?.Trim();
+        if (string.IsNullOrWhiteSpace(message))
+            message = fallbackMessage ?? "Une erreur inattendue s'est produite.";
+
+        // Prefer actionable details over opaque HTTP 500 wrappers
+        if (errors.Count > 0 && LooksLikeOpaqueHttpError(message))
+            message = "Impossible d'enregistrer. Corrigez les points suivants :";
+
+        TempData["Error"] = message;
+        if (errors.Count > 0)
+            TempData["ErrorDetails"] = string.Join("|||", errors);
+
+        // Map into ModelState so forms show ValidationSummary + field-level hints
+        if (errors.Count == 0)
         {
-            TempData["ErrorDetails"] = string.Join("|||", result.Errors);
+            ModelState.AddModelError(string.Empty, message!);
+            return;
         }
+
+        foreach (var err in errors)
+        {
+            var (key, msg) = SplitFieldError(err);
+            ModelState.AddModelError(key, msg);
+        }
+    }
+
+    private static bool LooksLikeOpaqueHttpError(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return true;
+        return message.Contains("HTTP 500", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("HTTP 400", StringComparison.OrdinalIgnoreCase)
+            || message.StartsWith("Erreur HTTP", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("le serveur n'a retourné aucun détail", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Parses "FieldName: message" or "[FieldName] message" into ModelState key + text.
+    /// </summary>
+    private static (string Key, string Message) SplitFieldError(string error)
+    {
+        // [Field] message
+        if (error.StartsWith('[') && error.Contains(']'))
+        {
+            var end = error.IndexOf(']');
+            var key = error[1..end].Trim();
+            var msg = error[(end + 1)..].Trim().TrimStart('-', '—', ' ');
+            return (string.IsNullOrEmpty(key) ? string.Empty : key, string.IsNullOrEmpty(msg) ? error : msg);
+        }
+
+        // Field: message
+        var colon = error.IndexOf(':');
+        if (colon > 0 && colon < 60)
+        {
+            var key = error[..colon].Trim();
+            var msg = error[(colon + 1)..].Trim();
+            if (key.All(c => char.IsLetterOrDigit(c) || c is '_' or '.') && !string.IsNullOrEmpty(msg))
+                return (key, msg);
+        }
+
+        return (string.Empty, error);
     }
 
     protected void SetApiResult<T>(ApiResponse<T>? result, string? successFallback = null, string? errorFallback = null)

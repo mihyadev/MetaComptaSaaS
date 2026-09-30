@@ -9,72 +9,58 @@
     var greeting = hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
 }
 
-<div class="text-center mb-4">
-    <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2 mb-2">@cabinetName</span>
-    <h1 class="h2 fw-bold mb-1">@greeting, @userName</h1>
-    <p class="text-body-secondary mb-0">Où souhaitez-vous travailler&nbsp;?</p>
+<div class="space-picker-hero">
+    <div class="client-pill">
+        <i class="bi bi-building text-primary"></i>@cabinetName
+    </div>
+    <h1>@greeting, @userName</h1>
+    <p>Où souhaitez-vous travailler&nbsp;? Même shell CRM monday — chaque board a sa couleur.</p>
 </div>
 
-<div class="row g-4 justify-content-center">
-    <div class="col-lg-5">
-        <div class="card border-0 shadow-sm rounded-4 h-100 border-start border-4 border-warning" id="gwDossier">
-            <div class="card-body p-4">
-                <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis px-3 py-2 mb-3">
-                    <i class="bi bi-folder2-open me-1"></i>Dossier client
-                </span>
-                <h2 class="h4 fw-bold">Entrer dans un dossier</h2>
-                <p class="text-body-secondary">Recherchez un client, activez son contexte, puis ouvrez ses déclarations et missions.</p>
+<div class="space-picker-grid" style="max-width:920px;">
+    <div class="space-board-card board-juridique" id="gwDossier" style="cursor:default;">
+        <div class="board-icon"><i class="bi bi-folder2-open"></i></div>
+        <span class="board-chip">Dossier client</span>
+        <h2>Entrer dans un dossier</h2>
+        <p>Recherchez un client, puis choisissez l’espace métier (Fiscal, ERP, Paie, Juridique).</p>
 
-                @if (hasClient)
-                {
-                    <div class="alert alert-success py-2 rounded-pill d-inline-flex align-items-center gap-2 mb-3">
-                        <span class="badge rounded-circle text-bg-success">&nbsp;</span>
-                        Client actif&nbsp;: <strong>@selectedClientName</strong>
-                    </div>
-                }
-
-                <div class="input-group mb-2">
-                    <span class="input-group-text bg-body-tertiary"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control" id="wsClientSearch" placeholder="Nom, raison sociale ou ICE…" autocomplete="off" />
-                </div>
-                <div class="list-group shadow-sm rounded-3 d-none" id="wsClientResults" style="max-height:240px;overflow-y:auto;"></div>
-
-                @if (hasClient)
-                {
-                    <a class="btn btn-warning rounded-pill mt-3" href="@Url.Action("Index", "Declarations")">
-                        Ouvrir le dossier de @selectedClientName
-                        <i class="bi bi-arrow-right ms-1"></i>
-                    </a>
-                }
-                else
-                {
-                    <p class="small text-body-secondary mt-3 mb-0">
-                        <i class="bi bi-mouse me-1"></i>Cliquez un client pour ouvrir son dossier fiscal
-                    </p>
-                }
+        @if (hasClient)
+        {
+            <div class="alert alert-success py-2 rounded-pill d-inline-flex align-items-center gap-2 mb-0">
+                <span class="badge rounded-circle text-bg-success">&nbsp;</span>
+                Client actif&nbsp;: <strong>@selectedClientName</strong>
             </div>
+        }
+
+        <div class="input-group mb-1">
+            <span class="input-group-text bg-body-tertiary"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="wsClientSearch" placeholder="Nom, raison sociale ou ICE…" autocomplete="off" />
         </div>
+        <div class="list-group shadow-sm rounded-3 d-none" id="wsClientResults" style="max-height:240px;overflow-y:auto;"></div>
+
+        @if (hasClient)
+        {
+            <a class="board-cta" href="@Url.Action("ClientSpaces", "Home")">
+                Choisir un espace pour @selectedClientName <i class="bi bi-arrow-right"></i>
+            </a>
+        }
+        else
+        {
+            <span class="board-cta" style="opacity:.7;"><i class="bi bi-mouse"></i> Cliquez un client pour ouvrir les espaces</span>
+        }
     </div>
 
-    <div class="col-lg-5">
-        <div class="card border-0 shadow-sm rounded-4 h-100 border-start border-4 border-primary">
-            <div class="card-body p-4 d-flex flex-column">
-                <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2 mb-3">
-                    <i class="bi bi-building me-1"></i>Cabinet
-                </span>
-                <h2 class="h4 fw-bold">Gestion interne</h2>
-                <p class="text-body-secondary">Pilot, commercial, équipes, planification et pilotage du cabinet.</p>
-                <div class="bg-primary-subtle rounded-3 p-3 mb-3">
-                    <div class="fw-bold text-primary">@cabinetName</div>
-                    <div class="small text-body-secondary">Espace administration</div>
-                </div>
-                <a href="@Url.Action("EnterCabinet", "Home")" class="btn btn-primary rounded-pill mt-auto align-self-start">
-                    Accéder au cabinet
-                    <i class="bi bi-arrow-right ms-1"></i>
-                </a>
-            </div>
+    <a class="space-board-card board-cabinet" href="@Url.Action("EnterCabinet", "Home")">
+        <div class="board-icon"><i class="bi bi-building"></i></div>
+        <span class="board-chip">Cabinet</span>
+        <h2>Gestion interne</h2>
+        <p>Pilotage, commercial, équipes, planification et administration du cabinet.</p>
+        <div class="rounded-3 p-3" style="background:color-mix(in srgb, var(--board-accent) 10%, #fff);">
+            <div class="fw-bold" style="color:var(--board-accent);">@cabinetName</div>
+            <div class="small text-body-secondary">Espace administration</div>
         </div>
-    </div>
+        <span class="board-cta">Accéder au cabinet <i class="bi bi-arrow-right"></i></span>
+    </a>
 </div>
 
 @section Scripts {
@@ -83,6 +69,7 @@
     var searchInput = document.getElementById('wsClientSearch');
     var resultsBox = document.getElementById('wsClientResults');
     var debounceTimer = null;
+    if (!searchInput || !resultsBox) return;
 
     searchInput.addEventListener('focus', function() {
         if (searchInput.value.length > 0) {

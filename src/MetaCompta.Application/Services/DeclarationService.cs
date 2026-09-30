@@ -281,7 +281,9 @@ public class DeclarationService : IDeclarationService
         return window.FilingDeadline;
     }
 
-    /// <summary>Init period template table wins over calendar defaults.</summary>
+    /// <summary>
+    /// Init Modèle de périodes wins: Fin/échéance = DateFin = DateLimite (no Morocco day-10/20 override).
+    /// </summary>
     private static (DateTime Start, DateTime End, DateTime Limite, string Periode) ApplyPeriodTemplate(
         CreateDeclarationDto? dto, MoroccoDeclarationCalendar.Window window, string type)
     {
@@ -292,7 +294,20 @@ public class DeclarationService : IDeclarationService
                 : (ps.Month == 1 && pe.Month == 12 && ps.Day == 1 && pe.Day == 31 && ps.Year == pe.Year
                     ? ps.Year.ToString()
                     : ps.ToString("yyyy-MM"));
+            // Fin / échéance column in Builder = both period end and lifecycle échéance
             return (ps.Date, pe.Date, pe.Date, label);
+        }
+
+        // Frequency-only Init: resolve slice so échéance stays Fin période, not dépôt Maroc
+        if (!string.IsNullOrWhiteSpace(dto?.Frequency) || !string.IsNullOrWhiteSpace(dto?.Periode))
+        {
+            var slice = DeclarationPeriodTemplate.ResolveAsOf(
+                DateTime.UtcNow, dto?.Frequency ?? window.Frequency, previousClosed: true);
+            if (slice != null)
+            {
+                var label = !string.IsNullOrWhiteSpace(dto?.Periode) ? dto!.Periode! : slice.Code;
+                return (slice.Start.Date, slice.End.Date, slice.End.Date, label);
+            }
         }
 
         return (window.PeriodStart, window.PeriodEnd, ResolveInitDateLimite(dto, window, type), window.PeriodeLabel);

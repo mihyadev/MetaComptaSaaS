@@ -379,6 +379,9 @@ public sealed class PayrollFacade : IPayrollFacade
     public async Task<ApiResponse<bool>?> ValidateAsync(int periodId)
         => await _api.PostAsync<bool>($"api/payroll/{periodId}/validate", new { });
 
+    public async Task<byte[]?> DownloadLivrePaieAsync(int periodId)
+        => await _api.GetBytesAsync($"api/payroll/{periodId}/livre-paie");
+
     // Engine
     public async Task<BulletinCompletDto?> GetBulletinAsync(int paySlipId)
     {
@@ -709,6 +712,12 @@ public sealed class ComptabiliteFacade : IComptabiliteFacade
 
     public async Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id)
         => await _api.PostAsync<EcritureComptableDto>($"api/comptabilite/ecritures/{id}/validate", new { });
+
+    public async Task<ApiResponse<EcritureComptableDto>?> ContrepasserEcritureAsync(int id)
+        => await _api.PostAsync<EcritureComptableDto>($"api/comptabilite/ecritures/{id}/contrepasser", new { });
+
+    public async Task<ApiResponse<EcritureComptableDto>?> PostPayrollPeriodAsync(int periodId)
+        => await _api.PostAsync<EcritureComptableDto>($"api/comptabilite/payroll/{periodId}/post", new { });
 
     public async Task<List<JournalDto>> GetJournauxAsync(int? clientId = null)
     {

@@ -1,12 +1,14 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
 
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Paie)]
 public class EmployeesController : BaseController
 {
     private readonly IEmployeeFacade _employees;

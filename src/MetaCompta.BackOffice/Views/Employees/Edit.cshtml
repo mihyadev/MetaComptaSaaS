@@ -195,7 +195,14 @@
                                     var motifsEdit = new[] { "Démission", "Licenciement", "Fin de CDD", "Retraite", "Décès", "Autre" };
                                     foreach (var m in motifsEdit)
                                     {
-                                        <option value="@m" selected="@(Model?.MotifSortie == m)">@m</option>
+                                        if (Model?.MotifSortie == m)
+                                        {
+                                            <option value="@m" selected>@m</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@m">@m</option>
+                                        }
                                     }
                                 }
                             </select>

@@ -359,8 +359,8 @@ public class ClientsController : BaseController
             {
                 HttpContext.Session.SetString("SelectedClientId", client.Id.ToString());
                 HttpContext.Session.SetString("SelectedClientName", client.RaisonSociale);
-                // Enter dossier-client workspace mode (dynamic client menu)
-                HttpContext.Session.SetString("WorkspaceMode", "Client");
+                // Client selected — métier space chosen next (ClientSpaces)
+                HttpContext.Session.Remove("WorkspaceMode");
 
                 // Auto-pick exercice first, then scope ActiveServices to that exercice
                 object? exercicePayload = null;
@@ -402,7 +402,8 @@ public class ClientsController : BaseController
                     hasActiveContract = access.AllowsManage,
                     contractAccessMode = access.Mode,
                     contractAccessReason = access.Reason,
-                    exercice = exercicePayload
+                    exercice = exercicePayload,
+                    redirectToClientSpaces = true
                 });
             }
         }

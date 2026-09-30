@@ -215,9 +215,25 @@ public sealed class ApiClient : IApiClient
                     }
 
                     // Enrich message with errors list if present
-                    if (!apiResponse.Success && apiResponse.Errors?.Count > 0 && string.IsNullOrEmpty(apiResponse.Message))
+                    if (!apiResponse.Success)
                     {
-                        apiResponse.Message = string.Join(" | ", apiResponse.Errors);
+                        if (apiResponse.Errors?.Count > 0)
+                        {
+                            // Prefer concrete field errors over opaque HTTP wrappers
+                            var opaque = string.IsNullOrWhiteSpace(apiResponse.Message)
+                                || apiResponse.Message.Contains("HTTP 500", StringComparison.OrdinalIgnoreCase)
+                                || apiResponse.Message.StartsWith("Erreur HTTP", StringComparison.OrdinalIgnoreCase);
+                            if (opaque)
+                                apiResponse.Message = "Veuillez corriger les champs indiqués.";
+                            else if (!apiResponse.Message!.Contains(apiResponse.Errors[0], StringComparison.OrdinalIgnoreCase))
+                            {
+                                // keep summary; details stay in Errors for SetApiError
+                            }
+                        }
+                        else if (string.IsNullOrWhiteSpace(apiResponse.Message))
+                        {
+                            apiResponse.Message = $"Erreur HTTP {statusCode}";
+                        }
                     }
 
                     return apiResponse;

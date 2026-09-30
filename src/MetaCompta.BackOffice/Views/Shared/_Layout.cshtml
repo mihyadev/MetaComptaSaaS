@@ -12,16 +12,65 @@
     var clientControllers = new[] { "Declarations", "EtatsFiscaux", "Comptabilite", "Payroll", "Employees", "Juridique", "Documents" };
     var isClientSection = clientControllers.Contains(currentController);
 
-    // Gateway = entry page (no menu). Elsewhere menu is dynamic: Cabinet vs Dossier Client.
-    var isGateway = currentController == "Home" && string.Equals(currentAction, "Workspace", StringComparison.OrdinalIgnoreCase);
-    var workspaceMode = Context.Session.GetString("WorkspaceMode");
+    // Gateway = entry pages (no métier sidebar)
+    var isGateway = currentController == "Home"
+        && (string.Equals(currentAction, "Workspace", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(currentAction, "ClientSpaces", StringComparison.OrdinalIgnoreCase));
+
+    var rawMode = Context.Session.GetString("WorkspaceMode");
+    if (string.Equals(rawMode, "Client", StringComparison.OrdinalIgnoreCase))
+    {
+        Context.Session.SetString("WorkspaceMode", "Fiscal");
+        rawMode = "Fiscal";
+    }
+    var workspaceMode = rawMode;
     if (!isGateway && string.IsNullOrWhiteSpace(workspaceMode))
     {
-        workspaceMode = (isClientSection && hasClient) ? "Client" : "Cabinet";
+        workspaceMode = (isClientSection && hasClient) ? "Fiscal" : "Cabinet";
     }
+    workspaceMode ??= "Cabinet";
     var showSidebar = !isGateway;
-    var isClientMenu = showSidebar && workspaceMode == "Client" && hasClient;
-    var isCabinetMenu = showSidebar && !isClientMenu;
+    var isMetierMenu = showSidebar && hasClient
+        && (workspaceMode == "Fiscal" || workspaceMode == "Erp" || workspaceMode == "Paie" || workspaceMode == "Juridique"
+            || workspaceMode == "Client");
+    var isFiscalMenu = showSidebar && hasClient && (workspaceMode == "Fiscal" || workspaceMode == "Client");
+    var isErpMenu = showSidebar && hasClient && workspaceMode == "Erp";
+    var isPaieMenu = showSidebar && hasClient && workspaceMode == "Paie";
+    var isJuridiqueMenu = showSidebar && hasClient && workspaceMode == "Juridique";
+    var isClientMenu = isMetierMenu; // topbar client selector
+    var isCabinetMenu = showSidebar && !isMetierMenu;
+
+    var spaceKey = workspaceMode switch
+    {
+        "Fiscal" or "Client" => "fiscal",
+        "Erp" => "erp",
+        "Paie" => "paie",
+        "Juridique" => "juridique",
+        _ => "cabinet"
+    };
+    if (isGateway && string.Equals(currentAction, "ClientSpaces", StringComparison.OrdinalIgnoreCase))
+        spaceKey = "picker";
+    else if (isGateway)
+        spaceKey = "gateway";
+
+    var modeBadgeLabel = spaceKey switch
+    {
+        "fiscal" => "Fiscal",
+        "erp" => "ERP",
+        "paie" => "Paie",
+        "juridique" => "Juridique",
+        "picker" => "Espaces",
+        _ => "Cabinet"
+    };
+    var modeTitleLabel = spaceKey switch
+    {
+        "fiscal" => "Fiscal & déclarations",
+        "erp" => "ERP — Tenue comptable",
+        "paie" => "Paie",
+        "juridique" => "Juridique",
+        "picker" => "Choisir un espace",
+        _ => "Espace cabinet"
+    };
 
     // Contract services → dossier menu (same codes as ContratCreate / _ServicesPicker)
     var activeServicesJson = Context.Session.GetString("ActiveServices") ?? "[]";
@@ -42,7 +91,7 @@
     <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
-<body class="@(isGateway ? "gw-mode" : "")">
+<body class="@(isGateway ? "gw-mode" : "") space-@spaceKey" data-space="@spaceKey">
     @if (showSidebar)
     {
     <!-- SIDEBAR -->
@@ -56,17 +105,17 @@
         </div>
 
         <div class="sidebar-client-context">
-            @if (isClientMenu)
+            @if (isMetierMenu)
             {
                 <div class="client-context-card" id="sidebarClientCard">
                     <div class="d-flex align-items-center justify-content-between mb-1">
-                        <div class="client-context-label mb-0"><i class="bi bi-folder2-open"></i> Dossier client</div>
-                        <span class="mode-badge client">Client</span>
+                        <div class="client-context-label mb-0"><i class="bi bi-folder2-open"></i> @modeTitleLabel</div>
+                        <span class="mode-badge @spaceKey">@modeBadgeLabel</span>
                     </div>
                     <div class="client-context-name" title="@selectedClientName">
                         <i class="bi bi-building" style="font-size:0.8rem; margin-right:0.25rem;"></i>@selectedClientName
                     </div>
-                    <div class="client-context-hint"><i class="bi bi-info-circle"></i> Menu du dossier actif</div>
+                    <div class="client-context-hint"><i class="bi bi-info-circle"></i> Espace métier actif</div>
                 </div>
             }
             else
@@ -82,9 +131,16 @@
             }
         </div>
 
+        @if (isMetierMenu)
+        {
+        <a class="nav-switch-space" href="@Url.Action("ClientSpaces", "Home")">
+            <i class="bi bi-grid-3x3-gap"></i>
+            <span>Changer d'espace métier</span>
+        </a>
+        }
         <a class="nav-switch-space" href="@Url.Action("Workspace", "Home")">
             <i class="bi bi-arrow-left-right"></i>
-            <span>Changer d'espace</span>
+            <span>Accueil / Cabinet</span>
         </a>
 
         <!-- Scrollable Nav -->
@@ -204,10 +260,10 @@
             </ul>
             }
             }
-            else if (isClientMenu)
+            else if (isFiscalMenu)
             {
-            <!-- B. DOSSIER CLIENT ONLY -->
-            <div class="nav-section"><i class="bi bi-person-workspace me-1"></i> Dossier client
+            <!-- FISCAL & DÉCLARATIONS -->
+            <div class="nav-section"><i class="bi bi-receipt me-1"></i> Fiscal &amp; déclarations
                 @{
                     var accessMode = Context.Session.GetString("ContractAccessMode");
                     var isConsult = string.Equals(accessMode, "Consult", StringComparison.OrdinalIgnoreCase)
@@ -220,31 +276,20 @@
                 }
                 <span class="section-line"></span>
             </div>
-            <div class="client-section-warning"><i class="bi bi-link-45deg"></i> Actions liées à <strong>@selectedClientName</strong></div>
+            <div class="client-section-warning"><i class="bi bi-link-45deg"></i> Process &amp; statuts — <strong>@selectedClientName</strong></div>
 
             <ul class="nav flex-column">
                 @{
-                    // Contract services ∩ role claims — Socialiste must not see Comptabilité/Fiscalité just because the contrat includes them
                     var canFiscalTva = PermissionHelper.HasAnyDomain(Context.Session, "tva");
                     var canFiscalIr = PermissionHelper.HasAnyDomain(Context.Session, "ir");
                     var canFiscalIs = PermissionHelper.HasAnyDomain(Context.Session, "is");
                     var canFiscalAny = canFiscalTva || canFiscalIr || canFiscalIs;
-                    var canCompta = PermissionHelper.HasAnyDomain(Context.Session, "comptabilite");
                     var canCnss = PermissionHelper.HasAnyDomain(Context.Session, "cnss");
-                    var canPayroll = PermissionHelper.HasAnyDomain(Context.Session, "payroll")
-                        || PermissionHelper.HasAnyDomain(Context.Session, "employee");
-                    var canSocial = canCnss || canPayroll;
-                    var canJuridique = PermissionHelper.HasAnyDomain(Context.Session, "juridique");
                     var canDocuments = PermissionHelper.HasAnyDomain(Context.Session, "document");
                     var canTasks = PermissionHelper.HasAnyDomain(Context.Session, "task");
-
-                    var showComptaFam = canCompta && HasAny("COMPTABILITE", "TRESORERIE", "BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG");
-                    // Exercice lifecycle is foundational (Sage) — not tied to a contract service line
-                    var showExercices = canCompta;
                     var showFiscalFam = canFiscalAny && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM", "ACOMPTES", "REG_IS", "IS", "LIASSEFISCALE");
                     var showIsFam = canFiscalIs && HasAny("ACOMPTES", "REG_IS", "IS", "DRF", "CM", "LIASSEFISCALE");
-                    var showSocialFam = canSocial && HasAny("CNSS", "DTS", "PAIE");
-                    var showJuridiqueFam = canJuridique && HasAny("PV_AGO", "DEPOT_RC");
+                    var showSocialDecl = canCnss && HasAny("CNSS", "DTS");
                     var declType = ViewBag.Type?.ToString();
                     var isFiscalDeclPage = currentController == "Declarations"
                         && !string.Equals(declType, "CNSS", StringComparison.OrdinalIgnoreCase)
@@ -269,16 +314,6 @@
                             _ => canFiscalAny
                         };
                     }
-                }
-
-                @if (showExercices)
-                {
-                <li class="nav-item">
-                    <a class="nav-link @(currentController == "Comptabilite" && (currentAction == "Exercices" || currentAction == "Cloture") ? "active" : "")"
-                       href="@Url.Action("Exercices", "Comptabilite")">
-                        <i class="bi bi-calendar3"></i> Exercices
-                    </a>
-                </li>
                 }
 
                 @if (showFiscalFam || showIsFam)
@@ -339,60 +374,14 @@
                 </li>
                 }
 
-                @if (showComptaFam)
+                @if (showSocialDecl)
                 {
                 <li class="nav-item">
-                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuComptaEtats" role="button"
-                       aria-expanded="@(currentController == "Comptabilite" || currentController == "EtatsFiscaux" ? "true" : "false")">
-                        <i class="bi bi-calculator"></i><span>Comptabilité &amp; États</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuSocialDecl" role="button"
+                       aria-expanded="@(DeclActive("CNSS") || DeclActive("DTS") ? "true" : "false")">
+                        <i class="bi bi-shield-check"></i><span>Social (déclarations)</span><i class="bi bi-chevron-down chevron-icon"></i>
                     </a>
-                    <div class="collapse sidebar-submenu @(currentController == "Comptabilite" || currentController == "EtatsFiscaux" ? "show" : "")" id="menuComptaEtats">
-                        <ul class="nav flex-column">
-                            @if (HasSvc("COMPTABILITE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Comptabilite")"><i class="bi bi-kanban"></i> Tableau de bord</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Ecritures" ? "active" : "")" href="@Url.Action("Ecritures", "Comptabilite")"><i class="bi bi-pencil-square"></i> Tenue comptable</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "PlanComptable" ? "active" : "")" href="@Url.Action("PlanComptable", "Comptabilite")"><i class="bi bi-diagram-3"></i> Plan comptable</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Journaux" ? "active" : "")" href="@Url.Action("Journaux", "Comptabilite")"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "GrandLivre" ? "active" : "")" href="@Url.Action("GrandLivre", "Comptabilite")"><i class="bi bi-book"></i> Grand livre</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Balance" ? "active" : "")" href="@Url.Action("Balance", "Comptabilite")"><i class="bi bi-symmetry-horizontal"></i> Balance</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie &amp; rapprochements</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
-                            }
-                            else if (HasSvc("TRESORERIE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie &amp; rapprochements</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
-                            }
-                            @if (HasAny("BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG", "COMPTABILITE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentController == "EtatsFiscaux" && (currentAction == "Synthese" || currentAction == "Bilan" || currentAction == "CPC" || currentAction == "EtatsSynthese") ? "active" : "")" href="@Url.Action("Synthese", "EtatsFiscaux")"><i class="bi bi-file-earmark-ruled"></i> États de Synthèse</a></li>
-                            }
-                            @if (HasSvc("ETATSFISCAUX") || HasSvc("BILAN"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Amortissements" || (currentAction == "Synthese" && Context.Request.Query["pane"] == "amort") ? "active" : "")" href="@Url.Action("Synthese", "EtatsFiscaux", new { pane = "amort" })"><i class="bi bi-graph-down-arrow"></i> Amortissements</a></li>
-                            }
-                            @if (HasSvc("EG"))
-                            {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Synthese", "EtatsFiscaux", new { pane = "detail-cpc" })"><i class="bi bi-fuel-pump"></i> E.G – Gasoil</a></li>
-                            }
-                            @if (HasAny("BILAN", "ETATSFISCAUX", "LIASSEFISCALE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentAction == "Index" && currentController == "EtatsFiscaux" ? "active" : "")" href="@Url.Action("Index", "EtatsFiscaux")"><i class="bi bi-clock-history"></i> Historique états</a></li>
-                            }
-                        </ul>
-                    </div>
-                </li>
-                }
-
-                @if (showSocialFam)
-                {
-                <li class="nav-item">
-                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuPaie" role="button"
-                       aria-expanded="@(currentController == "Payroll" || currentController == "Employees" || DeclActive("CNSS") || DeclActive("DTS") ? "true" : "false")">
-                        <i class="bi bi-cash-stack"></i><span>Social &amp; Paie</span><i class="bi bi-chevron-down chevron-icon"></i>
-                    </a>
-                    <div class="collapse sidebar-submenu @(currentController == "Payroll" || currentController == "Employees" || DeclActive("CNSS") || DeclActive("DTS") ? "show" : "")" id="menuPaie">
+                    <div class="collapse sidebar-submenu @(DeclActive("CNSS") || DeclActive("DTS") ? "show" : "")" id="menuSocialDecl">
                         <ul class="nav flex-column">
                             @if (CanDeclMenu("CNSS"))
                             {
@@ -402,44 +391,7 @@
                             {
                                 <li class="nav-item"><a class="nav-link @(DeclActive("DTS") ? "active" : "")" href="@Url.Action("Dts", "Declarations")"><i class="bi bi-file-text"></i> D.T.S / État 9421</a></li>
                             }
-                            @if (canPayroll && HasSvc("PAIE"))
-                            {
-                                <li class="nav-item"><a class="nav-link @(currentController == "Payroll" ? "active" : "")" href="@Url.Action("Index", "Payroll")"><i class="bi bi-file-earmark-spreadsheet"></i> Bulletins de paie</a></li>
-                                <li class="nav-item"><a class="nav-link @(currentController == "Employees" ? "active" : "")" href="@Url.Action("Index", "Employees")"><i class="bi bi-person-badge"></i> Employés</a></li>
-                            }
                         </ul>
-                    </div>
-                </li>
-                }
-
-                @if (showJuridiqueFam)
-                {
-                <li class="nav-item">
-                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuJuridique" role="button"
-                       aria-expanded="@(currentController == "Juridique" ? "true" : "false")">
-                        <i class="bi bi-bank"></i><span>Secrétariat juridique</span><i class="bi bi-chevron-down chevron-icon"></i>
-                    </a>
-                    <div class="collapse sidebar-submenu @(currentController == "Juridique" ? "show" : "")" id="menuJuridique">
-                        <ul class="nav flex-column">
-                            @if (HasSvc("PV_AGO"))
-                            {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "PVAG" })"><i class="bi bi-file-earmark-check"></i> PV AGO &amp; Rapport</a></li>
-                            }
-                            @if (HasSvc("DEPOT_RC"))
-                            {
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "DepotLegal" })"><i class="bi bi-archive"></i> Dépôt des comptes</a></li>
-                                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "RC" })"><i class="bi bi-card-text"></i> Registre de commerce</a></li>
-                            }
-                        </ul>
-                    </div>
-                </li>
-                }
-
-                @if (!showExercices && !showFiscalFam && !showIsFam && !showComptaFam && !showSocialFam && !showJuridiqueFam)
-                {
-                <li class="nav-item px-3 py-2">
-                    <div class="small text-body-secondary">
-                        <i class="bi bi-info-circle me-1"></i>Aucun module accessible pour vos permissions sur ce dossier.
                     </div>
                 </li>
                 }
@@ -475,6 +427,81 @@
                 <li class="nav-item"><a class="nav-link @(currentController == "Clients" && currentAction == "Details" ? "active" : "")" href="@Url.Action("Details", "Clients", new { id = affectClientIdDos, tab = "workflow" })"><i class="bi bi-person-gear"></i> Affectation templates</a></li>
                 }
                 <li class="nav-item"><a class="nav-link @(currentController == "Workflow" && currentAction == "Instances" ? "active" : "")" href="@Url.Action("Instances", "Workflow")"><i class="bi bi-play-circle"></i> Instances client</a></li>
+                }
+            </ul>
+            }
+            else if (isErpMenu)
+            {
+            <!-- ERP TENUE COMPTABLE -->
+            <div class="nav-section"><i class="bi bi-calculator me-1"></i> ERP — Tenue comptable <span class="section-line"></span></div>
+            <div class="client-section-warning"><i class="bi bi-link-45deg"></i> Ledger — <strong>@selectedClientName</strong></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Comptabilite")"><i class="bi bi-kanban"></i> Tableau de bord</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Comptabilite" && (currentAction == "Exercices" || currentAction == "Cloture") ? "active" : "")" href="@Url.Action("Exercices", "Comptabilite")"><i class="bi bi-calendar3"></i> Exercices</a></li>
+                @if (HasSvc("COMPTABILITE"))
+                {
+                <li class="nav-item"><a class="nav-link @(currentAction == "Ecritures" ? "active" : "")" href="@Url.Action("Ecritures", "Comptabilite")"><i class="bi bi-pencil-square"></i> Écritures</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "PlanComptable" ? "active" : "")" href="@Url.Action("PlanComptable", "Comptabilite")"><i class="bi bi-diagram-3"></i> Plan comptable</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "Journaux" ? "active" : "")" href="@Url.Action("Journaux", "Comptabilite")"><i class="bi bi-journal-bookmark"></i> Journaux</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "GrandLivre" ? "active" : "")" href="@Url.Action("GrandLivre", "Comptabilite")"><i class="bi bi-book"></i> Grand livre</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "Balance" ? "active" : "")" href="@Url.Action("Balance", "Comptabilite")"><i class="bi bi-symmetry-horizontal"></i> Balance</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Rapprochements</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "BalanceAgee" ? "active" : "")" href="@Url.Action("BalanceAgee", "Comptabilite")"><i class="bi bi-hourglass-split"></i> Balance âgée</a></li>
+                }
+                else if (HasSvc("TRESORERIE"))
+                {
+                <li class="nav-item"><a class="nav-link @(currentAction == "Rapprochements" ? "active" : "")" href="@Url.Action("Rapprochements", "Comptabilite")"><i class="bi bi-arrow-left-right"></i> Trésorerie</a></li>
+                }
+                @if (HasAny("BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG", "COMPTABILITE"))
+                {
+                <li class="nav-item"><a class="nav-link @(currentController == "EtatsFiscaux" ? "active" : "")" href="@Url.Action("Synthese", "EtatsFiscaux")"><i class="bi bi-file-earmark-ruled"></i> États de synthèse</a></li>
+                }
+            </ul>
+            }
+            else if (isPaieMenu)
+            {
+            <!-- PAIE -->
+            <div class="nav-section"><i class="bi bi-cash-stack me-1"></i> Paie <span class="section-line"></span></div>
+            <div class="client-section-warning"><i class="bi bi-link-45deg"></i> Gestion paie — <strong>@selectedClientName</strong></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Payroll" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Payroll")"><i class="bi bi-kanban"></i> Tableau de bord</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Payroll" && currentAction != "Index" && currentAction != "Rubriques" && currentAction != "Constantes" ? "active" : "")" href="@Url.Action("Index", "Payroll")"><i class="bi bi-file-earmark-spreadsheet"></i> Périodes &amp; bulletins</a></li>
+                <li class="nav-item"><a class="nav-link @(currentController == "Employees" ? "active" : "")" href="@Url.Action("Index", "Employees")"><i class="bi bi-person-badge"></i> Employés</a></li>
+                @if (ViewBag.CanPayrollEdit as bool? ?? false)
+                {
+                <li class="nav-item"><a class="nav-link @(currentAction == "Rubriques" ? "active" : "")" href="@Url.Action("Rubriques", "Payroll")"><i class="bi bi-list-ul"></i> Rubriques</a></li>
+                <li class="nav-item"><a class="nav-link @(currentAction == "Constantes" ? "active" : "")" href="@Url.Action("Constantes", "Payroll")"><i class="bi bi-sliders"></i> Constantes</a></li>
+                }
+                @if (HasSvc("CNSS") && PermissionHelper.HasAnyDomain(Context.Session, "cnss"))
+                {
+                <li class="nav-item mt-2"><div class="nav-section px-0">Lien fiscal <span class="section-line"></span></div></li>
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("EnterSpace", "Home", new { mode = "Fiscal" })"><i class="bi bi-box-arrow-up-right"></i> Ouvrir Fiscal (CNSS)</a></li>
+                }
+            </ul>
+            }
+            else if (isJuridiqueMenu)
+            {
+            <!-- JURIDIQUE -->
+            <div class="nav-section"><i class="bi bi-bank me-1"></i> Juridique <span class="section-line"></span></div>
+            <div class="client-section-warning"><i class="bi bi-link-45deg"></i> Secrétariat — <strong>@selectedClientName</strong></div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link @(currentController == "Juridique" && currentAction == "Index" && string.IsNullOrEmpty(Context.Request.Query["type"]) ? "active" : "")" href="@Url.Action("Index", "Juridique")"><i class="bi bi-kanban"></i> Tous les dossiers</a></li>
+                @if (HasSvc("PV_AGO") || HasSvc("JURIDIQUE"))
+                {
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "PVAG" })"><i class="bi bi-file-earmark-check"></i> PV AGO &amp; Rapport</a></li>
+                }
+                @if (HasSvc("DEPOT_RC") || HasSvc("JURIDIQUE"))
+                {
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "DepotLegal" })"><i class="bi bi-archive"></i> Dépôt des comptes</a></li>
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Juridique", new { type = "RC" })"><i class="bi bi-card-text"></i> Registre de commerce</a></li>
+                }
+                @if (ViewBag.CanJuridiqueCreate as bool? ?? false)
+                {
+                <li class="nav-item"><a class="nav-link @(currentAction == "Create" ? "active" : "")" href="@Url.Action("Create", "Juridique")"><i class="bi bi-plus-circle"></i> Nouveau dossier</a></li>
+                }
+                @if (PermissionHelper.HasAnyDomain(Context.Session, "document"))
+                {
+                <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Documents", new { categorie = "Contrat" })"><i class="bi bi-folder2-open"></i> Documents</a></li>
                 }
             </ul>
             }
@@ -590,6 +617,20 @@
             </div>
         </header>
 
+        @if (showSidebar && (isMetierMenu || isCabinetMenu))
+        {
+        <div class="space-banner" role="status" aria-live="polite">
+            <div class="space-banner-dot" aria-hidden="true"></div>
+            <span class="space-banner-label">@modeTitleLabel</span>
+            @if (isMetierMenu && hasClient)
+            {
+                <span class="space-banner-sep">·</span>
+                <span class="space-banner-client">@selectedClientName</span>
+            }
+            <span class="space-banner-pill">@modeBadgeLabel</span>
+        </div>
+        }
+
         <div class="mc-content">
             @if (ViewBag.HasSelectedClient == true && ViewBag.HasOpenExercice != true)
             {
@@ -697,7 +738,7 @@
                     $.post('@Url.Action("SetClientContext", "Clients")', { clientId: id }, function(res) {
                         if (res.success) {
                             toastr.success('Client actif : ' + name);
-                            window.location.href = '@Url.Action("Index", "Declarations")';
+                            window.location.href = '@Url.Action("ClientSpaces", "Home")';
                         }
                     });
                 };
@@ -709,13 +750,7 @@
                 $.post('@Url.Action("SetClientContext", "Clients")', { clientId: id }, function(res) {
                     if (res.success) {
                         toastr.success('Client actif : ' + name);
-                        var path = (window.location.pathname || '').toLowerCase();
-                        var isWorkspace = path.indexOf('/home/workspace') !== -1 || path.endsWith('/workspace');
-                        if (isWorkspace) {
-                            window.location.href = '@Url.Action("Index", "Declarations")';
-                        } else {
-                            window.location.reload();
-                        }
+                        window.location.href = '@Url.Action("ClientSpaces", "Home")';
                     }
                 });
             };

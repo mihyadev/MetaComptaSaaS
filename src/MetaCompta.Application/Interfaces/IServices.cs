@@ -114,6 +114,7 @@ public interface IPayrollService
     Task<ApiResponse<bool>> UpdateVariablesBulkAsync(int employeeId, int annee, int mois, List<VariableEmployeCreateDto> variables, int cabinetId, string userId);
     Task<ApiResponse<PayrollPeriodDto>> CalculateAllAsync(int periodId, int cabinetId, string userId);
     Task<ApiResponse<bool>> ValidateAsync(int periodId, int cabinetId, string userId);
+    Task<ApiResponse<string>> GetLivrePaieCsvAsync(int periodId, int cabinetId);
 
     // Payroll Engine
     Task<ApiResponse<BulletinCompletDto>> GetBulletinAsync(int paySlipId, int cabinetId);
@@ -438,10 +439,22 @@ public interface IComptabiliteService
     Task<ApiResponse<EcritureComptableDto>> UpdateEcritureAsync(int id, EcritureCreateDto dto, int cabinetId, string userId);
     Task<ApiResponse<bool>> DeleteEcritureAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<EcritureComptableDto>> ValidateEcritureAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<EcritureComptableDto>> ContrepasserEcritureAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<bool>> SetLettrageAsync(int cabinetId, string userId, IReadOnlyList<int> ligneIds, string? lettrageCode);
+    Task<ApiResponse<EcritureComptableDto>> PostPayrollPeriodAsync(int payrollPeriodId, int cabinetId, string userId);
     Task<ApiResponse<List<GrandLivreDto>>> GetGrandLivreAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, string? numCompte = null, int? exerciceId = null);
     Task<ApiResponse<List<BalanceDto>>> GetBalanceAsync(int clientId, int cabinetId, DateTime? dateDebut, DateTime? dateFin, int? exerciceId = null);
     Task<ApiResponse<List<BalanceAgeeDto>>> GetBalanceAgeeAsync(int clientId, int cabinetId);
     Task<ApiResponse<List<RapprochementBancaireDto>>> GetRapprochementsAsync(int cabinetId, int? clientId);
     Task<ApiResponse<RapprochementBancaireDto>> CreateRapprochementAsync(RapprochementCreateDto dto, int cabinetId, string userId);
     Task<ApiResponse<RapprochementBancaireDto>> UpdateRapprochementAsync(int id, RapprochementUpdateDto dto, int cabinetId, string userId);
+}
+
+public interface IJuridiqueService
+{
+    Task<ApiResponse<PagedResult<DossierJuridiqueDto>>> GetAllAsync(int cabinetId, int? clientId, string? type, string? statut, int page, string? search);
+    Task<ApiResponse<DossierJuridiqueDto>> GetByIdAsync(int id, int cabinetId);
+    Task<ApiResponse<DossierJuridiqueDto>> CreateAsync(DossierJuridiqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<DossierJuridiqueDto>> UpdateAsync(int id, DossierJuridiqueCreateDto dto, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ChangeStatusAsync(int id, string statut, int cabinetId, string userId);
 }

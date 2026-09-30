@@ -231,7 +231,7 @@ public class WorkflowTemplate : TenantEntity
     public bool IsDefault { get; set; } = true;
     public bool IsActive { get; set; } = true;
 
-    /// <summary>System-seeded template (Plan Marocain) = non-modifiable by users.</summary>
+    /// <summary>Legacy flag — no longer locks Builder cabinet bases (kept for DB compat).</summary>
     public bool IsSystem { get; set; } = false;
 
     /// <summary>Version for template evolution tracking.</summary>

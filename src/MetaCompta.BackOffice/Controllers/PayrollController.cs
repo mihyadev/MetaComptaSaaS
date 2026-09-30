@@ -1,12 +1,14 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
 using MetaCompta.BackOffice.Services;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Controllers;
 
 [RequireSelectedClient]
+[RequireWorkspaceMode(WorkspaceModes.Paie)]
 public class PayrollController : BaseController
 {
     private readonly IPayrollFacade _payroll;
@@ -87,6 +89,24 @@ public class PayrollController : BaseController
         var result = await _payroll.ValidateAsync(id);
         SetApiResult(result, null, "Erreur lors de la validation.");
         return RedirectToAction("Period", new { id });
+    }
+
+    [RequirePermission(ClaimDefinitions.PayrollDetail)]
+    public async Task<IActionResult> LivrePaie(int id)
+    {
+        var bytes = await _payroll.DownloadLivrePaieAsync(id);
+        if (bytes == null || bytes.Length == 0)
+        {
+            TempData["Error"] = "Impossible de générer le livre de paie.";
+            return RedirectToAction("Period", new { id });
+        }
+        return File(bytes, "text/csv", $"livre-paie-{id}.csv");
+    }
+
+    [RequirePermission(ClaimDefinitions.PayrollDetail)]
+    public IActionResult OpenCnssFiscal()
+    {
+        return RedirectToAction("EnterSpace", "Home", new { mode = "Fiscal" });
     }
 
     // ===========================================================

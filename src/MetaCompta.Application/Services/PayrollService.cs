@@ -15,14 +15,21 @@ public class PayrollService : IPayrollService
     private readonly IReferenceDataService _refData;
     private readonly PayrollEngine _engine;
     private readonly IExerciceContextService _exerciceContext;
+    private readonly IComptabiliteService _compta;
 
-    public PayrollService(MetaComptaDbContext db, IMapper mapper, IReferenceDataService refData, IExerciceContextService exerciceContext)
+    public PayrollService(
+        MetaComptaDbContext db,
+        IMapper mapper,
+        IReferenceDataService refData,
+        IExerciceContextService exerciceContext,
+        IComptabiliteService compta)
     {
         _db = db;
         _mapper = mapper;
         _refData = refData;
         _engine = new PayrollEngine(db);
         _exerciceContext = exerciceContext;
+        _compta = compta;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -493,7 +500,40 @@ public class PayrollService : IPayrollService
         period.DateValidation = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return ApiResponse<bool>.Ok(true, "Paie validée avec succès.");
+        // Pont paie → journal SA (idempotent)
+        var post = await _compta.PostPayrollPeriodAsync(periodId, cabinetId, userId);
+        if (post.Success)
+            return ApiResponse<bool>.Ok(true, "Paie validée — écriture journal SA générée.");
+        return ApiResponse<bool>.Ok(true, $"Paie validée. Écriture comptable : {post.Message}");
+    }
+
+    public async Task<ApiResponse<string>> GetLivrePaieCsvAsync(int periodId, int cabinetId)
+    {
+        var period = await _db.PayrollPeriods
+            .Include(p => p.Client)
+            .Include(p => p.PaySlips).ThenInclude(s => s.Employee)
+            .FirstOrDefaultAsync(p => p.Id == periodId && p.CabinetId == cabinetId);
+        if (period == null) return ApiResponse<string>.Fail("Période non trouvée.");
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("CIN;Nom;Prenom;Brut;CotisationsSalariales;IR;NetAPayer;CotisationsPatronales");
+        foreach (var s in period.PaySlips.OrderBy(x => x.Employee?.Nom))
+        {
+            var emp = s.Employee;
+            sb.Append(emp?.CIN ?? emp?.Id.ToString() ?? "").Append(';')
+                .Append(emp?.Nom ?? "").Append(';')
+                .Append(emp?.Prenom ?? "").Append(';')
+                .Append(s.SalaireBrutGlobal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(';')
+                .Append(s.CotisationCNSS.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(';')
+                .Append(s.IRRetenu.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(';')
+                .Append(s.SalaireNetAPayer.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(';')
+                .Append(s.CotisationPatronaleCNSS.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))
+                .AppendLine();
+        }
+        period.LivrePaieUrl = $"livre-paie-{period.Annee}-{period.Mois:D2}.csv";
+        period.JournalComptableUrl = $"PAIE-{period.Id}";
+        await _db.SaveChangesAsync();
+        return ApiResponse<string>.Ok(sb.ToString(), "Livre de paie généré.");
     }
 
     // ═══════════════════════════════════════════════════════════

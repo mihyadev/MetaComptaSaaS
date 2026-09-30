@@ -144,11 +144,24 @@ public class GenerateDeclarationsResultDto
 
 public class ClientCreateDto
 {
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "La raison sociale est obligatoire.")]
+    [System.ComponentModel.DataAnnotations.StringLength(500, ErrorMessage = "La raison sociale ne peut pas dépasser 500 caractères.")]
     public string RaisonSociale { get; set; } = string.Empty;
+
+    [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\s*\d\s*){15}$|^$", ErrorMessage = "L'ICE doit contenir exactement 15 chiffres.")]
+    [System.ComponentModel.DataAnnotations.StringLength(20, ErrorMessage = "L'ICE est trop long.")]
     public string? ICE { get; set; }
+
+    [System.ComponentModel.DataAnnotations.StringLength(50)]
     public string? IF { get; set; }
+
+    [System.ComponentModel.DataAnnotations.StringLength(50)]
     public string? RC { get; set; }
+
+    [System.ComponentModel.DataAnnotations.StringLength(50)]
     public string? NumeroCNSS { get; set; }
+
+    [System.ComponentModel.DataAnnotations.StringLength(50)]
     public string? NumeroPatente { get; set; }
     public DateTime? DateDebutActivite { get; set; }
     public string? CodeActivite { get; set; }
@@ -159,13 +172,19 @@ public class ClientCreateDto
     public string? AdresseSiegeSocial { get; set; }
     public string? VilleSiegeSocial { get; set; }
     public string? TelephonePrincipal { get; set; }
+
+    [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "L'e-mail principal n'est pas valide.")]
     public string? EmailPrincipal { get; set; }
     public string? ContactNom { get; set; }
     public string? ContactFonction { get; set; }
     public string? ContactTelephone { get; set; }
+
+    [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "L'e-mail du contact n'est pas valide.")]
     public string? ContactEmail { get; set; }
     public string? ManagerPrincipalId { get; set; }
     public string TypeTVA { get; set; } = "Mensuelle";
+
+    [System.ComponentModel.DataAnnotations.Range(1, 12, ErrorMessage = "Le mois de clôture doit être entre 1 et 12.")]
     public int MoisClotureExercice { get; set; } = 12;
     public DateTime? DateDebutContrat { get; set; }
     public string? NotesInternes { get; set; }
@@ -725,6 +744,12 @@ public class CompteComptableUpdateDto
     public string? Libelle { get; set; }
     public string? Nature { get; set; }
     public bool? EstActif { get; set; }
+}
+
+public class LettrageRequestDto
+{
+    public List<int> LigneIds { get; set; } = new();
+    public string? LettrageCode { get; set; }
 }
 
 public class CompteImportResultDto

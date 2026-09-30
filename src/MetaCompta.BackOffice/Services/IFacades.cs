@@ -113,6 +113,7 @@ public interface IPayrollFacade
     Task<ApiResponse<PayrollPeriodDto>?> InitializeAsync(int clientId, int annee, int mois);
     Task<ApiResponse<PayrollPeriodDto>?> CalculateAllAsync(int periodId);
     Task<ApiResponse<bool>?> ValidateAsync(int periodId);
+    Task<byte[]?> DownloadLivrePaieAsync(int periodId);
 
     // Engine
     Task<BulletinCompletDto?> GetBulletinAsync(int paySlipId);
@@ -207,6 +208,8 @@ public interface IComptabiliteFacade
     Task<ApiResponse<EcritureComptableDto>?> UpdateEcritureAsync(int id, EcritureCreateDto dto);
     Task<ApiResponse<bool>?> DeleteEcritureAsync(int id);
     Task<ApiResponse<EcritureComptableDto>?> ValidateEcritureAsync(int id);
+    Task<ApiResponse<EcritureComptableDto>?> ContrepasserEcritureAsync(int id);
+    Task<ApiResponse<EcritureComptableDto>?> PostPayrollPeriodAsync(int periodId);
     Task<List<JournalDto>> GetJournauxAsync(int? clientId = null);
     Task<ApiResponse<JournalDto>?> UpdateJournalAsync(int id, JournalUpdateDto dto);
     Task<List<GrandLivreDto>> GetGrandLivreAsync(int clientId, DateTime? dateDebut = null, DateTime? dateFin = null, int? exerciceId = null);

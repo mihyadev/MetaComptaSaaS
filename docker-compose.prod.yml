@@ -1,0 +1,153 @@
+﻿# ============================================
+# MetaCompta SAS - Production Docker Compose
+# Stack: SQL Server + API + BackOffice + Extranet + Admin + Caddy (HTTPS)
+# Domains: metacompta.ma → BackOffice; api/extranet/admin subdomains
+# Secrets: set in .env (see .env.example)
+# ============================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: metacompta-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - backoffice
+      - extranet
+      - admin
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: metacompta-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Express
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - ./backups:/backups:ro
+    networks:
+      - metacompta-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+    # 1433 intentionally not published — SQL only reachable inside Docker network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: metacompta-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${MSSQL_DB};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=true;MultipleActiveResultSets=true"
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+    # Not published publicly — reached via https://api.metacompta.ma
+    expose:
+      - "8080"
+    volumes:
+      - metacompta-uploads:/app/uploads
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  backoffice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backoffice
+    container_name: metacompta-backoffice
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ApiSettings__BaseUrl: http://api:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    expose:
+      - "8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+  extranet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: extranet
+    container_name: metacompta-extranet
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ApiSettings__BaseUrl: http://api:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    expose:
+      - "8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: admin
+    container_name: metacompta-admin
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ApiSettings__BaseUrl: http://api:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    expose:
+      - "8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - metacompta-network
+    restart: unless-stopped
+
+networks:
+  metacompta-network:
+    driver: bridge
+
+volumes:
+  mssql-data:
+  metacompta-uploads:
+  caddy-data:
+  caddy-config:

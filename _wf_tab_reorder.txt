@@ -1,0 +1,387 @@
+        <!-- Styles Personnaliser (Builder) -->
+        <style>
+            #wfCustomizePanel .builder-card { border: 0; border-radius: 16px; box-shadow: var(--monday-shadow); }
+            #wfCustomizePanel .step-card { background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 16px; margin-bottom: 1rem; position: relative; overflow: hidden; }
+            #wfCustomizePanel .step-card.collapsed-step .step-body { display: none; }
+            #wfCustomizePanel .step-card.collapsed-step .step-header { border-bottom: 0; }
+            #wfCustomizePanel .step-card.collapsed-step .chevron-icon { transform: rotate(-90deg); }
+            #wfCustomizePanel .step-num { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.82rem; color: #fff; background: var(--monday-blue); flex-shrink: 0; }
+            #wfCustomizePanel .step-header { display: flex; align-items: center; gap: 0.7rem; cursor: pointer; padding: 0.9rem 1.1rem; background: var(--monday-bg); border-bottom: 1px solid var(--monday-border); }
+            #wfCustomizePanel .step-header h6 { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--monday-text); }
+            #wfCustomizePanel .step-type-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: color-mix(in srgb, var(--monday-blue) 12%, var(--monday-surface)); color: var(--monday-blue); border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .assign-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-green) 12%, var(--monday-surface)); color: var(--monday-green); font-weight: 600; border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .sla-badge { font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; background: color-mix(in srgb, var(--monday-orange) 12%, var(--monday-surface)); color: var(--monday-orange); font-weight: 600; border: 1px solid var(--monday-border); }
+            #wfCustomizePanel .chevron-icon { transition: transform .25s ease; font-size: 0.9rem; color: var(--monday-muted); }
+            #wfCustomizePanel .step-body { padding: 1.1rem; background: var(--monday-surface); }
+            #wfCustomizePanel .field-section { background: var(--monday-bg); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.65rem; }
+            #wfCustomizePanel .field-section-title { font-size: 0.72rem; font-weight: 800; color: var(--monday-blue); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.55rem; display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--monday-border); }
+            #wfCustomizePanel .form-label-sm { font-size: 0.74rem; font-weight: 600; color: var(--monday-muted); margin-bottom: 0.2rem; display: block; }
+            #wfCustomizePanel .tpl-mini { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.8rem; border: 1px solid var(--monday-border); border-radius: 12px; margin-bottom: 0.45rem; cursor: pointer; font-size: 0.8rem; text-decoration: none; background: var(--monday-surface); color: inherit; width: 100%; text-align: left; }
+            #wfCustomizePanel .tpl-mini.active { background: color-mix(in srgb, var(--monday-blue) 8%, var(--monday-surface)); border-color: var(--monday-blue); }
+            #wfCustomizePanel .tpl-mini .tpl-type { font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+            #wfCustomizePanel .chk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.45rem; }
+            #wfCustomizePanel .chk-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.65rem; background: var(--monday-surface); border: 1px solid var(--monday-border); border-radius: 10px; font-size: 0.74rem; font-weight: 600; color: var(--monday-text); cursor: pointer; }
+            #wfCustomizePanel .chk-item input:checked ~ span { color: var(--monday-blue); font-weight: 700; }
+            #wfCustomizePanel .chk-item .form-check-input { width: 1rem; height: 1rem; margin: 0; }
+            #wfCustomizePanel .section-title { font-size: 0.8rem; font-weight: 800; color: var(--monday-text); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.6rem; }
+            #wfCustomizePanel .section-title i { font-size: 0.9rem; color: var(--monday-blue); }
+            #wfCustomizePanel .btn-add-step { border: 2px dashed var(--monday-border); border-radius: 14px; padding: 1rem; text-align: center; color: var(--monday-blue); font-weight: 700; font-size: 0.85rem; background: transparent; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+            #wfCustomizePanel .btn-delete-step { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--monday-border); background: var(--monday-surface); color: var(--monday-red); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; cursor: pointer; }
+            #wfCustomizePanel .client-copy-banner { background: color-mix(in srgb, var(--monday-green) 10%, var(--monday-surface)); border: 1px solid var(--monday-border); border-radius: 12px; padding: 0.65rem 0.9rem; font-size: 0.78rem; font-weight: 600; color: var(--monday-text); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        </style>
+
+        <!-- 1) Affectation / personnaliser (FORM FIRST) -->
+        @if (canWfConfigure)
+        {
+            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-0" id="wfAffectFormTitle"><i class="bi bi-plus-circle text-success me-2"></i>Affecter / personnaliser un workflow</h6>
+                            <p class="text-muted mb-0" style="font-size:0.78rem;">Associez un modèle cabinet — une copie est créée pour ce client.</p>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary rounded-pill px-3 btn-wf-customize"
+                                data-type="All"
+                                data-type-label="Tous types"
+                                data-template=""
+                                data-sla="1.0"
+                                data-valclient="true"
+                                data-docs="true"
+                                data-auto="true"
+                                data-active="true"
+                                data-assignee="">
+                            <i class="bi bi-sliders me-1"></i>Ouvrir le Personnaliser
+                        </button>
+                    </div>
+                    <form asp-action="SaveWorkflowAffectation" method="post" id="clientWfAffectForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ClientId" value="@Model.Id" />
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Type de déclaration</label>
+                                <select name="DeclarationType" id="wfAffectType" class="form-select">
+                                    <option value="All">Tous types</option>
+                                    @foreach (var e in DeclarationServiceCatalog.All)
+                                    {
+                                        <option value="@e.DeclarationType">@e.DisplayName (@e.DeclarationType)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Modèle de workflow (cabinet)</label>
+                                <select name="WorkflowTemplateId" id="wfAffectTemplate" class="form-select">
+                                    <option value="" data-type="">— Choisir un modèle —</option>
+                                    @foreach (var t in cabinetTemplates)
+                                    {
+                                        <option value="@t.Id" data-type="@(t.DeclarationType ?? "")">@t.Name (@(t.DeclarationType ?? "?"))</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Responsable principal</label>
+                                <select name="PrimaryAssigneeUserId" id="wfAffectAssignee" class="form-select">
+                                    <option value="">— Non défini —</option>
+                                    @foreach (var emp in cabinetEmployees)
+                                    {
+                                        <option value="@emp.Id">@emp.FullName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Multiplicateur SLA</label>
+                                <input name="SLAMultiplier" id="wfAffectSla" type="number" step="0.1" min="0.1" max="5" class="form-control" value="1.0" />
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="ClientValidationEnabled" type="checkbox" class="form-check-input" value="true" checked id="wfValClient" />
+                                    <label class="form-check-label" for="wfValClient">Valid. client</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="DocumentRequestEnabled" type="checkbox" class="form-check-input" value="true" checked id="wfDocs" />
+                                    <label class="form-check-label" for="wfDocs">Docs</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" checked id="wfAuto" />
+                                    <label class="form-check-label" for="wfAuto">Auto-start</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check form-switch">
+                                    <input name="IsActive" type="checkbox" class="form-check-input" value="true" checked id="wfActive" />
+                                    <label class="form-check-label" for="wfActive">Actif</label>
+                                </div>
+                            </div>
+                            <div class="col-md-12 d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfAffectReset" style="display:none;">
+                                    Nouvelle affectation
+                                </button>
+                                <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                    <i class="bi bi-check-lg me-1"></i>Affecter au client
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <!-- Personnaliser panel (hidden until click) -->
+        <div id="wfCustomizePanel" style="display:none;" class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h4 class="fw-bold mb-0"><i class="bi bi-kanban-fill text-primary me-2"></i>Personnaliser le workflow</h4>
+                    <p class="text-muted mb-0" style="font-size:0.82rem;" id="wfCustomizeSubtitle">Une copie est créée pour ce client — modifiez les étapes librement.</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="#" id="wfCustOpenBuilder" class="btn btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener">
+                        <i class="bi bi-tools me-1"></i>Ouvrir dans le Builder
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfCustomizeClose">
+                        <i class="bi bi-x-lg me-1"></i>Fermer
+                    </button>
+                </div>
+            </div>
+
+            <form asp-action="SaveClientWorkflowCustomization" method="post" id="wfCustomizeForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ClientId" value="@Model.Id" />
+                <input type="hidden" name="DeclarationType" id="wfCustType" />
+                <input type="hidden" name="SourceTemplateId" id="wfCustSourceTemplateId" value="" />
+                <input type="hidden" name="WorkflowTemplateId" id="wfCustTemplateId" value="" />
+
+                <div class="row g-3">
+                    <div class="col-lg-3">
+                        <div class="card builder-card">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1" style="font-size:0.82rem;"><i class="bi bi-collection text-primary me-1"></i>Modèles cabinet</h6>
+                                <p class="text-muted mb-3" style="font-size:0.72rem;">Choisir un modèle crée / ouvre la copie de ce client.</p>
+                                <div id="wfCustTplList">
+                                    @{
+                                        var typeColorsCust = new Dictionary<string, (string bg, string fg)> {
+                                            ["TVA"] = ("#dbeafe", "#2563eb"),
+                                            ["IS"] = ("#fce7f3", "#be185d"),
+                                            ["IR"] = ("#ede9fe", "#7c3aed"),
+                                            ["CNSS"] = ("#d1fae5", "#059669"),
+                                            ["Paie"] = ("#fef3c7", "#d97706"),
+                                            ["Juridique"] = ("#fee2e2", "#dc2626"),
+                                            ["Comptabilite"] = ("#e0f2fe", "#0284c7"),
+                                            ["IR_SALAIRES"] = ("#f5f3ff", "#6d28d9"),
+                                            ["All"] = ("#f1f5f9", "#475569")
+                                        };
+                                    }
+                                    @foreach (var t in cabinetTemplates)
+                                    {
+                                        var tc = typeColorsCust.ContainsKey(t.DeclarationType ?? "") ? typeColorsCust[t.DeclarationType!] : typeColorsCust["All"];
+                                        <button type="button" class="tpl-mini wf-cust-tpl"
+                                                data-id="@t.Id"
+                                                data-type="@(t.DeclarationType ?? "")"
+                                                data-name="@t.Name"
+                                                data-steps="@t.StepCount">
+                                            <span class="tpl-type" style="background:@tc.bg; color:@tc.fg;">@(t.DeclarationType ?? "All")</span>
+                                            <span class="fw-semibold text-dark" style="font-size:0.78rem;">@t.Name</span>
+                                            <span class="ms-auto text-muted" style="font-size:0.65rem;">@t.StepCount ét.</span>
+                                        </button>
+                                    }
+                                </div>
+                                @if (!cabinetTemplates.Any())
+                                {
+                                    <div class="text-center text-muted py-3" style="font-size:0.8rem;"><i class="bi bi-inbox d-block mb-1" style="font-size:1.3rem;"></i>Aucun modèle</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-9">
+                        <div id="wfCustCopyBanner" class="client-copy-banner" style="display:none;">
+                            <i class="bi bi-person-check-fill text-success"></i>
+                            <span id="wfCustCopyBannerText">Copie workflow de ce client</span>
+                        </div>
+
+                        <div class="card builder-card mb-3">
+                            <div class="card-body">
+                                <div class="section-title"><i class="bi bi-gear-fill"></i>Configuration générale (ce client)</div>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Type de déclaration</label>
+                                        <input type="text" class="form-control form-control-sm" id="wfCustTypeLabel" readonly />
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label-sm">Nom du workflow (copie client)</label>
+                                        <input type="text" name="TemplateName" id="wfCustTemplateName" class="form-control form-control-sm" placeholder="Nom de la copie client" />
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label-sm">Description</label>
+                                        <input type="text" name="TemplateDescription" id="wfCustTemplateDesc" class="form-control form-control-sm" placeholder="Description…" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Multiplicateur SLA</label>
+                                        <input name="SLAMultiplier" id="wfCustSla" type="number" step="0.1" min="0.1" max="5" class="form-control form-control-sm" value="1.0" required />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-sm">Responsable principal</label>
+                                        <select name="PrimaryAssigneeUserId" id="wfCustAssignee" class="form-select form-select-sm">
+                                            <option value="">— Non défini —</option>
+                                            @foreach (var emp in cabinetEmployees)
+                                            {
+                                                <option value="@emp.Id">@emp.FullName</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <div class="chk-grid w-100" style="grid-template-columns:1fr 1fr;">
+                                            <label class="chk-item">
+                                                <input type="hidden" name="IsActive" value="false" />
+                                                <input name="IsActive" type="checkbox" class="form-check-input" value="true" id="wfCustActive" />
+                                                <span>Actif</span>
+                                            </label>
+                                            <label class="chk-item">
+                                                <input type="hidden" name="AutoStartWorkflow" value="false" />
+                                                <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" id="wfCustAuto" />
+                                                <span>Auto-start</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label-sm">Options</label>
+                                        <div class="chk-grid">
+                                            <label class="chk-item">
+                                                <input type="hidden" name="ClientValidationEnabled" value="false" />
+                                                <input name="ClientValidationEnabled" type="checkbox" class="form-check-input" value="true" id="wfCustVal" />
+                                                <span>Valid. client</span>
+                                            </label>
+                                            <label class="chk-item">
+                                                <input type="hidden" name="DocumentRequestEnabled" value="false" />
+                                                <input name="DocumentRequestEnabled" type="checkbox" class="form-check-input" value="true" id="wfCustDocs" />
+                                                <span>Demande docs</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card builder-card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div class="section-title mb-0"><i class="bi bi-list-ol"></i>Étapes du workflow (modifiable)</div>
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2" id="wfCustStepCount" style="font-size:0.78rem;">0 étapes</span>
+                                </div>
+                                <div id="wfCustomizeSteps"></div>
+                                <button type="button" class="btn-add-step mt-2" id="wfCustAddStep">
+                                    <i class="bi bi-plus-lg"></i> Ajouter une étape
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill px-3" id="wfCustomizeClose2">Annuler</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4">
+                                <i class="bi bi-check-lg me-1"></i>Enregistrer la copie client
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- 2) Table: all workflows attached to this client -->
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-person-gear text-primary me-2"></i>Workflows attachés à ce client</h6>
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">@wfConfigs.Count</span>
+                </div>
+
+                @if (wfConfigs.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 mc-table" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Type</th>
+                                    <th>Workflow (copie client)</th>
+                                    <th>Responsable</th>
+                                    <th class="text-center">Valid. client</th>
+                                    <th class="text-center">Docs</th>
+                                    <th>SLA</th>
+                                    <th class="text-center">Auto-start</th>
+                                    <th class="text-center">Actif</th>
+                                    <th class="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cfg in wfConfigs)
+                                {
+                                    var typeLabel = DeclarationServiceCatalog.Get(cfg.DeclarationType)?.DisplayName ?? cfg.DeclarationType;
+                                    <tr>
+                                        <td class="ps-3"><span class="badge bg-primary-subtle text-primary rounded-pill">@typeLabel</span></td>
+                                        <td class="fw-semibold">@(cfg.WorkflowTemplateName ?? "Auto")</td>
+                                        <td class="small">@(cfg.PrimaryAssigneeName ?? "—")</td>
+                                        <td class="text-center">@(cfg.ClientValidationEnabled ? "Oui" : "Non")</td>
+                                        <td class="text-center">@(cfg.DocumentRequestEnabled ? "Oui" : "Non")</td>
+                                        <td><span class="badge bg-info-subtle text-info rounded-pill">x@(cfg.SLAMultiplier)</span></td>
+                                        <td class="text-center">@(cfg.AutoStartWorkflow ? "Oui" : "Non")</td>
+                                        <td class="text-center">
+                                            @if (cfg.IsActive)
+                                            {
+                                                <span class="badge bg-success-subtle text-success rounded-pill">Actif</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactif</span>
+                                            }
+                                        </td>
+                                        <td class="text-end pe-3 text-nowrap">
+                                            @if (canWfConfigure)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2 btn-wf-customize"
+                                                    style="font-size:0.7rem;"
+                                                    data-type="@cfg.DeclarationType"
+                                                    data-type-label="@typeLabel"
+                                                    data-template="@(cfg.WorkflowTemplateId?.ToString() ?? "")"
+                                                    data-template-name="@(cfg.WorkflowTemplateName ?? "")"
+                                                    data-sla="@cfg.SLAMultiplier.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                    data-valclient="@(cfg.ClientValidationEnabled ? "true" : "false")"
+                                                    data-docs="@(cfg.DocumentRequestEnabled ? "true" : "false")"
+                                                    data-auto="@(cfg.AutoStartWorkflow ? "true" : "false")"
+                                                    data-active="@(cfg.IsActive ? "true" : "false")"
+                                                    data-assignee="@(cfg.PrimaryAssigneeUserId ?? "")">
+                                                    <i class="bi bi-sliders me-1"></i>Personnaliser
+                                                </button>
+                                            }
+                                            @if (cfg.WorkflowTemplateId.HasValue)
+                                            {
+                                                <form asp-controller="Workflow" asp-action="StartWorkflow" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="WorkflowTemplateId" value="@cfg.WorkflowTemplateId.Value" />
+                                                    <input type="hidden" name="ClientId" value="@Model.Id" />
+                                                    <input type="hidden" name="DeclarationType" value="@cfg.DeclarationType" />
+                                                    <button type="submit" class="btn btn-sm btn-success rounded-pill px-2"
+                                                            style="font-size:0.7rem;"
+                                                            onclick="return confirm('Démarrer le workflow \'@(cfg.WorkflowTemplateName ?? "sélectionné")\' pour ce client ?')">
+                                                        <i class="bi bi-play-fill me-1"></i>Démarrer
+                                                    </button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-3 mb-0" style="font-size:0.85rem;">
+                        <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
+                        Aucun workflow attaché. Utilisez le formulaire ci-dessus pour en affecter un.
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Tous les workflows -->

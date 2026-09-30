@@ -1,4 +1,5 @@
 using AutoMapper;
+using MetaCompta.Application.Common;
 using MetaCompta.Application.DTOs;
 using MetaCompta.Application.Interfaces;
 using MetaCompta.Domain.Common;
@@ -6,6 +7,7 @@ using MetaCompta.Domain.Entities;
 using MetaCompta.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MetaCompta.Application.Services;
 
@@ -78,32 +80,38 @@ public class ClientService : IClientService
 
     public async Task<ApiResponse<ClientDto>> CreateAsync(ClientCreateDto dto, int cabinetId, string userId)
     {
-        // Validate uniqueness
-        if (!string.IsNullOrWhiteSpace(dto.ICE) && await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.ICE == dto.ICE))
-            return ApiResponse<ClientDto>.Fail("Un client avec cet ICE existe déjà.");
-        if (!string.IsNullOrWhiteSpace(dto.IF) && await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.IF == dto.IF))
-            return ApiResponse<ClientDto>.Fail("Un client avec cet IF existe déjà.");
+        NormalizeClientDto(dto);
+        var validation = await ValidateClientDtoAsync(dto, cabinetId, excludeId: null);
+        if (validation != null)
+            return validation;
 
-        var client = _mapper.Map<Client>(dto);
-        client.CabinetId = cabinetId;
-        client.CreatedBy = userId;
-        client.Statut = "Active";
+        try
+        {
+            var client = _mapper.Map<Client>(dto);
+            client.CabinetId = cabinetId;
+            client.CreatedBy = userId;
+            client.Statut = "Active";
 
-        // ⚠️ Services are NOT manually created here.
-        // They are activated exclusively through the Contract lifecycle (ContratCommercial validation).
-        // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
+            // ⚠️ Services are NOT manually created here.
+            // They are activated exclusively through the Contract lifecycle (ContratCommercial validation).
+            // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
 
-        _db.Clients.Add(client);
-        await _db.SaveChangesAsync();
+            _db.Clients.Add(client);
+            await _db.SaveChangesAsync();
 
-        // Reload with navigations for correct DTO mapping
-        var created = await _db.Clients
-            .Include(c => c.ServiceContrats)
-            .Include(c => c.Employees)
-            .Include(c => c.Declarations)
-            .FirstAsync(c => c.Id == client.Id);
+            var created = await _db.Clients
+                .Include(c => c.ServiceContrats)
+                .Include(c => c.Employees)
+                .Include(c => c.Declarations)
+                .FirstAsync(c => c.Id == client.Id);
 
-        return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(created), "Client créé avec succès.");
+            return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(created), "Client créé avec succès.");
+        }
+        catch (DbUpdateException ex)
+        {
+            var mapped = DbErrorMapper.Map(ex);
+            return ApiResponse<ClientDto>.Fail(mapped.Message, mapped.Errors);
+        }
     }
 
     public async Task<ApiResponse<ClientDto>> UpdateAsync(int id, ClientCreateDto dto, int cabinetId, string userId)
@@ -111,33 +119,144 @@ public class ClientService : IClientService
         var client = await _db.Clients
             .FirstOrDefaultAsync(c => c.Id == id && c.CabinetId == cabinetId);
         if (client == null)
-            return ApiResponse<ClientDto>.Fail("Client non trouvé.");
+            return ApiResponse<ClientDto>.Fail("Client non trouvé.", new List<string> { "Client introuvable ou déjà supprimé." });
 
-        _mapper.Map(dto, client);
-        client.UpdatedBy = userId;
-        client.UpdatedAt = DateTime.UtcNow;
+        NormalizeClientDto(dto);
+        var validation = await ValidateClientDtoAsync(dto, cabinetId, excludeId: id);
+        if (validation != null)
+            return validation;
 
-        // ⚠️ Services are NOT manually updated here.
-        // They are managed exclusively through the Contract lifecycle (ContratCommercial validation).
-        // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
-
-        await _db.SaveChangesAsync();
-
-        // Audit log
-        _db.AuditLogs.Add(new Domain.Common.AuditLog
+        try
         {
-            UserId = userId,
-            UserName = userId,
-            Action = "Update",
-            EntityType = "Client",
-            EntityId = id.ToString(),
-            CabinetId = cabinetId,
-            NewValues = JsonSerializer.Serialize(dto)
-        });
-        await _db.SaveChangesAsync();
+            _mapper.Map(dto, client);
+            client.UpdatedBy = userId;
+            client.UpdatedAt = DateTime.UtcNow;
 
-        return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(client), "Client modifié avec succès.");
+            // ⚠️ Services are NOT manually updated here.
+            // They are managed exclusively through the Contract lifecycle (ContratCommercial validation).
+            // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
+
+            await _db.SaveChangesAsync();
+
+            _db.AuditLogs.Add(new Domain.Common.AuditLog
+            {
+                UserId = userId,
+                UserName = userId,
+                Action = "Update",
+                EntityType = "Client",
+                EntityId = id.ToString(),
+                CabinetId = cabinetId,
+                NewValues = JsonSerializer.Serialize(dto)
+            });
+            await _db.SaveChangesAsync();
+
+            return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(client), "Client modifié avec succès.");
+        }
+        catch (DbUpdateException ex)
+        {
+            var mapped = DbErrorMapper.Map(ex);
+            return ApiResponse<ClientDto>.Fail(mapped.Message, mapped.Errors);
+        }
     }
+
+    /// <summary>Empty optional unique/FK fields → null (avoids unique-index collisions on "").</summary>
+    private static void NormalizeClientDto(ClientCreateDto dto)
+    {
+        dto.RaisonSociale = (dto.RaisonSociale ?? string.Empty).Trim();
+        dto.ICE = NullIfWhiteSpace(dto.ICE);
+        dto.IF = NullIfWhiteSpace(dto.IF);
+        dto.RC = NullIfWhiteSpace(dto.RC);
+        dto.NumeroCNSS = NullIfWhiteSpace(dto.NumeroCNSS);
+        dto.NumeroPatente = NullIfWhiteSpace(dto.NumeroPatente);
+        dto.ManagerPrincipalId = NullIfWhiteSpace(dto.ManagerPrincipalId);
+        dto.EmailPrincipal = NullIfWhiteSpace(dto.EmailPrincipal);
+        dto.ContactEmail = NullIfWhiteSpace(dto.ContactEmail);
+        dto.TelephonePrincipal = NullIfWhiteSpace(dto.TelephonePrincipal);
+        dto.FormeJuridique = NullIfWhiteSpace(dto.FormeJuridique);
+        dto.SecteurActivite = NullIfWhiteSpace(dto.SecteurActivite);
+        dto.CodeActivite = NullIfWhiteSpace(dto.CodeActivite);
+        dto.AdresseSiegeSocial = NullIfWhiteSpace(dto.AdresseSiegeSocial);
+        dto.VilleSiegeSocial = NullIfWhiteSpace(dto.VilleSiegeSocial);
+        dto.ContactNom = NullIfWhiteSpace(dto.ContactNom);
+        dto.ContactFonction = NullIfWhiteSpace(dto.ContactFonction);
+        dto.ContactTelephone = NullIfWhiteSpace(dto.ContactTelephone);
+        dto.NotesInternes = NullIfWhiteSpace(dto.NotesInternes);
+        if (string.IsNullOrWhiteSpace(dto.TypeTVA))
+            dto.TypeTVA = "Mensuelle";
+        if (dto.MoisClotureExercice is < 1 or > 12)
+            dto.MoisClotureExercice = 12;
+    }
+
+    private async Task<ApiResponse<ClientDto>?> ValidateClientDtoAsync(ClientCreateDto dto, int cabinetId, int? excludeId)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(dto.RaisonSociale))
+            errors.Add("RaisonSociale: La raison sociale est obligatoire.");
+        else if (dto.RaisonSociale.Length > 500)
+            errors.Add("RaisonSociale: La raison sociale ne peut pas dépasser 500 caractères.");
+
+        if (dto.ICE != null)
+        {
+            var iceDigits = Regex.Replace(dto.ICE, @"\s+", "");
+            if (!Regex.IsMatch(iceDigits, @"^\d{15}$"))
+                errors.Add("ICE: L'ICE doit contenir exactement 15 chiffres.");
+            else
+                dto.ICE = iceDigits;
+
+            if (dto.ICE != null && await _db.Clients.AnyAsync(c =>
+                    c.CabinetId == cabinetId && c.ICE == dto.ICE && (!excludeId.HasValue || c.Id != excludeId.Value)))
+                errors.Add("ICE: Un client avec cet ICE existe déjà.");
+        }
+
+        if (dto.IF != null)
+        {
+            if (await _db.Clients.AnyAsync(c =>
+                    c.CabinetId == cabinetId && c.IF == dto.IF && (!excludeId.HasValue || c.Id != excludeId.Value)))
+                errors.Add("IF: Un client avec cet IF existe déjà.");
+        }
+
+        if (dto.RC != null)
+        {
+            if (await _db.Clients.AnyAsync(c =>
+                    c.CabinetId == cabinetId && c.RC == dto.RC && (!excludeId.HasValue || c.Id != excludeId.Value)))
+                errors.Add("RC: Un client avec ce RC existe déjà.");
+        }
+
+        if (dto.NumeroCNSS != null)
+        {
+            if (await _db.Clients.AnyAsync(c =>
+                    c.CabinetId == cabinetId && c.NumeroCNSS == dto.NumeroCNSS && (!excludeId.HasValue || c.Id != excludeId.Value)))
+                errors.Add("NumeroCNSS: Un client avec ce n° CNSS existe déjà.");
+        }
+
+        if (dto.EmailPrincipal != null && !IsLikelyEmail(dto.EmailPrincipal))
+            errors.Add("EmailPrincipal: L'e-mail principal n'est pas valide.");
+
+        if (dto.ContactEmail != null && !IsLikelyEmail(dto.ContactEmail))
+            errors.Add("ContactEmail: L'e-mail du contact n'est pas valide.");
+
+        if (dto.ManagerPrincipalId != null)
+        {
+            var managerExists = await _db.Users.AnyAsync(u =>
+                u.Id == dto.ManagerPrincipalId && u.CabinetId == cabinetId && u.IsActive);
+            if (!managerExists)
+                errors.Add("ManagerPrincipalId: Ce manager est introuvable dans le cabinet. Laissez vide ou choisissez un collaborateur existant.");
+        }
+
+        if (errors.Count == 0)
+            return null;
+
+        return ApiResponse<ClientDto>.Fail(
+            "Veuillez corriger les champs indiqués avant d'enregistrer.",
+            errors);
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsLikelyEmail(string email)
+        => email.Contains('@') && email.IndexOf('@') > 0 && email.IndexOf('@') < email.Length - 1;
 
     public async Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId)
     {
@@ -487,8 +606,6 @@ public class ClientService : IClientService
         ServiceContrat svc, DateTime exDebut, DateTime exFin)
     {
         var periods = new List<(string Periode, DateTime DateDebut, DateTime DateFin, DateTime DateLimite)>();
-        var jourLimite = svc.JourLimiteDeclaration ?? 20;
-        var delaiMois = svc.DelaiDeclarationMois ?? 1;
         var freq = DeclarationPeriodTemplate.NormalizeFrequency(svc.Frequence);
 
         // Walk each calendar year covered by the exercise
@@ -499,11 +616,21 @@ public class ClientService : IClientService
                 if (slice.End < exDebut || slice.Start > exFin) continue;
                 var start = slice.Start < exDebut ? exDebut : slice.Start;
                 var end = slice.End > exFin ? exFin : slice.End;
-                var limiteDate = end.AddMonths(delaiMois);
-                limiteDate = new DateTime(
-                    limiteDate.Year,
-                    limiteDate.Month,
-                    Math.Min(jourLimite, DateTime.DaysInMonth(limiteDate.Year, limiteDate.Month)));
+                // Fin / échéance = fin de période (aligned with Builder Modèle de périodes)
+                var limiteDate = end.Date;
+                if (svc.JourLimiteDeclaration.HasValue || svc.DelaiDeclarationMois.HasValue)
+                {
+                    var jourLimite = svc.JourLimiteDeclaration ?? 20;
+                    var delaiMois = svc.DelaiDeclarationMois ?? 0;
+                    if (delaiMois != 0 || svc.JourLimiteDeclaration.HasValue)
+                    {
+                        limiteDate = end.AddMonths(delaiMois);
+                        limiteDate = new DateTime(
+                            limiteDate.Year,
+                            limiteDate.Month,
+                            Math.Min(jourLimite, DateTime.DaysInMonth(limiteDate.Year, limiteDate.Month)));
+                    }
+                }
                 periods.Add((slice.Code, start, end, limiteDate));
             }
         }

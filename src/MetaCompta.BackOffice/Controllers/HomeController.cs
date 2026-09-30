@@ -1,5 +1,6 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +25,7 @@ public class HomeController : BaseController
 
     public IActionResult Workspace()
     {
-        // Entry gateway: no left menu until Cabinet or Dossier Client is chosen
+        // Entry gateway: no left menu until Cabinet or a client métier space is chosen
         HttpContext.Session.Remove("WorkspaceMode");
         ViewBag.UserName = UserName;
         ViewBag.UserRole = UserRole;
@@ -37,15 +38,80 @@ public class HomeController : BaseController
     /// <summary>Enter cabinet administration space (shows cabinet sidebar menu).</summary>
     public IActionResult EnterCabinet()
     {
-        HttpContext.Session.SetString("WorkspaceMode", "Cabinet");
+        HttpContext.Session.SetString("WorkspaceMode", WorkspaceModes.Cabinet);
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// Métier picker after a client is selected: Fiscal / ERP / Paie / Juridique.
+    /// </summary>
+    public IActionResult ClientSpaces()
+    {
+        if (!SelectedClientId.HasValue)
+            return RedirectToAction(nameof(Workspace));
+
+        // Stay on gateway-style page (no métier sidebar) until a space is chosen
+        var mode = WorkspaceModes.Normalize(HttpContext.Session.GetString("WorkspaceMode"));
+        if (mode == WorkspaceModes.Cabinet || string.IsNullOrEmpty(HttpContext.Session.GetString("WorkspaceMode")))
+            HttpContext.Session.Remove("WorkspaceMode");
+
+        ViewBag.UserName = UserName;
+        ViewBag.CabinetName = CabinetName;
+        ViewBag.SelectedClientName = SelectedClientName;
+        ViewBag.SelectedClientId = SelectedClientId;
+
+        var activeJson = HttpContext.Session.GetString("ActiveServices") ?? "[]";
+        var services = System.Text.Json.JsonSerializer.Deserialize<List<string>>(activeJson) ?? new();
+        bool Has(string code) => services.Contains(code, StringComparer.OrdinalIgnoreCase);
+        bool HasAny(params string[] codes) => codes.Any(Has);
+
+        var canFiscal = PermissionHelper.HasAnyDomain(HttpContext.Session, "tva")
+            || PermissionHelper.HasAnyDomain(HttpContext.Session, "ir")
+            || PermissionHelper.HasAnyDomain(HttpContext.Session, "is")
+            || PermissionHelper.HasAnyDomain(HttpContext.Session, "cnss")
+            || PermissionHelper.HasPermission(HttpContext.Session, ClaimDefinitions.DeclarationView);
+        var canErp = PermissionHelper.HasAnyDomain(HttpContext.Session, "comptabilite");
+        var canPaie = PermissionHelper.HasAnyDomain(HttpContext.Session, "payroll")
+            || PermissionHelper.HasAnyDomain(HttpContext.Session, "employee");
+        var canJuridique = PermissionHelper.HasAnyDomain(HttpContext.Session, "juridique");
+
+        ViewBag.ShowFiscal = canFiscal && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM",
+            "ACOMPTES", "REG_IS", "IS", "LIASSEFISCALE", "CNSS", "DTS");
+        // Fiscal also available if they have declaration view + any service, or always as process hub when client selected
+        if (!ViewBag.ShowFiscal && canFiscal)
+            ViewBag.ShowFiscal = true;
+
+        ViewBag.ShowErp = canErp && HasAny("COMPTABILITE", "TRESORERIE", "BILAN", "ETATSFISCAUX", "LIASSEFISCALE", "EG");
+        if (!ViewBag.ShowErp && canErp && Has("COMPTABILITE"))
+            ViewBag.ShowErp = true;
+
+        ViewBag.ShowPaie = canPaie && Has("PAIE");
+        ViewBag.ShowJuridique = canJuridique && HasAny("JURIDIQUE", "PV_AGO", "DEPOT_RC");
+
+        return View();
+    }
+
+    /// <summary>Enter a métier space for the selected client.</summary>
+    [HttpGet]
+    public IActionResult EnterSpace(string mode)
+    {
+        if (!SelectedClientId.HasValue)
+            return RedirectToAction(nameof(Workspace));
+
+        var normalized = WorkspaceModes.Normalize(mode);
+        if (!WorkspaceModes.IsMetier(normalized))
+            return RedirectToAction(nameof(ClientSpaces));
+
+        HttpContext.Session.SetString("WorkspaceMode", normalized);
+        var (controller, action) = WorkspaceModes.Landing(normalized);
+        return RedirectToAction(action, controller);
     }
 
     [RequirePermission(ClaimDefinitions.CabinetDetail)]
     public async Task<IActionResult> Index()
     {
         if (string.IsNullOrEmpty(HttpContext.Session.GetString("WorkspaceMode")))
-            HttpContext.Session.SetString("WorkspaceMode", "Cabinet");
+            HttpContext.Session.SetString("WorkspaceMode", WorkspaceModes.Cabinet);
 
         ViewBag.UserName = UserName;
         ViewBag.UserRole = UserRole;

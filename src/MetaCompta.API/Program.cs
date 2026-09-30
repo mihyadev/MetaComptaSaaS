@@ -120,6 +120,7 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IClientUserService, ClientUserService>();
 builder.Services.AddScoped<IComptabiliteService, ComptabiliteService>();
+builder.Services.AddScoped<IJuridiqueService, JuridiqueService>();
 builder.Services.AddScoped<IExerciceContextService, ExerciceContextService>();
 builder.Services.AddScoped<IExerciceClotureService, ExerciceClotureService>();
 
@@ -150,6 +151,28 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+            .Where(kv => kv.Value?.Errors.Count > 0)
+            .SelectMany(kv => kv.Value!.Errors.Select(err =>
+            {
+                var msg = string.IsNullOrWhiteSpace(err.ErrorMessage)
+                    ? err.Exception?.Message ?? "Valeur invalide."
+                    : err.ErrorMessage;
+                return string.IsNullOrWhiteSpace(kv.Key) ? msg : $"{kv.Key}: {msg}";
+            }))
+            .Distinct()
+            .ToList();
+
+        var body = MetaCompta.Application.DTOs.ApiResponse<object>.Fail(
+            "Veuillez corriger les champs indiqués avant d'enregistrer.",
+            errors);
+        return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(body);
+    };
 });
 
 // ===== Swagger =====
@@ -182,6 +205,8 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ===== Middleware Pipeline =====
+app.UseMiddleware<MetaCompta.API.Middleware.ApiExceptionMiddleware>();
+
 // Swagger always enabled (needed for Docker healthcheck and production API docs)
 app.UseSwagger();
 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "MetaCompta API v1"));
@@ -1070,18 +1095,14 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('WorkflowTemplates') AND name = 'IsSystem')
             ALTER TABLE [WorkflowTemplates] ADD [IsSystem] bit NOT NULL DEFAULT 0;
     ");
-    // Mark only cabinet/global Plan Marocain defaults as system (never client-owned copies)
+    // Builder owns cabinet bases — they must stay editable. Clear legacy IsSystem locks
+    // (a previous patch wrongly marked all IsDefault cabinet templates as Plan Marocain).
     await db.Database.ExecuteSqlRawAsync(@"
         IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('WorkflowTemplates') AND name = 'IsSystem')
         BEGIN
             UPDATE [WorkflowTemplates]
-            SET [IsSystem] = 1
-            WHERE [IsDefault] = 1 AND [ClientId] IS NULL AND [IsDeleted] = 0 AND [IsSystem] = 0;
-
-            -- Client copies must stay editable (fix previous overly broad patch)
-            UPDATE [WorkflowTemplates]
             SET [IsSystem] = 0
-            WHERE [ClientId] IS NOT NULL AND [IsSystem] = 1;
+            WHERE [IsSystem] = 1;
         END
     ");
 
@@ -1122,6 +1143,41 @@ using (var scope = app.Services.CreateScope())
         IF COL_LENGTH('Declarations', 'LifecycleEndedAt') IS NULL ALTER TABLE [Declarations] ADD [LifecycleEndedAt] datetime2 NULL;
     ");
     Console.WriteLine("[Startup] Declarations lifecycle columns check/add complete.");
+
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF COL_LENGTH('LignesEcritures', 'LettrageCode') IS NULL
+            ALTER TABLE [LignesEcritures] ADD [LettrageCode] nvarchar(20) NULL;
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DossiersJuridiques')
+        BEGIN
+            CREATE TABLE [DossiersJuridiques] (
+                [Id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [CabinetId] int NOT NULL,
+                [ClientId] int NOT NULL,
+                [TypeDossier] nvarchar(50) NOT NULL,
+                [Reference] nvarchar(80) NOT NULL,
+                [Objet] nvarchar(500) NOT NULL,
+                [Description] nvarchar(max) NULL,
+                [Statut] nvarchar(40) NOT NULL DEFAULT N'EnCours',
+                [DateOuverture] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [DateCloture] datetime2 NULL,
+                [DateDepot] datetime2 NULL,
+                [DateEcheance] datetime2 NULL,
+                [Responsable] nvarchar(200) NULL,
+                [Montant] decimal(18,2) NOT NULL DEFAULT 0,
+                [Notes] nvarchar(max) NULL,
+                [ChecklistJson] nvarchar(max) NULL,
+                [IsDeleted] bit NOT NULL DEFAULT 0,
+                [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] nvarchar(max) NULL,
+                [UpdatedAt] datetime2 NULL,
+                [UpdatedBy] nvarchar(max) NULL,
+                [DeletedAt] datetime2 NULL,
+                [DeletedBy] nvarchar(max) NULL
+            );
+            CREATE INDEX [IX_DossiersJuridiques_Client] ON [DossiersJuridiques]([CabinetId],[ClientId]);
+        END
+    ");
+    Console.WriteLine("[Startup] Lettrage + DossiersJuridiques check/add complete.");
 
     // ===== Patch: WorkflowStepInstances relance/routing columns =====
     try

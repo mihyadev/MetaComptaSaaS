@@ -230,12 +230,10 @@ public class WorkflowService : IWorkflowService
         if (template == null)
             return ApiResponse<WorkflowTemplateDto>.Fail("Modèle non trouvé.");
 
-        // Global Plan Marocain only — client-owned copies are always editable
-        if (template.IsSystem && !template.ClientId.HasValue)
-            return ApiResponse<WorkflowTemplateDto>.Fail("Ce modèle système (Plan Marocain) ne peut pas être modifié. Assignez-le au client pour créer une copie modifiable.");
-
-        // Heal bad data: client copy wrongly flagged as system
-        if (template.ClientId.HasValue && template.IsSystem)
+        // Cabinet bases (Builder) are always editable. Client copies are also editable.
+        // IsSystem was historically set on defaults by a startup patch — clear it so Builder works.
+        // Running instances use client copies (or keep their own step rows), not a locked Plan Marocain.
+        if (template.IsSystem)
             template.IsSystem = false;
 
         // Client-owned copies can be customized even with running instances (in-flight keep their step instances).
@@ -396,10 +394,8 @@ public class WorkflowService : IWorkflowService
         if (template == null)
             return ApiResponse<bool>.Fail("Modèle non trouvé.");
 
-        // Global Plan Marocain only — client copies can be removed
-        if (template.IsSystem && !template.ClientId.HasValue)
-            return ApiResponse<bool>.Fail("Ce modèle système (Plan Marocain) ne peut pas être supprimé.");
-        if (template.ClientId.HasValue && template.IsSystem)
+        // Cabinet Builder templates may be retired/deleted; clear legacy IsSystem lock.
+        if (template.IsSystem)
             template.IsSystem = false;
 
         var hasInstances = await _db.WorkflowInstances.AnyAsync(wi => wi.WorkflowTemplateId == id && wi.Status == WorkflowInstanceStatus.Active);
@@ -674,7 +670,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "TVA", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture / création dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier TVA pour la période", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
+                    new() { Name = "Ouverture / création dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier TVA pour la période (Modèle de périodes Mensuel — Fin/échéance = dernier jour du mois)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", ActionConfigJson = BuildMensuelPeriodInitConfigJson() },
                     new() { Name = "Demande documents", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Envoi de la demande de factures d'achat/vente au client", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0}" },
                     new() { Name = "Réception documents (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Le client dépose les factures — relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
                     new() { Name = "Contrôle exhaustivité", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Vérification exhaustivité pièces; branche EnAttenteCorrection si incomplet", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
@@ -697,7 +693,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "IS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture dossier liasse", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier liasse (exercice, clôture, deadline 31/03 N+1)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
+                    new() { Name = "Ouverture dossier liasse", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier liasse — échéance = Fin du Modèle de périodes (défaut Mensuel)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", ActionConfigJson = BuildMensuelPeriodInitConfigJson() },
                     new() { Name = "Demande pièces annuelles", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Checklist annuelle : inventaire, banques, paie, immobilisations, PV AG…", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0,\"checklist\":\"annuelle\"}" },
                     new() { Name = "Réception pièces (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 168, Description = "Le client dépose les pièces — relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1,\"requireChecklistComplete\":true}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
                     new() { Name = "Contrôle exhaustivité", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Vérification exhaustivité pièces; Refuser → retour collecte", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1,\"requireChecklistComplete\":true}" },
@@ -743,7 +739,7 @@ public class WorkflowService : IWorkflowService
                 DeclarationType = "CNSS", IsDefault = true,
                 Steps = new()
                 {
-                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Le 1er du mois : ouvre le CNSS du mois précédent (ex. 1 août → CNSS juillet, dépôt jusqu'au 10)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", IsScheduled = true, CronExpression = "0 8 1 * *", CronDescription = "Le 1er de chaque mois à 08:00 — CNSS mois précédent (fenêtre dépôt 1–10)", ActionConfigJson = "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":10,\"windowMonthOffset\":1}" },
+                    new() { Name = "Ouverture période CNSS", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Le 1er du mois : ouvre le CNSS du mois précédent — Fin/échéance = dernier jour du mois (Modèle de périodes), Action à la fin = clôture", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Brouillon, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", IsScheduled = true, CronExpression = "0 8 1 * *", CronDescription = "Le 1er de chaque mois à 08:00 — ouvre CNSS mois précédent ; clôture à Fin/échéance du modèle", ActionConfigJson = BuildMensuelPeriodInitConfigJson() },
                     new() { Name = "Demande état du personnel", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Demande des entrées/sorties, absences, heures supplémentaires", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ACompleter, TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Collecte données paie", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Le client transmet les éléments variables de paie du mois", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute },
                     new() { Name = "Calcul cotisations CNSS", StepOrder = 3, StepType = "Saisie", AssignmentType = "Department", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Calcul des parts salariales et patronales (CNSS, AMO, TFP)", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Completee, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
@@ -856,10 +852,19 @@ public class WorkflowService : IWorkflowService
 
     public async Task<ApiResponse<WorkflowInstanceDto>> StartWorkflowAsync(StartWorkflowDto dto, int cabinetId, string userId)
     {
-        // 1. Resolve template
+        // 1. Resolve template — prefer client-owned copy when starting for a client
         WorkflowTemplate? template;
         if (dto.WorkflowTemplateId.HasValue)
         {
+            // Cabinet template + client → clone/link affectation so "Workflows attachés" is populated
+            if (dto.ClientId > 0)
+            {
+                var ensure = await EnsureClientTemplateAsync(
+                    dto.ClientId, dto.WorkflowTemplateId.Value, dto.DeclarationType, cabinetId, userId);
+                if (ensure.Success && ensure.Data != null)
+                    dto.WorkflowTemplateId = ensure.Data.Id;
+            }
+
             template = await _db.WorkflowTemplates
                 .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
                 .FirstOrDefaultAsync(wt => wt.Id == dto.WorkflowTemplateId.Value && wt.CabinetId == cabinetId && wt.IsActive);
@@ -1248,7 +1253,10 @@ public class WorkflowService : IWorkflowService
         if (instance == null)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance non trouvée.");
         if (instance.Status != WorkflowInstanceStatus.Active)
-            return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+            return ApiResponse<WorkflowStepInstanceDto>.Fail(
+                instance.Status == WorkflowInstanceStatus.Completed
+                    ? "Le workflow est déjà terminé (dossier clôturé / échéance période)."
+                    : "Le workflow n'est pas actif.");
 
         await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
@@ -1448,7 +1456,10 @@ public class WorkflowService : IWorkflowService
         if (instance == null)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance non trouvée.");
         if (instance.Status != WorkflowInstanceStatus.Active)
-            return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+            return ApiResponse<WorkflowStepInstanceDto>.Fail(
+                instance.Status == WorkflowInstanceStatus.Completed
+                    ? "Le workflow est déjà terminé (dossier clôturé / échéance période)."
+                    : "Le workflow n'est pas actif.");
 
         await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
@@ -1727,7 +1738,10 @@ public class WorkflowService : IWorkflowService
         if (instance == null)
             return ApiResponse<WorkflowStepInstanceDto>.Fail("Instance workflow introuvable.");
         if (instance.Status != WorkflowInstanceStatus.Active)
-            return ApiResponse<WorkflowStepInstanceDto>.Fail("Le workflow n'est pas actif.");
+            return ApiResponse<WorkflowStepInstanceDto>.Fail(
+                instance.Status == WorkflowInstanceStatus.Completed
+                    ? "Le workflow est déjà terminé (dossier clôturé ou échéance période). Impossible de prendre cette étape."
+                    : "Le workflow n'est pas actif.");
 
         await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
 
@@ -2231,7 +2245,10 @@ public class WorkflowService : IWorkflowService
 
         // Already the client-owned copy (Personnaliser opened on existing copy) — do not wipe customizations
         if (source.ClientId == clientId)
+        {
+            await LinkClientAffectationAsync(clientId, source.DeclarationType, source.Id, cabinetId, userId);
             return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(source));
+        }
 
         if (!Enum.TryParse<WorkflowDeclarationType>(declarationType ?? source.DeclarationType.ToString(), true, out var declType))
             declType = source.DeclarationType;
@@ -2292,21 +2309,47 @@ public class WorkflowService : IWorkflowService
             {
                 await _db.SaveChangesAsync();
                 var synced = await UpdateTemplateAsync(existingClientTpl.Id, cloneDto, cabinetId, userId);
-                if (synced.Success)
+                if (synced.Success && synced.Data != null)
+                {
+                    await LinkClientAffectationAsync(clientId, declType, synced.Data.Id, cabinetId, userId);
                     _logger.LogInformation(
                         "Re-synced client workflow {ClientTplId} from cabinet {SourceId} for client {ClientId}",
                         existingClientTpl.Id, sourceTemplateId, clientId);
+                }
                 return synced;
             }
 
             await _db.SaveChangesAsync();
+            await LinkClientAffectationAsync(clientId, declType, existingClientTpl.Id, cabinetId, userId);
             return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(existingClientTpl));
         }
 
         var created = await CreateTemplateAsync(cloneDto, cabinetId, userId);
-        if (created.Success)
-            _logger.LogInformation("Cloned workflow template {SourceId} → client {ClientId} as {NewId}", sourceTemplateId, clientId, created.Data?.Id);
+        if (created.Success && created.Data != null)
+        {
+            await LinkClientAffectationAsync(clientId, declType, created.Data.Id, cabinetId, userId);
+            _logger.LogInformation("Cloned workflow template {SourceId} → client {ClientId} as {NewId}", sourceTemplateId, clientId, created.Data.Id);
+        }
         return created;
+    }
+
+    /// <summary>
+    /// Ensures "Workflows attachés à ce client" shows the client copy (ClientWorkflowConfigs row).
+    /// </summary>
+    private async Task LinkClientAffectationAsync(
+        int clientId, WorkflowDeclarationType declType, int clientTemplateId, int cabinetId, string userId)
+    {
+        await UpsertClientConfigAsync(new ClientWorkflowConfigCreateDto
+        {
+            ClientId = clientId,
+            DeclarationType = declType.ToString(),
+            WorkflowTemplateId = clientTemplateId,
+            ClientValidationEnabled = true,
+            DocumentRequestEnabled = true,
+            AutoStartWorkflow = true,
+            SLAMultiplier = 1m,
+            IsActive = true
+        }, cabinetId, userId, skipClone: true);
     }
 
     public async Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientWorkflowCustomizationAsync(
@@ -2881,19 +2924,30 @@ public class WorkflowService : IWorkflowService
 
     /// <summary>
     /// Stamps LifecycleEndsAt / LifecycleEndAction on the declaration from the Init step template.
+    /// PeriodEnd (default) = Fin/échéance from Modèle de périodes (DateLimite, else DateFin).
+    /// CalendrierMaroc = legacy dépôt window (ex. CNSS 10 du mois suivant).
     /// </summary>
     private static void ApplyDeclarationLifecycleFromInit(WorkflowStepTemplate template, Declaration declaration)
     {
-        // PeriodEnd: DateFin période, except CNSS/TVA/… where work is in the next-month filing window
-        // (ex. CNSS juillet → clôture auto le 10 août = DateLimite).
         var mode = string.IsNullOrWhiteSpace(template.LifecycleEndMode)
             ? "PeriodEnd"
             : template.LifecycleEndMode.Trim();
         if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase))
             return;
 
-        declaration.LifecycleEndsAt = MoroccoDeclarationCalendar.GetLifecycleEndDate(
-            declaration.Type, declaration.DateFin, declaration.DateLimite);
+        if (string.Equals(mode, "CalendrierMaroc", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "DeclarationDateLimite", StringComparison.OrdinalIgnoreCase))
+        {
+            declaration.LifecycleEndsAt = MoroccoDeclarationCalendar.GetLifecycleEndDate(
+                declaration.Type, declaration.DateFin, declaration.DateLimite);
+        }
+        else
+        {
+            // PeriodEnd / DaysFromOpen / etc. — Action à la fin fires on Fin/échéance (period table)
+            declaration.LifecycleEndsAt = declaration.DateLimite != default
+                ? declaration.DateLimite.Date
+                : declaration.DateFin.Date;
+        }
 
         declaration.LifecycleEndAction = string.IsNullOrWhiteSpace(template.ActionOnLifecycleEnd)
             ? nameof(WorkflowActionType.ClotureDeclaration)
@@ -3084,6 +3138,57 @@ public class WorkflowService : IWorkflowService
                     {
                         instance.Status = WorkflowInstanceStatus.Completed;
                         instance.CompletedAt = now;
+
+                        // Jump UI to Clôture/Archivage step so Instance Details shows the closed end-state
+                        await AttachStepTemplatesIgnoreDeletedAsync(instance.StepInstances);
+                        var clotureStep = instance.StepInstances
+                            .Where(s => s.WorkflowStepTemplate?.StepType == WorkflowStepType.ClotureArchivage)
+                            .OrderByDescending(s => s.StepOrder)
+                            .FirstOrDefault()
+                            ?? instance.StepInstances.OrderByDescending(s => s.StepOrder).FirstOrDefault();
+                        if (clotureStep != null)
+                        {
+                            instance.CurrentStepOrder = clotureStep.StepOrder;
+                            clotureStep.Status = WorkflowStepStatus.Completed;
+                            clotureStep.CompletedAt = now;
+                            clotureStep.CompletedByUserId = null;
+                            clotureStep.Notes = "Clôturé automatiquement (échéance période — Hangfire).";
+                        }
+
+                        // Open steps before clôture: skip — dossier is closed, not "En cours"
+                        foreach (var si in instance.StepInstances.Where(s =>
+                                     s.Id != clotureStep?.Id
+                                     && s.Status is WorkflowStepStatus.InProgress
+                                         or WorkflowStepStatus.Pending
+                                         or WorkflowStepStatus.WaitingForClient
+                                         or WorkflowStepStatus.WaitingForValidation))
+                        {
+                            si.Status = WorkflowStepStatus.Skipped;
+                            si.CompletedAt ??= now;
+                            si.Notes = "Échéance période — étape annulée (clôture automatique).";
+                        }
+
+                        // Cancel open tasks so assignees no longer see AFaire/EnCours on a closed dossier
+                        var openTaskIds = instance.StepInstances
+                            .Where(s => s.TaskItemId.HasValue)
+                            .Select(s => s.TaskItemId!.Value)
+                            .Distinct()
+                            .ToList();
+                        var openTasks = await _db.TaskItems
+                            .Where(t => t.CabinetId == decl.CabinetId
+                                && !t.IsDeleted
+                                && t.Statut != RefCodes.StatutTache.Termine
+                                && t.Statut != RefCodes.StatutTache.Annule
+                                && (openTaskIds.Contains(t.Id) || t.DeclarationId == decl.Id))
+                            .ToListAsync();
+                        foreach (var task in openTasks)
+                        {
+                            task.Statut = RefCodes.StatutTache.Annule;
+                            task.UpdatedBy = "SYSTEM";
+                            task.Description = string.IsNullOrWhiteSpace(task.Description)
+                                ? "Annulée : dossier clôturé automatiquement (échéance période)."
+                                : task.Description + "\n[SYSTEM] Annulée : dossier clôturé automatiquement (échéance période).";
+                        }
                     }
                 }
                 else
@@ -3690,11 +3795,23 @@ public class WorkflowService : IWorkflowService
             }
         }
 
-        var life = MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(frequency);
-        startDay ??= life.StartDay;
-        endDay ??= life.EndDay;
-        monthOffset ??= life.Months;
-        deadlineYearOffset ??= life.Years;
+        // When Fin/échéance comes from the period model, ignore legacy dépôt-window offsets (day 10 CNSS, etc.)
+        if (periodStart.HasValue && periodEnd.HasValue)
+        {
+            startDay = null;
+            endDay = null;
+            monthOffset = null;
+            deadlineMonth = null;
+            deadlineYearOffset = null;
+        }
+        else
+        {
+            var life = MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(frequency);
+            startDay ??= life.StartDay;
+            endDay ??= life.EndDay;
+            monthOffset ??= life.Months;
+            deadlineYearOffset ??= life.Years;
+        }
 
         return new InitPeriodConfig(
             frequency,
@@ -3706,6 +3823,37 @@ public class WorkflowService : IWorkflowService
             monthOffset,
             deadlineMonth,
             deadlineYearOffset);
+    }
+
+    /// <summary>
+    /// Default Init ActionConfigJson: Mensuel (12) with Fin/échéance = last day of each month (YYYY at runtime).
+    /// </summary>
+    private static string BuildMensuelPeriodInitConfigJson()
+    {
+        var labels = new[]
+        {
+            "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+            "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+        };
+        var ends = new[] { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+        var periods = new System.Text.StringBuilder();
+        periods.Append('[');
+        for (var m = 1; m <= 12; m++)
+        {
+            if (m > 1) periods.Append(',');
+            periods.Append('{')
+                .Append("\"label\":\"").Append(labels[m - 1]).Append("\",")
+                .Append("\"start\":\"").Append(m.ToString("00")).Append("-01\",")
+                .Append("\"end\":\"").Append(m.ToString("00")).Append('-').Append(ends[m - 1].ToString("00")).Append("\",")
+                .Append("\"startMonth\":").Append(m).Append(',')
+                .Append("\"startDay\":1,")
+                .Append("\"endMonth\":").Append(m).Append(',')
+                .Append("\"endDay\":").Append(ends[m - 1])
+                .Append('}');
+        }
+        periods.Append(']');
+        return "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodTemplate\":\"Mensuelle\",\"periodFrequency\":\"Mensuelle\",\"periods\":"
+            + periods + "}";
     }
     private async Task<string?> EvaluateDocumentGateAsync(WorkflowStepTemplate stepTemplate, int declarationId, int cabinetId)
     {

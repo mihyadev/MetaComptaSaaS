@@ -17,7 +17,13 @@ public class MappingProfile : Profile
             .ForMember(d => d.DeclarationCount, opt => opt.MapFrom(s => s.Declarations.Count))
             .ForMember(d => d.ServicesFiduciaires, opt => opt.MapFrom(s => s.ServiceContrats));
         CreateMap<ClientCreateDto, Client>()
-            .ForMember(d => d.ServiceContrats, opt => opt.Ignore()); // handled manually
+            .ForMember(d => d.ServiceContrats, opt => opt.Ignore()) // handled manually
+            .ForMember(d => d.ManagerPrincipalId, opt => opt.MapFrom(s =>
+                string.IsNullOrWhiteSpace(s.ManagerPrincipalId) ? null : s.ManagerPrincipalId.Trim()))
+            .ForMember(d => d.ICE, opt => opt.MapFrom(s => string.IsNullOrWhiteSpace(s.ICE) ? null : s.ICE.Trim()))
+            .ForMember(d => d.IF, opt => opt.MapFrom(s => string.IsNullOrWhiteSpace(s.IF) ? null : s.IF.Trim()))
+            .ForMember(d => d.RC, opt => opt.MapFrom(s => string.IsNullOrWhiteSpace(s.RC) ? null : s.RC.Trim()))
+            .ForMember(d => d.NumeroCNSS, opt => opt.MapFrom(s => string.IsNullOrWhiteSpace(s.NumeroCNSS) ? null : s.NumeroCNSS.Trim()));
 
         // ServiceContrat
         CreateMap<ServiceContrat, ServiceContratDto>();

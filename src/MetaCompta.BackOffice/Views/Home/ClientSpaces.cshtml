@@ -1,0 +1,74 @@
+@{
+    ViewData["Title"] = "Espaces métier";
+    Layout = "_Layout";
+    var clientName = ViewBag.SelectedClientName as string ?? "Client";
+    var showFiscal = ViewBag.ShowFiscal as bool? ?? true;
+    var showErp = ViewBag.ShowErp as bool? ?? false;
+    var showPaie = ViewBag.ShowPaie as bool? ?? false;
+    var showJuridique = ViewBag.ShowJuridique as bool? ?? false;
+}
+
+<div class="space-picker-hero">
+    <div class="client-pill">
+        <i class="bi bi-building text-primary"></i>@clientName
+    </div>
+    <h1>Choisir un espace métier</h1>
+    <p>Chaque espace garde le style CRM monday, avec sa propre couleur de board — comme un workspace dédié.</p>
+</div>
+
+<div class="space-picker-grid">
+    @if (showFiscal)
+    {
+        <a class="space-board-card board-fiscal" href="@Url.Action("EnterSpace", "Home", new { mode = "Fiscal" })">
+            <div class="board-icon"><i class="bi bi-file-earmark-check"></i></div>
+            <span class="board-chip">Fiscal</span>
+            <h2>Fiscal &amp; déclarations</h2>
+            <p>TVA, IS, CNSS… suivi des dossiers, statuts, workflows et tâches.</p>
+            <span class="board-cta">Ouvrir l’espace <i class="bi bi-arrow-right"></i></span>
+        </a>
+    }
+    @if (showErp)
+    {
+        <a class="space-board-card board-erp" href="@Url.Action("EnterSpace", "Home", new { mode = "Erp" })">
+            <div class="board-icon"><i class="bi bi-journal-bookmark"></i></div>
+            <span class="board-chip">ERP</span>
+            <h2>ERP — Tenue comptable</h2>
+            <p>Plan, journaux, écritures, grand livre, balance et clôture.</p>
+            <span class="board-cta">Ouvrir l’espace <i class="bi bi-arrow-right"></i></span>
+        </a>
+    }
+    @if (showPaie)
+    {
+        <a class="space-board-card board-paie" href="@Url.Action("EnterSpace", "Home", new { mode = "Paie" })">
+            <div class="board-icon"><i class="bi bi-people"></i></div>
+            <span class="board-chip">Paie</span>
+            <h2>Paie</h2>
+            <p>Périodes, bulletins, employés, livre de paie et lien CNSS.</p>
+            <span class="board-cta">Ouvrir l’espace <i class="bi bi-arrow-right"></i></span>
+        </a>
+    }
+    @if (showJuridique)
+    {
+        <a class="space-board-card board-juridique" href="@Url.Action("EnterSpace", "Home", new { mode = "Juridique" })">
+            <div class="board-icon"><i class="bi bi-briefcase"></i></div>
+            <span class="board-chip">Juridique</span>
+            <h2>Secrétariat juridique</h2>
+            <p>PV AGO, dépôt des comptes, registre et échéances.</p>
+            <span class="board-cta">Ouvrir l’espace <i class="bi bi-arrow-right"></i></span>
+        </a>
+    }
+</div>
+
+@if (!showFiscal && !showErp && !showPaie && !showJuridique)
+{
+    <div class="alert alert-warning rounded-4 mt-4 text-center">
+        Aucun espace métier accessible pour vos permissions / services du contrat.
+        <a href="@Url.Action("Workspace", "Home")" class="alert-link">Retour à l’accueil</a>
+    </div>
+}
+
+<div class="text-center mt-4">
+    <a class="btn btn-outline-secondary rounded-pill" href="@Url.Action("Workspace", "Home")">
+        <i class="bi bi-arrow-left me-1"></i> Changer de client / cabinet
+    </a>
+</div>

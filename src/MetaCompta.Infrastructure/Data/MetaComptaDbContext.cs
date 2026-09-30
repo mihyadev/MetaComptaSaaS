@@ -52,6 +52,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<JournalComptable> JournauxComptables => Set<JournalComptable>();
     public DbSet<EcritureComptable> EcrituresComptables => Set<EcritureComptable>();
     public DbSet<LigneEcriture> LignesEcritures => Set<LigneEcriture>();
+    public DbSet<DossierJuridique> DossiersJuridiques => Set<DossierJuridique>();
     public DbSet<CompteBancaire> ComptesBancaires => Set<CompteBancaire>();
     public DbSet<RapprochementBancaire> RapprochementsBancaires => Set<RapprochementBancaire>();
     public DbSet<RapprochementLigne> RapprochementLignes => Set<RapprochementLigne>();
@@ -449,9 +450,23 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(x => x.Debit).HasPrecision(18, 2);
             e.Property(x => x.Credit).HasPrecision(18, 2);
             e.Property(x => x.MontantTva).HasPrecision(18, 2);
+            e.Property(x => x.LettrageCode).HasMaxLength(20);
             e.HasQueryFilter(x => !x.IsDeleted);
             e.HasOne(x => x.Ecriture).WithMany(ec => ec.Lignes).HasForeignKey(x => x.EcritureComptableId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Compte).WithMany().HasForeignKey(x => x.CompteComptableId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<DossierJuridique>(e =>
+        {
+            e.ToTable("DossiersJuridiques");
+            e.Property(x => x.TypeDossier).HasMaxLength(50);
+            e.Property(x => x.Reference).HasMaxLength(80);
+            e.Property(x => x.Objet).HasMaxLength(500);
+            e.Property(x => x.Statut).HasMaxLength(40);
+            e.Property(x => x.Responsable).HasMaxLength(200);
+            e.Property(x => x.Montant).HasPrecision(18, 2);
+            e.HasQueryFilter(x => !x.IsDeleted);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.CabinetId, x.ClientId });
         });
         builder.Entity<CompteBancaire>(e =>
         {

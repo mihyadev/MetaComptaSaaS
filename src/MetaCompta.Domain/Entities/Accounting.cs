@@ -109,6 +109,8 @@ public class LigneEcriture : TenantEntity
     public decimal Credit { get; set; }
     public string? CodeTva { get; set; }
     public decimal? MontantTva { get; set; }
+    /// <summary>Simple lettrage code (same code on lignes of one compte).</summary>
+    public string? LettrageCode { get; set; }
     public int SortOrder { get; set; }
 }
 

@@ -1,0 +1,563 @@
+@using MetaCompta.Application.DTOs
+@model ClientCreateDto
+@{
+    var isEdit = ViewBag.IsEdit as bool? ?? false;
+    var clientId = ViewBag.ClientId as int? ?? 0;
+    var clientServices = ViewBag.ClientServices as List<ServiceContratDto> ?? new();
+    List<ReferenceDataDto> ReadRefs(string key) =>
+        (ViewData[key] as IEnumerable<ReferenceDataDto>)?.ToList() ?? new List<ReferenceDataDto>();
+    var refFormes = ReadRefs("Ref_FORME_JURIDIQUE");
+    var refTva = ReadRefs("Ref_TYPE_TVA");
+    var refVilles = ReadRefs("Ref_VILLE");
+    var refSecteurs = ReadRefs("Ref_SECTEUR_ACTIVITE");
+    var moisNoms = new[] { "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre" };
+    var totalSteps = isEdit ? 4 : 3;
+
+    // Historical rows often store Label ("Casablanca"); <option value> uses Code ("CASABLANCA").
+    string? ResolveRefCode(string? current, IEnumerable<ReferenceDataDto> items)
+    {
+        if (string.IsNullOrWhiteSpace(current)) return current;
+        var trimmed = current.Trim();
+        var list = items as IList<ReferenceDataDto> ?? items.ToList();
+        var hit = list.FirstOrDefault(r =>
+            string.Equals(r.Code, trimmed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(r.Label, trimmed, StringComparison.OrdinalIgnoreCase));
+        return hit?.Code ?? trimmed;
+    }
+
+    List<ReferenceDataDto> BuildRefItems(IEnumerable<ReferenceDataDto> items, string? selected, IEnumerable<string>? fallback = null)
+    {
+        var list = items
+            .Where(r => !string.IsNullOrWhiteSpace(r.Code))
+            .Select(r => new ReferenceDataDto { Code = r.Code, Label = string.IsNullOrWhiteSpace(r.Label) ? r.Code : r.Label })
+            .ToList();
+        if (list.Count == 0 && fallback != null)
+            list = fallback.Select(v => new ReferenceDataDto { Code = v, Label = v }).ToList();
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !list.Any(r => string.Equals(r.Code, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            list.Insert(0, new ReferenceDataDto { Code = selected!, Label = selected! });
+        }
+        return list;
+    }
+
+    void SyncModelField(string key, string? value)
+    {
+        ViewData.ModelState.Remove(key);
+        ViewData.ModelState.SetModelValue(key, new Microsoft.AspNetCore.Mvc.ModelBinding.ValueProviderResult(value ?? string.Empty));
+    }
+
+    var formeFallback = new[] { "SARL", "SA", "SNC", "SCS", "SCA", "Auto-Entrepreneur", "Personne Physique", "Association", "Coopérative" };
+    var villeFallback = new[] { "CASABLANCA", "RABAT", "MARRAKECH", "FES", "TANGER", "AGADIR", "MEKNES", "OUJDA", "KENITRA", "TETOUAN", "SALE", "NADOR", "MOHAMMEDIA", "EL_JADIDA", "BENI_MELLAL", "KHOURIBGA", "SETTAT", "SAFI" };
+    var tvaFallback = new[] { "Mensuelle", "Trimestrielle", "Exonéré" };
+
+    // Normalize BEFORE building options so select current value matches option values.
+    var formeItems = BuildRefItems(refFormes, null, formeFallback);
+    var villeItems = BuildRefItems(refVilles, null, villeFallback);
+    var secteurItems = BuildRefItems(refSecteurs, null);
+    var tvaItems = BuildRefItems(refTva, null, tvaFallback);
+
+    var selectedForme = ResolveRefCode(Model?.FormeJuridique, formeItems);
+    var selectedVille = ResolveRefCode(Model?.VilleSiegeSocial, villeItems);
+    var selectedSecteur = ResolveRefCode(Model?.SecteurActivite, secteurItems);
+    var selectedTva = ResolveRefCode(Model?.TypeTVA, tvaItems) ?? "Mensuelle";
+    var selectedMois = (Model?.MoisClotureExercice is >= 1 and <= 12 ? Model.MoisClotureExercice : 12);
+
+    formeItems = BuildRefItems(formeItems, selectedForme);
+    villeItems = BuildRefItems(villeItems, selectedVille);
+    secteurItems = BuildRefItems(secteurItems, selectedSecteur);
+    tvaItems = BuildRefItems(tvaItems, selectedTva);
+
+    if (Model != null)
+    {
+        Model.FormeJuridique = selectedForme;
+        Model.VilleSiegeSocial = selectedVille;
+        Model.SecteurActivite = selectedSecteur;
+        Model.TypeTVA = selectedTva;
+        Model.MoisClotureExercice = selectedMois;
+        SyncModelField(nameof(ClientCreateDto.FormeJuridique), selectedForme);
+        SyncModelField(nameof(ClientCreateDto.VilleSiegeSocial), selectedVille);
+        SyncModelField(nameof(ClientCreateDto.SecteurActivite), selectedSecteur);
+        SyncModelField(nameof(ClientCreateDto.TypeTVA), selectedTva);
+        SyncModelField(nameof(ClientCreateDto.MoisClotureExercice), selectedMois.ToString());
+    }
+}
+
+<div class="mc-card mb-4">
+    <div class="card-body py-3 px-4">
+        <div class="client-form-wizard" id="clientFormWizard">
+            <div class="wizard-step active" data-step="0">
+                <div class="wizard-step-circle"><i class="bi bi-building"></i></div>
+                <span class="wizard-step-label">Identité</span>
+            </div>
+            <div class="wizard-connector"></div>
+            <div class="wizard-step" data-step="1">
+                <div class="wizard-step-circle"><i class="bi bi-person-lines-fill"></i></div>
+                <span class="wizard-step-label">Contact</span>
+            </div>
+            <div class="wizard-connector"></div>
+            <div class="wizard-step" data-step="2">
+                <div class="wizard-step-circle"><i class="bi bi-calculator"></i></div>
+                <span class="wizard-step-label">Fiscal</span>
+            </div>
+            @if (isEdit)
+            {
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="3">
+                    <div class="wizard-step-circle"><i class="bi bi-briefcase"></i></div>
+                    <span class="wizard-step-label">Services</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Step 0: Identité -->
+<div class="client-form-panel step-panel" id="step0">
+    <div class="panel-head">
+        <div class="panel-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-building"></i></div>
+        <div>
+            <h5>Identité de l'entreprise</h5>
+            <small>Informations légales et administratives</small>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label" asp-for="RaisonSociale">Raison sociale <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-building text-muted"></i></span>
+                    <input asp-for="RaisonSociale" class="form-control" placeholder="Ex: ABC Consulting SARL" />
+                </div>
+                <span asp-validation-for="RaisonSociale" class="text-danger small"></span>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="FormeJuridique">Forme juridique</label>
+                <select name="FormeJuridique" id="FormeJuridique" class="form-select">
+                    <option value="">— Sélectionner —</option>
+                    @foreach (var r in formeItems)
+                    {
+                        if (string.Equals(r.Code, selectedForme, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <option value="@r.Code" selected>@r.Label</option>
+                        }
+                        else
+                        {
+                            <option value="@r.Code">@r.Label</option>
+                        }
+                    }
+                </select>
+            </div>
+
+            <div class="col-12"><div class="section-divider">Identifiants</div></div>
+
+            <div class="col-md-4">
+                <label class="form-label" asp-for="ICE">ICE</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-fingerprint text-muted"></i></span>
+                    <input asp-for="ICE" class="form-control" placeholder="15 chiffres" maxlength="20" />
+                </div>
+                <div class="form-text">Identifiant Commun de l'Entreprise</div>
+                <span asp-validation-for="ICE" class="text-danger small"></span>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="IF">IF</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-hash text-muted"></i></span>
+                    <input asp-for="IF" class="form-control" placeholder="Identifiant fiscal" />
+                </div>
+                <span asp-validation-for="IF" class="text-danger small"></span>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="RC">RC</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-journal-text text-muted"></i></span>
+                    <input asp-for="RC" class="form-control" placeholder="Registre du commerce" />
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="NumeroCNSS">N° CNSS</label>
+                <input asp-for="NumeroCNSS" class="form-control" placeholder="Numéro CNSS" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="NumeroPatente">N° Patente</label>
+                <input asp-for="NumeroPatente" class="form-control" placeholder="Numéro patente" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="CapitalSocial">Capital social</label>
+                <div class="input-group">
+                    <input asp-for="CapitalSocial" class="form-control" type="number" step="0.01" placeholder="0.00" />
+                    <span class="input-group-text">MAD</span>
+                </div>
+            </div>
+
+            <div class="col-12"><div class="section-divider">Activité</div></div>
+
+            <div class="col-md-4">
+                <label class="form-label" asp-for="SecteurActivite">Secteur d'activité</label>
+                @if (secteurItems.Any())
+                {
+                    <select name="SecteurActivite" id="SecteurActivite" class="form-select">
+                        <option value="">— Sélectionner —</option>
+                        @foreach (var r in secteurItems)
+                        {
+                            if (string.Equals(r.Code, selectedSecteur, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <option value="@r.Code" selected>@r.Label</option>
+                            }
+                            else
+                            {
+                                <option value="@r.Code">@r.Label</option>
+                            }
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input asp-for="SecteurActivite" class="form-control" placeholder="Ex: Technologies, Commerce…" />
+                }
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="CodeActivite">Code activité</label>
+                <input asp-for="CodeActivite" class="form-control" placeholder="Code activité" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="DateCreation">Date de création</label>
+                <input asp-for="DateCreation" class="form-control" type="date" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 1: Contact -->
+<div class="client-form-panel step-panel" id="step1" style="display:none;">
+    <div class="panel-head">
+        <div class="panel-icon bg-success bg-opacity-10 text-success"><i class="bi bi-person-lines-fill"></i></div>
+        <div>
+            <h5>Coordonnées &amp; contact</h5>
+            <small>Adresse, téléphone, e-mail et personne de contact</small>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label" asp-for="AdresseSiegeSocial">Adresse siège social</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-geo-alt text-muted"></i></span>
+                    <textarea asp-for="AdresseSiegeSocial" class="form-control" rows="2" placeholder="Adresse complète du siège social"></textarea>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="VilleSiegeSocial">Ville</label>
+                <select name="VilleSiegeSocial" id="VilleSiegeSocial" class="form-select">
+                    <option value="">— Sélectionner —</option>
+                    @foreach (var r in villeItems)
+                    {
+                        if (string.Equals(r.Code, selectedVille, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <option value="@r.Code" selected>@r.Label</option>
+                        }
+                        else
+                        {
+                            <option value="@r.Code">@r.Label</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="TelephonePrincipal">Téléphone principal</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-telephone text-muted"></i></span>
+                    <input asp-for="TelephonePrincipal" class="form-control" placeholder="+212 5XX-XXXXXX" />
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="EmailPrincipal">E-mail principal</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-envelope text-muted"></i></span>
+                    <input asp-for="EmailPrincipal" class="form-control" type="email" placeholder="contact@societe.ma" />
+                </div>
+                <span asp-validation-for="EmailPrincipal" class="text-danger small"></span>
+            </div>
+
+            <div class="col-12"><div class="section-divider"><i class="bi bi-person-badge me-1"></i>Personne de contact</div></div>
+
+            <div class="col-md-3">
+                <label class="form-label" asp-for="ContactNom">Nom</label>
+                <input asp-for="ContactNom" class="form-control" placeholder="Nom complet" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" asp-for="ContactFonction">Fonction</label>
+                <input asp-for="ContactFonction" class="form-control" placeholder="Ex: Gérant" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" asp-for="ContactTelephone">Téléphone</label>
+                <input asp-for="ContactTelephone" class="form-control" placeholder="+212 6XX-XXXXXX" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" asp-for="ContactEmail">E-mail</label>
+                <input asp-for="ContactEmail" class="form-control" type="email" placeholder="gerant@societe.ma" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2: Fiscal -->
+<div class="client-form-panel step-panel" id="step2" style="display:none;">
+    <div class="panel-head">
+        <div class="panel-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-calculator"></i></div>
+        <div>
+            <h5>Informations fiscales</h5>
+            <small>Régime TVA, clôture et contrat</small>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" asp-for="TypeTVA">Régime TVA</label>
+                <select name="TypeTVA" id="TypeTVA" class="form-select">
+                    @foreach (var r in tvaItems)
+                    {
+                        if (string.Equals(r.Code, selectedTva, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <option value="@r.Code" selected>@r.Label</option>
+                        }
+                        else
+                        {
+                            <option value="@r.Code">@r.Label</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" asp-for="MoisClotureExercice">Mois de clôture</label>
+                <select name="MoisClotureExercice" id="MoisClotureExercice" class="form-select">
+                    @for (var m = 1; m <= 12; m++)
+                    {
+                        if (m == selectedMois)
+                        {
+                            <option value="@m" selected>@moisNoms[m]</option>
+                        }
+                        else
+                        {
+                            <option value="@m">@moisNoms[m]</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="DateDebutActivite">Début d'activité</label>
+                <input asp-for="DateDebutActivite" class="form-control" type="date" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" asp-for="DateDebutContrat">Début de contrat</label>
+                <input asp-for="DateDebutContrat" class="form-control" type="date" />
+            </div>
+            <div class="col-12">
+                <label class="form-label" asp-for="NotesInternes">Notes internes</label>
+                <textarea asp-for="NotesInternes" class="form-control" rows="3" placeholder="Observations, particularités du dossier…"></textarea>
+            </div>
+        </div>
+
+        @if (!isEdit)
+        {
+            <div class="client-form-info mt-4 d-flex align-items-start gap-3">
+                <div class="panel-icon bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:40px;height:40px;border-radius:.65rem;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-briefcase"></i>
+                </div>
+                <div>
+                    <div class="fw-bold mb-1">Services fiduciaires — via contrat</div>
+                    <p class="mb-0 small text-body-secondary">
+                        Après création, activez les services (TVA, IS, CNSS, Paie…) en validant un
+                        <strong>Contrat commercial</strong>.
+                    </p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (isEdit)
+{
+<!-- Step 3: Services (edit only, read-only) -->
+<div class="client-form-panel step-panel" id="step3" style="display:none;">
+    <div class="panel-head">
+        <div class="panel-icon bg-info bg-opacity-10 text-info"><i class="bi bi-briefcase"></i></div>
+        <div class="flex-grow-1">
+            <h5>Services fiduciaires</h5>
+            <small>Gérés exclusivement par les contrats commerciaux</small>
+        </div>
+        @if (clientServices.Any(s => s.Actif))
+        {
+            <button type="button" class="btn btn-outline-success btn-sm rounded-pill" id="btnGenerateDecl">
+                <i class="bi bi-lightning-charge me-1"></i>Générer déclarations
+            </button>
+        }
+    </div>
+    <div class="panel-body">
+        <div class="client-form-info mb-3 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Pour modifier les services, utilisez
+            <a href="@Url.Action("Contrats", "Commercial")" class="fw-semibold text-decoration-none">Commercial → Contrats</a>.
+        </div>
+
+        @if (clientServices.Any())
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @{
+                    Func<string, string> getCat = t => (t ?? "").ToUpperInvariant() switch
+                    {
+                        "TVA" or "IS" or "IR" or "ETATSFISCAUX" => "Fiscal",
+                        "CNSS" or "PAIE" => "Social",
+                        "COMPTABILITE" or "BILAN" => "Comptable",
+                        "JURIDIQUE" => "Juridique",
+                        "AUDITCOMPTABLE" or "CONSEILFISCAL" => "Conseil",
+                        _ => "Autre"
+                    };
+                    var catColors = new Dictionary<string, string> { ["Fiscal"] = "primary", ["Social"] = "success", ["Comptable"] = "warning", ["Juridique"] = "danger", ["Conseil"] = "info" };
+                }
+                @foreach (var g in clientServices.Where(s => s.Actif).GroupBy(s => getCat(s.TypeService)).OrderBy(g => g.Key))
+                {
+                    var color = catColors.GetValueOrDefault(g.Key, "secondary");
+                    <span class="badge bg-@color bg-opacity-10 text-@color px-3 py-2 rounded-pill">
+                        @g.Key : @g.Count()
+                    </span>
+                }
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Service</th>
+                        <th>Catégorie</th>
+                        <th>Fréquence</th>
+                        <th>Début</th>
+                        <th>Fin</th>
+                        <th class="text-end">Tarif</th>
+                        <th>Exercice</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (clientServices.Any())
+                    {
+                        @foreach (var svc in clientServices)
+                        {
+                            <tr class="@(svc.Actif ? "" : "opacity-50")">
+                                <td class="ps-3 fw-semibold border-start border-3 @(svc.Actif ? "border-primary" : "border-secondary")">@(svc.LibelleService ?? svc.TypeService)</td>
+                                <td><span class="badge bg-light text-dark rounded-pill">@(svc.Categorie ?? "-")</span></td>
+                                <td>@(svc.Frequence ?? "-")</td>
+                                <td>@svc.DateDebut.ToString("dd/MM/yyyy")</td>
+                                <td>@(svc.DateFin?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td class="text-end">
+                                    @if (svc.HonorairesMensuels.HasValue) { @(svc.HonorairesMensuels.Value.ToString("N0") + " MAD/mois") }
+                                    else if (svc.HonorairesAnnuels.HasValue) { @(svc.HonorairesAnnuels.Value.ToString("N0") + " MAD/an") }
+                                    else { <text>-</text> }
+                                </td>
+                                <td>@(svc.ExerciceFiscal?.ToString() ?? "-")</td>
+                                <td>
+                                    @if (svc.Actif) { <span class="badge bg-success-subtle text-success rounded-pill">Actif</span> }
+                                    else { <span class="badge bg-secondary-subtle text-secondary rounded-pill">Inactif</span> }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Aucun service. Activez-les via un contrat commercial.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+}
+
+<div class="client-form-actions">
+    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" id="prevBtn" style="display:none;">
+        <i class="bi bi-arrow-left me-1"></i> Précédent
+    </button>
+    <div class="ms-auto d-flex gap-2 flex-wrap">
+        <a href="@(isEdit ? Url.Action("Details", "Clients", new { id = clientId }) : Url.Action("Index", "Clients"))" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+        <button type="button" class="btn btn-primary rounded-pill px-4" id="nextBtn">
+            Suivant <i class="bi bi-arrow-right ms-1"></i>
+        </button>
+        <button type="submit" class="btn btn-success rounded-pill px-4" id="submitBtn" style="display:none;">
+            <i class="bi bi-check-lg me-1"></i> @(isEdit ? "Enregistrer" : "Créer le client")
+        </button>
+    </div>
+</div>
+
+<script>
+(function () {
+    var currentStep = 0;
+    var totalSteps = @totalSteps;
+
+    function showStep(step) {
+        document.querySelectorAll('.step-panel').forEach(function (el) { el.style.display = 'none'; });
+        var panel = document.getElementById('step' + step);
+        if (panel) panel.style.display = '';
+        currentStep = step;
+
+        document.querySelectorAll('#clientFormWizard .wizard-step').forEach(function (el) {
+            var s = parseInt(el.getAttribute('data-step'), 10);
+            el.classList.remove('active', 'completed');
+            if (s === step) el.classList.add('active');
+            else if (s < step) el.classList.add('completed');
+        });
+        document.querySelectorAll('#clientFormWizard .wizard-connector').forEach(function (el, i) {
+            el.classList.toggle('active', i < step);
+        });
+
+        var prev = document.getElementById('prevBtn');
+        var next = document.getElementById('nextBtn');
+        var submit = document.getElementById('submitBtn');
+        if (prev) prev.style.display = step > 0 ? '' : 'none';
+        if (next) next.style.display = step < totalSteps - 1 ? '' : 'none';
+        if (submit) submit.style.display = step === totalSteps - 1 ? '' : 'none';
+    }
+
+    document.getElementById('nextBtn')?.addEventListener('click', function () {
+        if (currentStep < totalSteps - 1) showStep(currentStep + 1);
+    });
+    document.getElementById('prevBtn')?.addEventListener('click', function () {
+        if (currentStep > 0) showStep(currentStep - 1);
+    });
+    document.querySelectorAll('#clientFormWizard .wizard-step').forEach(function (el) {
+        el.addEventListener('click', function () {
+            showStep(parseInt(el.getAttribute('data-step'), 10));
+        });
+    });
+
+    showStep(0);
+
+    @if (isEdit)
+    {
+    <text>
+    document.getElementById('btnGenerateDecl')?.addEventListener('click', function () {
+        var clientId = @clientId;
+        var year = new Date().getFullYear();
+        if (!confirm('Générer les déclarations manquantes pour l\'exercice ' + year + ' ?')) return;
+        fetch('/Clients/GenerateDeclarations?clientId=' + clientId + '&exercice=' + year, { method: 'POST' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    alert((data.totalGenerated || 0) + ' déclaration(s) générée(s).');
+                    location.reload();
+                } else {
+                    alert(data.message || 'Erreur lors de la génération.');
+                }
+            })
+            .catch(function () { alert('Erreur réseau.'); });
+    });
+    </text>
+    }
+})();
+</script>
