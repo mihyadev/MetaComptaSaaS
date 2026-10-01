@@ -4,89 +4,242 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - MetaCompta Espace Client</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
 </head>
-<body>
+<body class="ex-portal">
 @{
     var clientName = Context.Session.GetString("ClientName") ?? "MetaCompta";
     var userName = Context.Session.GetString("UserName") ?? "Client";
     var initials = string.Concat(clientName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => w[0])).ToUpper();
+    if (string.IsNullOrWhiteSpace(initials)) { initials = "MC"; }
     var ctrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
-    string Nav(string c) => ctrl == c ? "nav-link active" : "nav-link";
+    var routeType = ViewContext.RouteData.Values["type"]?.ToString()
+        ?? ViewBag.DossierType as string
+        ?? "";
+    string Nav(string c) => ctrl == c ? "ex-nav-link active" : "ex-nav-link";
+    string DosNav(string type)
+    {
+        var active = ctrl == "Dossiers"
+            && string.Equals(routeType, type, StringComparison.OrdinalIgnoreCase);
+        return active ? "ex-nav-link active" : "ex-nav-link";
+    }
     var badgeTasks = Context.Items["BadgeTasks"] as int? ?? 0;
     var badgeNotif = Context.Items["BadgeNotif"] as int? ?? 0;
     var badgeMsg = Context.Items["BadgeMsg"] as int? ?? 0;
+    var dossiers = ViewBag.PortalDossiers as List<ExtranetDossierSummaryDto> ?? new List<ExtranetDossierSummaryDto>();
+    var exercices = ViewBag.PortalExercices as List<ExerciceComptableDto> ?? new List<ExerciceComptableDto>();
+    var selectedExoId = ViewBag.SelectedExerciceId as int? ?? (int.TryParse(Context.Session.GetString("SelectedExerciceId"), out var sid) ? sid : (int?)null);
+    var selectedExo = ViewBag.SelectedExercice as int? ?? (int.TryParse(Context.Session.GetString("SelectedExercice"), out var sy) ? sy : (int?)null);
+    var selectedExoStatut = ViewBag.SelectedExerciceStatut as string ?? Context.Session.GetString("SelectedExerciceStatut") ?? "Ouvert";
+    var showPaySlips = ViewBag.ShowPaySlipsMenu as bool? ?? false;
+    var returnUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
+    var pageTitle = ViewData["Title"]?.ToString() ?? "Espace Client";
 }
+<div class="ex-sidebar-backdrop" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
+<aside class="mc-sidebar ex-sidebar" id="sidebar" aria-label="Navigation extranet">
+    <div class="ex-side-brand">
+        <div class="ex-side-logo"><i class="bi bi-hexagon-fill"></i></div>
+        <div class="ex-side-brand-text">
+            <strong>MetaCompta</strong>
+            <span>Espace client</span>
+        </div>
+    </div>
 
-<nav class="mc-sidebar" id="sidebar" aria-label="Navigation extranet">
-    <div class="sidebar-brand">
-        <div class="brand-icon"><i class="bi bi-kanban-fill"></i></div>
-        <div>
-            <h4>Espace Client</h4>
-            <div class="brand-sub">@clientName</div>
-        </div>
-    </div>
-    <div class="sidebar-client-context">
-        <div class="client-context-card">
-            <div class="client-context-label"><i class="bi bi-building"></i> Entreprise</div>
+    <div class="ex-side-company">
+        <div class="ex-company-avatar">@initials</div>
+        <div class="ex-company-meta">
+            <div class="client-context-label">Entreprise</div>
             <div class="client-context-name" title="@clientName">@clientName</div>
-            <div class="client-context-hint">Portail extranet</div>
+            <div class="client-context-hint">
+                @if (selectedExo.HasValue)
+                {
+                    <span>Exercice @selectedExo</span>
+                    <span class="badge exo-statut-badge @(string.Equals(selectedExoStatut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")">@selectedExoStatut</span>
+                }
+                else
+                {
+                    <span>Portail fiscal & social</span>
+                }
+            </div>
         </div>
     </div>
-    <div class="sidebar-scroll">
-        <div class="nav-section">Menu <span class="section-line"></span></div>
-        <ul class="nav flex-column">
-            <li class="nav-item"><a class="@Nav("Home")" href="/Home"><i class="bi bi-grid-1x2-fill"></i> Tableau de bord</a></li>
-            <li class="nav-item"><a class="@Nav("Contrats")" href="/Contrats"><i class="bi bi-file-earmark-medical"></i> Mon contrat</a></li>
-            <li class="nav-item"><a class="@Nav("Declarations")" href="/Declarations"><i class="bi bi-file-earmark-text"></i> Mes déclarations</a></li>
-            <li class="nav-item"><a class="@Nav("Documents")" href="/Documents"><i class="bi bi-folder"></i> Documents</a></li>
-            <li class="nav-item">
-                <a class="@Nav("MessagesExtranet")" href="/MessagesExtranet"><i class="bi bi-chat-left-text"></i> Messages
-                    @if (badgeMsg > 0) { <span class="nav-badge">@badgeMsg</span> }
+
+    <nav class="ex-side-nav">
+        <div class="ex-nav-group">
+            <div class="ex-nav-label">Vue d'ensemble</div>
+            <a class="@Nav("Home")" href="/Home">
+                <span class="ex-nav-ico"><i class="bi bi-grid-1x2-fill"></i></span>
+                <span class="ex-nav-text">Tableau de bord</span>
+            </a>
+            <a class="@(ctrl == "Dossiers" && string.IsNullOrEmpty(routeType) ? "ex-nav-link active" : "ex-nav-link")" href="/Dossiers">
+                <span class="ex-nav-ico"><i class="bi bi-collection"></i></span>
+                <span class="ex-nav-text">Tous les dossiers</span>
+            </a>
+        </div>
+
+        <div class="ex-nav-group">
+            <div class="ex-nav-label">Mes dossiers</div>
+            @if (dossiers.Any())
+            {
+                @foreach (var d in dossiers)
+                {
+                    var icon = d.Type.ToUpperInvariant() switch
+                    {
+                        "TVA" => "bi-percent",
+                        "IS" or "DRF" or "CM" or "ACOMPTES" or "REG_IS" => "bi-bank",
+                        "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "bi-person-badge",
+                        "CNSS" or "AMO" => "bi-shield-check",
+                        "DTS" => "bi-file-earmark-person",
+                        _ => "bi-folder2-open"
+                    };
+                    var accent = d.Type.ToUpperInvariant() switch
+                    {
+                        "TVA" => "dos-tva",
+                        "IS" or "DRF" or "CM" or "ACOMPTES" or "REG_IS" => "dos-is",
+                        "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "dos-ir",
+                        "CNSS" or "AMO" or "DTS" => "dos-cnss",
+                        _ => "dos-default"
+                    };
+                    <a class="@DosNav(d.Type) @accent" href="/Dossiers/@d.Type">
+                        <span class="ex-nav-ico"><i class="bi @icon"></i></span>
+                        <span class="ex-nav-text">@d.DisplayName</span>
+                        @if (d.Urgentes > 0)
+                        {
+                            <span class="ex-nav-badge danger">@d.Urgentes</span>
+                        }
+                        else if (d.EnCours > 0)
+                        {
+                            <span class="ex-nav-badge">@d.EnCours</span>
+                        }
+                    </a>
+                }
+            }
+            else
+            {
+                <div class="ex-nav-empty">Aucun dossier pour cet exercice.</div>
+            }
+        </div>
+
+        <div class="ex-nav-group">
+            <div class="ex-nav-label">Collaboratif</div>
+            <a class="@Nav("Contrats")" href="/Contrats">
+                <span class="ex-nav-ico"><i class="bi bi-file-earmark-medical"></i></span>
+                <span class="ex-nav-text">Mon contrat</span>
+            </a>
+            <a class="@Nav("Documents")" href="/Documents">
+                <span class="ex-nav-ico"><i class="bi bi-folder2-open"></i></span>
+                <span class="ex-nav-text">Documents</span>
+            </a>
+            <a class="@Nav("MessagesExtranet")" href="/MessagesExtranet">
+                <span class="ex-nav-ico"><i class="bi bi-chat-left-text"></i></span>
+                <span class="ex-nav-text">Messages</span>
+                @if (badgeMsg > 0) { <span class="ex-nav-badge">@badgeMsg</span> }
+            </a>
+            <a class="@Nav("Tasks")" href="/Tasks">
+                <span class="ex-nav-ico"><i class="bi bi-check2-square"></i></span>
+                <span class="ex-nav-text">Mes tâches</span>
+                @if (badgeTasks > 0) { <span class="ex-nav-badge">@badgeTasks</span> }
+            </a>
+            @if (showPaySlips)
+            {
+                <a class="@Nav("PaySlips")" href="/PaySlips">
+                    <span class="ex-nav-ico"><i class="bi bi-receipt"></i></span>
+                    <span class="ex-nav-text">Bulletins de paie</span>
                 </a>
-            </li>
-            <li class="nav-item">
-                <a class="@Nav("Tasks")" href="/Tasks"><i class="bi bi-check2-square"></i> Mes tâches
-                    @if (badgeTasks > 0) { <span class="nav-badge">@badgeTasks</span> }
-                </a>
-            </li>
-            <li class="nav-item"><a class="@Nav("PaySlips")" href="/PaySlips"><i class="bi bi-receipt"></i> Bulletins de paie</a></li>
-            <li class="nav-item">
-                <a class="@Nav("Notifications")" href="/Notifications"><i class="bi bi-bell"></i> Notifications
-                    @if (badgeNotif > 0) { <span class="nav-badge">@badgeNotif</span> }
-                </a>
-            </li>
-            <li class="nav-item"><a class="@Nav("Profile")" href="/Profile"><i class="bi bi-building"></i> Mon entreprise</a></li>
-        </ul>
+            }
+            <a class="@Nav("Notifications")" href="/Notifications">
+                <span class="ex-nav-ico"><i class="bi bi-bell"></i></span>
+                <span class="ex-nav-text">Notifications</span>
+                @if (badgeNotif > 0) { <span class="ex-nav-badge">@badgeNotif</span> }
+            </a>
+            <a class="@Nav("Profile")" href="/Profile">
+                <span class="ex-nav-ico"><i class="bi bi-buildings"></i></span>
+                <span class="ex-nav-text">Mon entreprise</span>
+            </a>
+        </div>
+    </nav>
+
+    <div class="ex-side-foot">
+        <a href="/Account/Logout" class="ex-logout-link"><i class="bi bi-box-arrow-right"></i> Déconnexion</a>
     </div>
-</nav>
+</aside>
 
 <div class="mc-main">
-    <header class="mc-topbar">
-        <div class="d-flex align-items-center gap-3">
-            <button class="btn btn-light border d-md-none rounded-circle" type="button" onclick="document.getElementById('sidebar').classList.toggle('show')">
+    <header class="mc-topbar ex-topbar">
+        <div class="ex-topbar-left">
+            <button class="ex-icon-btn d-md-none" type="button" onclick="document.getElementById('sidebar').classList.toggle('show'); document.getElementById('sidebarBackdrop').classList.toggle('show');" aria-label="Menu">
                 <i class="bi bi-list"></i>
             </button>
-            <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2">@initials</span>
-            <span class="fw-bold d-none d-sm-inline">@clientName</span>
+            <div class="ex-topbar-title">
+                <span class="ex-topbar-kicker">Espace client</span>
+                <strong>@pageTitle</strong>
+            </div>
         </div>
-        <div class="user-menu">
-            <a class="notification-bell text-decoration-none position-relative" href="/Notifications" title="Notifications">
+        <div class="user-menu ex-topbar-actions">
+            <div class="dropdown exo-switcher">
+                <button class="ex-exo-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="ex-exo-ico"><i class="bi bi-calendar3"></i></span>
+                    @if (selectedExo.HasValue)
+                    {
+                        <span class="ex-exo-text">
+                            <span class="ex-exo-label">Exercice</span>
+                            <span class="ex-exo-year">@selectedExo</span>
+                        </span>
+                        <span class="badge exo-statut-badge @(string.Equals(selectedExoStatut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")">@selectedExoStatut</span>
+                    }
+                    else
+                    {
+                        <span class="small text-muted">Choisir un exercice</span>
+                    }
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end exo-dropdown shadow border-0">
+                    <li class="dropdown-header">Changer d'exercice</li>
+                    @if (exercices.Any())
+                    {
+                        @foreach (var e in exercices)
+                        {
+                            <li>
+                                <form method="post" action="/Dossiers/SwitchExercice" class="px-0">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="exerciceId" value="@e.Id" />
+                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                    <button type="submit" class="dropdown-item d-flex align-items-center justify-content-between gap-3 @(selectedExoId == e.Id ? "active" : "")">
+                                        <span class="fw-semibold">Exercice @e.Annee</span>
+                                        <span class="badge exo-statut-badge @(string.Equals(e.Statut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")">@e.Statut</span>
+                                    </button>
+                                </form>
+                            </li>
+                        }
+                    }
+                    else
+                    {
+                        <li><span class="dropdown-item-text small text-muted">Aucun exercice</span></li>
+                    }
+                </ul>
+            </div>
+            <a class="ex-icon-btn position-relative" href="/Notifications" title="Notifications">
                 <i class="bi bi-bell"></i>
                 @if (badgeNotif > 0)
                 {
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.55rem;">@badgeNotif</span>
+                    <span class="ex-dot-badge">@badgeNotif</span>
                 }
             </a>
             <div class="dropdown">
-                <button class="btn btn-light border rounded-pill dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
+                <button class="ex-user-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <span class="user-avatar">@(string.IsNullOrEmpty(userName) ? "C" : userName.Substring(0, 1).ToUpper())</span>
-                    <span class="d-none d-md-inline small fw-semibold">@userName</span>
+                    <span class="d-none d-md-flex flex-column align-items-start lh-1">
+                        <span class="ex-user-name">@userName</span>
+                        <span class="ex-user-role">Client</span>
+                    </span>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="/Profile"><i class="bi bi-building me-2"></i>Mon entreprise</a></li>
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                    <li><a class="dropdown-item" href="/Profile"><i class="bi bi-buildings me-2"></i>Mon entreprise</a></li>
+                    <li><a class="dropdown-item" href="/Contrats"><i class="bi bi-file-earmark-medical me-2"></i>Mon contrat</a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item text-danger" href="/Account/Logout"><i class="bi bi-box-arrow-right me-2"></i>Déconnexion</a></li>
                 </ul>
@@ -96,14 +249,14 @@
     <div class="mc-content">
         @if (TempData["Success"] != null)
         {
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <div class="alert alert-success alert-dismissible fade show ex-alert" role="alert">
                 <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         }
         @if (TempData["Error"] != null)
         {
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <div class="alert alert-danger alert-dismissible fade show ex-alert" role="alert">
                 <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>

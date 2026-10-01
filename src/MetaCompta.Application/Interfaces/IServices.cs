@@ -146,7 +146,7 @@ public interface IPayrollService
 
 public interface IDocumentService
 {
-    Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? categorie = null, int page = 1, int pageSize = 20, string? search = null);
+    Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(int cabinetId, int? clientId = null, string? categorie = null, int page = 1, int pageSize = 20, string? search = null, bool extranetVisibleOnly = false, string? extranetUserId = null);
     Task<ApiResponse<List<DocumentDto>>> GetByDeclarationIdAsync(int declarationId, int cabinetId);
     Task<ApiResponse<DocumentDto>> GetByIdAsync(int id, int cabinetId);
     Task<ApiResponse<DocumentDto>> UploadAsync(Stream fileStream, string fileName, string contentType, long size, string titre, string categorie, int? clientId, int cabinetId, string userId, int? declarationId = null, int? checklistItemId = null);
@@ -190,7 +190,8 @@ public interface IDashboardService
 {
     Task<ApiResponse<DashboardDto>> GetManagerDashboardAsync(int cabinetId, string userId);
     Task<ApiResponse<DashboardDto>> GetAssistantDashboardAsync(int cabinetId, string userId);
-    Task<ApiResponse<ExtranetDashboardDto>> GetExtranetDashboardAsync(int clientId);
+    Task<ApiResponse<ExtranetDashboardDto>> GetExtranetDashboardAsync(int clientId, int? exerciceComptableId = null);
+    Task<ApiResponse<ExtranetContextDto>> GetExtranetContextAsync(int clientId, int cabinetId, int? exerciceComptableId = null);
 }
 
 public interface IReferenceDataService

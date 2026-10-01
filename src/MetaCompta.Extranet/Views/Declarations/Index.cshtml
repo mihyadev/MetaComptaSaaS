@@ -21,20 +21,32 @@
 
 <div class="ex-kpi-grid">
     <div class="ex-kpi">
-        <div><div class="ex-kpi-label">En cours</div><div class="ex-kpi-value">@enCours</div></div>
-        <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">En cours</div><div class="ex-kpi-value">@enCours</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Périodes actives</div>
     </div>
     <div class="ex-kpi success">
-        <div><div class="ex-kpi-label">Clôturées / payées</div><div class="ex-kpi-value">@soumises</div></div>
-        <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Clôturées</div><div class="ex-kpi-value">@soumises</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Payées / archivées</div>
     </div>
     <div class="ex-kpi danger">
-        <div><div class="ex-kpi-label">Urgentes</div><div class="ex-kpi-value">@urgentes</div></div>
-        <div class="ex-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Urgentes</div><div class="ex-kpi-value">@urgentes</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">≤ 7 jours</div>
     </div>
     <div class="ex-kpi warning">
-        <div><div class="ex-kpi-label">Montant total</div><div class="ex-kpi-value" style="font-size:1.35rem;">@totalMontant.ToString("N0") <small class="fw-600 fs-6">MAD</small></div></div>
-        <div class="ex-kpi-icon"><i class="bi bi-cash-coin"></i></div>
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Montant</div><div class="ex-kpi-value" style="font-size:1.35rem;">@totalMontant.ToString("N0")</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-cash-coin"></i></div>
+        </div>
+        <div class="ex-kpi-foot">MAD total</div>
     </div>
 </div>
 
@@ -121,15 +133,20 @@
 
 @section Scripts {
 <script>
-$(function(){
-    $('.filter-btn').on('click', function(){
-        $('.filter-btn').removeClass('active');
-        $(this).addClass('active');
-        var f = $(this).data('filter');
-        if (f === 'all') { $('.declaration-card').show(); }
-        else if (f === 'urgente') { $('.declaration-card').hide(); $('.declaration-card[data-urgent="urgente"]').show(); }
-        else { $('.declaration-card').hide(); $('.declaration-card[data-group="'+f+'"]').show(); }
+(function () {
+    document.querySelectorAll('.filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.filter-btn').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var f = btn.getAttribute('data-filter');
+            document.querySelectorAll('.declaration-card').forEach(function (card) {
+                var show = f === 'all'
+                    || (f === 'urgente' && card.getAttribute('data-urgent') === 'urgente')
+                    || (f !== 'urgente' && card.getAttribute('data-group') === f);
+                card.style.display = show ? '' : 'none';
+            });
+        });
     });
-});
+})();
 </script>
 }

@@ -899,10 +899,48 @@ public class ExtranetDashboardController : ControllerBase
     private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
 
     [HttpGet("extranet")]
-    public async Task<IActionResult> Get()
+    public async Task<IActionResult> Get([FromQuery] int? exerciceComptableId = null)
     {
         if (ClientId == 0) return Forbid();
-        return Ok(await _service.GetExtranetDashboardAsync(ClientId));
+        return Ok(await _service.GetExtranetDashboardAsync(ClientId, exerciceComptableId));
+    }
+}
+
+[ApiController]
+[Route("api/client-exercices")]
+[Authorize(Policy = "ExtranetAccess")]
+public class ClientExercicesController : ControllerBase
+{
+    private readonly IComptabiliteService _compta;
+    public ClientExercicesController(IComptabiliteService compta) => _compta = compta;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        if (ClientId == 0) return Forbid();
+        return Ok(await _compta.GetExercicesAsync(ClientId, CabinetId));
+    }
+}
+
+[ApiController]
+[Route("api/client-context")]
+[Authorize(Policy = "ExtranetAccess")]
+public class ClientContextController : ControllerBase
+{
+    private readonly IDashboardService _dashboard;
+    public ClientContextController(IDashboardService dashboard) => _dashboard = dashboard;
+
+    private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
+    private int ClientId => int.TryParse(User.FindFirst("ClientId")?.Value, out var id) ? id : 0;
+
+    [HttpGet]
+    public async Task<IActionResult> Get([FromQuery] int? exerciceComptableId = null)
+    {
+        if (ClientId == 0) return Forbid();
+        return Ok(await _dashboard.GetExtranetContextAsync(ClientId, CabinetId, exerciceComptableId));
     }
 }
 
@@ -1991,8 +2029,13 @@ public class DocumentsController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] int? clientId, [FromQuery] string? categorie,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
     {
-        // Security: Extranet client users can only see their own documents
-        if (IsClientUser) clientId = ClientId;
+        // Security: Extranet client users can only see their own shared (+ self-uploaded) documents
+        if (IsClientUser)
+        {
+            clientId = ClientId;
+            return Ok(await _documentService.GetAllAsync(CabinetId, clientId, categorie, page, pageSize, search,
+                extranetVisibleOnly: true, extranetUserId: UserId));
+        }
         return Ok(await _documentService.GetAllAsync(CabinetId, clientId, categorie, page, pageSize, search));
     }
 

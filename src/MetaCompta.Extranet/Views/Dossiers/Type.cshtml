@@ -1,0 +1,185 @@
+@model List<MetaCompta.Application.DTOs.DeclarationDto>
+@using MetaCompta.Application.DTOs
+@{
+    var dossierLabel = ViewBag.DossierLabel as string ?? "Dossier";
+    var dossierType = ViewBag.DossierType as string ?? "";
+    var dossierFreq = ViewBag.DossierFrequency as string ?? "";
+    var dossierIcon = ViewBag.DossierIcon as string ?? "bi-folder2-open";
+    var dossierAccent = ViewBag.DossierAccent as string ?? "default";
+    var exoAnnee = ViewBag.ExerciceAnnee as int?;
+    var exoStatut = ViewBag.ExerciceStatut as string ?? "Ouvert";
+    ViewData["Title"] = $"Dossier {dossierLabel}";
+
+    var declarations = Model ?? new List<DeclarationDto>();
+    var closedStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "Soumise", "Validee", "Payee", "Payée", "Cloturee", "Clôturée", "Archivee", "Archivée", "Rapprochee", "Rapprochée" };
+    var enCours = declarations.Count(d => !closedStatuses.Contains(d.Statut));
+    var soumises = declarations.Count(d => closedStatuses.Contains(d.Statut));
+    var urgentes = declarations.Count(d => d.DaysUntilDeadline <= 7 && !closedStatuses.Contains(d.Statut));
+    var totalMontant = declarations.Where(d => d.MontantDu.HasValue).Sum(d => d.MontantDu!.Value);
+}
+
+<div class="ex-page-hero">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <a href="/Dossiers" class="ex-icon-btn" title="Retour aux dossiers"><i class="bi bi-arrow-left"></i></a>
+            <span class="ex-dossier-chip dos-@dossierAccent"><i class="bi @dossierIcon"></i>@dossierType</span>
+        </div>
+        <h4>Dossier @dossierLabel</h4>
+        <p class="ex-sub">
+            @if (!string.IsNullOrEmpty(dossierFreq)) { <span>@dossierFreq</span> }
+            @if (exoAnnee.HasValue)
+            {
+                <span class="mx-1">·</span>
+                <span>Exercice @exoAnnee</span>
+                <span class="badge exo-statut-badge @(string.Equals(exoStatut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")">@exoStatut</span>
+            }
+        </p>
+    </div>
+    <a href="/Tasks" class="btn btn-primary btn-sm"><i class="bi bi-list-task me-1"></i>Mes tâches</a>
+</div>
+
+<div class="ex-kpi-grid">
+    <div class="ex-kpi">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">En cours</div>
+                <div class="ex-kpi-value">@enCours</div>
+            </div>
+            <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Périodes actives</div>
+    </div>
+    <div class="ex-kpi success">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">Clôturées</div>
+                <div class="ex-kpi-value">@soumises</div>
+            </div>
+            <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Payées / archivées</div>
+    </div>
+    <div class="ex-kpi danger">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">Urgentes</div>
+                <div class="ex-kpi-value">@urgentes</div>
+            </div>
+            <div class="ex-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">≤ 7 jours</div>
+    </div>
+    <div class="ex-kpi warning">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">Montant</div>
+                <div class="ex-kpi-value" style="font-size:1.45rem;">@totalMontant.ToString("N0")</div>
+            </div>
+            <div class="ex-kpi-icon"><i class="bi bi-cash-coin"></i></div>
+        </div>
+        <div class="ex-kpi-foot">MAD total</div>
+    </div>
+</div>
+
+<div class="ex-filter-bar mb-4" id="filterTabs">
+    <button type="button" class="nav-link active filter-btn" data-filter="all">Toutes (@declarations.Count)</button>
+    <button type="button" class="nav-link filter-btn" data-filter="encours">En cours (@enCours)</button>
+    <button type="button" class="nav-link filter-btn" data-filter="soumise">Clôturées (@soumises)</button>
+    <button type="button" class="nav-link filter-btn" data-filter="urgente">Urgentes (@urgentes)</button>
+</div>
+
+<div id="declarationList">
+@foreach (var d in declarations.OrderBy(x => x.DateLimite))
+{
+    var isClosed = closedStatuses.Contains(d.Statut);
+    var statusClass = d.Statut switch
+    {
+        "Soumise" or "Validee" or "Payee" or "Payée" or "Cloturee" or "Clôturée" or "Archivee" or "Archivée" or "Rapprochee" or "Rapprochée" => "success",
+        "EnCours" or "EnPreparation" or "EnRevision" => "info",
+        "EnAttenteValidation" or "APayer" => "warning",
+        "Refusee" or "Rejetee" => "danger",
+        _ => "secondary"
+    };
+    var statusLabel = d.Statut switch
+    {
+        "Brouillon" => "Brouillon", "EnCours" => "En cours", "EnPreparation" => "En préparation",
+        "EnRevision" => "En révision", "EnAttenteValidation" => "Validation", "Validee" => "Validée",
+        "Soumise" => "Soumise", "Payee" or "Payée" => "Payée", "Cloturee" or "Clôturée" => "Clôturée",
+        "Archivee" or "Archivée" => "Archivée", "Rapprochee" or "Rapprochée" => "Rapprochée",
+        "APayer" => "À payer", "Rejetee" or "Refusee" => "Rejetée", _ => d.Statut
+    };
+    var isOverdue = d.DaysUntilDeadline <= 0 && !isClosed;
+    var isUrgent = d.DaysUntilDeadline <= 7 && !isOverdue && !isClosed;
+    var filterGroup = isClosed ? "soumise" : "encours";
+    var urgentAttr = isUrgent || isOverdue ? "urgente" : "";
+    var accent = isOverdue ? "accent-danger" : isUrgent ? "accent-warning" : isClosed ? "accent-success" : "accent-info";
+
+    <div class="ex-board-card @accent declaration-card" data-group="@filterGroup" data-urgent="@urgentAttr">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="ex-kpi-icon text-@statusClass" style="background:rgba(var(--bs-@(statusClass == "info" ? "info" : statusClass)-rgb),0.12);">
+                <i class="bi @dossierIcon"></i>
+            </div>
+            <div class="flex-grow-1" style="min-width:220px;">
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                    <h6 class="fw-bold mb-0">@d.Periode</h6>
+                    <span class="badge bg-@statusClass rounded-pill">@statusLabel</span>
+                    @if (isOverdue) { <span class="badge bg-danger rounded-pill">@(Math.Abs(d.DaysUntilDeadline))j retard</span> }
+                    else if (isUrgent) { <span class="badge bg-warning text-dark rounded-pill">@(d.DaysUntilDeadline)j</span> }
+                    @if (isClosed) { <span class="ex-status-pill bg-success-subtle text-success-emphasis"><i class="bi bi-lock-fill"></i>Clôturée</span> }
+                </div>
+                <div class="ex-meta-row">
+                    <span><i class="bi bi-calendar3"></i>Échéance @d.DateLimite.ToString("dd/MM/yyyy")</span>
+                    @if (d.MontantDu.HasValue) { <span><i class="bi bi-cash-coin"></i>@d.MontantDu.Value.ToString("N2") MAD</span> }
+                    @if (!string.IsNullOrEmpty(d.CurrentStepName))
+                    {
+                        <span><i class="bi bi-diagram-3"></i>@(d.WorkflowStatus == "Active" ? "Étape" : "WF") : @d.CurrentStepName</span>
+                    }
+                </div>
+                @if (d.TotalSteps > 0)
+                {
+                    <div class="ex-progress">
+                        <div class="ex-progress-meta">
+                            <span>Avancement</span>
+                            <span>@d.CompletedSteps / @d.TotalSteps (@d.ProgressPercent.ToString("0.#")%)</span>
+                        </div>
+                        <div class="progress"><div class="progress-bar" style="width:@(d.ProgressPercent.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+                    </div>
+                }
+            </div>
+            <a href="/Declarations/Details/@d.Id" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-eye me-1"></i>Détails</a>
+        </div>
+    </div>
+}
+</div>
+
+@if (!declarations.Any())
+{
+    <div class="ex-board-card text-center py-5">
+        <i class="bi @dossierIcon text-muted" style="font-size:3rem;"></i>
+        <h5 class="mt-3 fw-semibold text-muted">Aucune période</h5>
+        <p class="mb-0 small text-muted">Aucune déclaration @dossierLabel pour l'exercice sélectionné.</p>
+    </div>
+}
+
+@section Scripts {
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var buttons = document.querySelectorAll('.filter-btn');
+    var cards = document.querySelectorAll('.declaration-card');
+    buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            buttons.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var f = btn.getAttribute('data-filter');
+            cards.forEach(function (card) {
+                var show = f === 'all'
+                    || (f === 'urgente' && card.getAttribute('data-urgent') === 'urgente')
+                    || (f !== 'urgente' && card.getAttribute('data-group') === f);
+                card.style.display = show ? '' : 'none';
+            });
+        });
+    });
+});
+</script>
+}

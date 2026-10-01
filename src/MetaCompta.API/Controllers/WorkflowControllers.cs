@@ -324,13 +324,13 @@ public class ClientDeclarationsController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? type = null, [FromQuery] string? statut = null,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] int? exerciceComptableId = null)
     {
         // Security: always enforce ClientId from JWT — client cannot browse other clients
         if (ClientId == 0) return Forbid();
         // Open CNSS/TVA workflows started without CreateDeclaration → create so Extranet list is not empty
         await _workflows.HealMissingDeclarationsForClientAsync(CabinetId, ClientId, UserId);
-        return Ok(await _service.GetAllAsync(CabinetId, ClientId, type, statut, page, pageSize));
+        return Ok(await _service.GetAllAsync(CabinetId, ClientId, type, statut, page, pageSize, exerciceComptableId));
     }
 
     [HttpGet("{id}")]

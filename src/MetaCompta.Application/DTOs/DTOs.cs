@@ -569,8 +569,34 @@ public class ExtranetDashboardDto
     public int DeclarationsSoumises { get; set; }
     public int TachesEnAttente { get; set; }
     public int MessagesNonLus { get; set; }
+    public int? ExerciceComptableId { get; set; }
+    public int? ExerciceAnnee { get; set; }
+    public string? ExerciceStatut { get; set; }
+    public List<string> ActiveServices { get; set; } = new();
+    public List<ExtranetDossierSummaryDto> DossierSummaries { get; set; } = new();
     public List<ExtranetDeadlineDto> ProchainsDelais { get; set; } = new();
     public List<ExtranetRecentDto> DernieresDeclarations { get; set; } = new();
+}
+
+public class ExtranetDossierSummaryDto
+{
+    public string Type { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Frequency { get; set; } = string.Empty;
+    public bool IsShellOnly { get; set; }
+    public int EnCours { get; set; }
+    public int Urgentes { get; set; }
+    public int Cloturees { get; set; }
+    public int Total { get; set; }
+    public DateTime? NextDeadline { get; set; }
+}
+
+public class ExtranetContextDto
+{
+    public ExerciceComptableDto? CurrentExercice { get; set; }
+    public List<ExerciceComptableDto> Exercices { get; set; } = new();
+    public List<string> ActiveServices { get; set; } = new();
+    public List<ExtranetDossierSummaryDto> DossierSummaries { get; set; } = new();
 }
 
 public class ExtranetDeadlineDto

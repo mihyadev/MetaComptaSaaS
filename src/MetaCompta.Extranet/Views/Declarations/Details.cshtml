@@ -66,60 +66,57 @@
     else if (cnssData != null) montantAPayer = cnssData.MontantTotal;
 }
 
-<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+<div class="ex-page-hero">
     <div>
-        <a href="/Declarations" class="btn btn-sm btn-outline-secondary rounded-pill">
-            <i class="bi bi-arrow-left me-1"></i>Retour
-        </a>
+        <a href="/Dossiers" class="ex-icon-btn mb-2" title="Retour"><i class="bi bi-arrow-left"></i></a>
+        <h4 class="mb-1">@Model.Type — @Model.Periode</h4>
+        <p class="ex-sub mb-0">@clientName · @statutLabel</p>
     </div>
-    <div class="small text-muted">@clientName</div>
+    <span class="badge bg-@statutColor rounded-pill px-3 py-2">@statutLabel</span>
 </div>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-body p-4">
-        <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="rounded-3 d-flex align-items-center justify-content-center bg-primary text-white flex-shrink-0" style="width:50px;height:50px;">
-                <i class="bi @typeIcon fs-4"></i>
-            </div>
+<div class="ex-kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="ex-kpi">
+        <div class="ex-kpi-top">
             <div>
-                <h4 class="mb-0">@Model.Type — @Model.Periode</h4>
-                <span class="badge bg-@statutColor rounded-pill">@statutLabel</span>
+                <div class="ex-kpi-label">Montant à payer</div>
+                <div class="ex-kpi-value" style="font-size:1.45rem;">@montantAPayer.ToString("N2")</div>
             </div>
+            <div class="ex-kpi-icon"><i class="bi bi-cash-coin"></i></div>
         </div>
-
-        <div class="row g-3">
-            <div class="col-md-4">
-                <div class="card border shadow-none bg-body-tertiary">
-                    <div class="card-body p-3">
-                        <div class="small text-muted text-uppercase fw-semibold mb-1">Montant à payer</div>
-                        <div class="fs-4 fw-bold text-primary">@montantAPayer.ToString("N2")</div>
-                        <div class="small text-muted">MAD</div>
-                    </div>
-                </div>
+        <div class="ex-kpi-foot">MAD</div>
+    </div>
+    <div class="ex-kpi @(isOverdue ? "danger" : isUrgent ? "warning" : "success")">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">Date limite</div>
+                <div class="ex-kpi-value" style="font-size:1.25rem;">@Model.DateLimite.ToString("dd/MM/yyyy")</div>
             </div>
-            <div class="col-md-4">
-                <div class="card border shadow-none bg-body-tertiary">
-                    <div class="card-body p-3">
-                        <div class="small text-muted text-uppercase fw-semibold mb-1">Date limite</div>
-                        <div class="fs-5 fw-bold @(isOverdue ? "text-danger" : isUrgent ? "text-warning" : "")">@Model.DateLimite.ToString("dd/MM/yyyy")</div>
-                        @if (isOverdue) { <div class="small text-danger">@(Math.Abs(Model.DaysUntilDeadline)) jours de retard</div> }
-                        else if (isDone) { <div class="small text-success">Terminée</div> }
-                        else { <div class="small text-muted">@Model.DaysUntilDeadline jours restants</div> }
-                    </div>
-                </div>
+            <div class="ex-kpi-icon"><i class="bi bi-calendar-event"></i></div>
+        </div>
+        <div class="ex-kpi-foot">
+            @if (isOverdue) { <text>@(Math.Abs(Model.DaysUntilDeadline)) j de retard</text> }
+            else if (isDone) { <text>Terminée</text> }
+            else { <text>@Model.DaysUntilDeadline j restants</text> }
+        </div>
+    </div>
+    <div class="ex-kpi purple">
+        <div class="ex-kpi-top">
+            <div>
+                <div class="ex-kpi-label">Votre comptable</div>
+                <div class="ex-kpi-value" style="font-size:1.1rem;">@(Model.AssistantName ?? "Non assigné")</div>
             </div>
-            <div class="col-md-4">
-                <div class="card border shadow-none bg-body-tertiary">
-                    <div class="card-body p-3">
-                        <div class="small text-muted text-uppercase fw-semibold mb-1">Votre comptable</div>
-                        <div class="fw-bold">@(Model.AssistantName ?? "Non assigné")</div>
-                        @if (Model.MontantCredit.HasValue && Model.MontantCredit > 0)
-                        {
-                            <div class="small mt-2 text-success">Crédit disponible: @Model.MontantCredit.Value.ToString("N2") MAD</div>
-                        }
-                    </div>
-                </div>
-            </div>
+            <div class="ex-kpi-icon"><i class="bi @typeIcon"></i></div>
+        </div>
+        <div class="ex-kpi-foot">
+            @if (Model.MontantCredit.HasValue && Model.MontantCredit > 0)
+            {
+                <text>Crédit @Model.MontantCredit.Value.ToString("N2") MAD</text>
+            }
+            else
+            {
+                <text>Interlocuteur cabinet</text>
+            }
         </div>
     </div>
 </div>
@@ -129,8 +126,8 @@
     var isCollecteStep = currentStep!.StepType == "Collecte" || currentStep.StepType == "DemandePieces";
     var isApprovalStep = currentStep.StepType == "ValidationClient";
 
-    <div class="card shadow-sm mb-4 border-start border-warning border-4">
-        <div class="card-body p-4">
+    <div class="ex-board-card declaration-card accent-warning mb-4">
+        <div class="ex-panel-body">
             <h6 class="fw-bold mb-2"><i class="bi bi-bell text-warning me-1"></i>Action demandée</h6>
             <p class="small mb-3 text-muted">@currentStep.StepName @if (!string.IsNullOrEmpty(currentStep.Notes)) { <span>— @currentStep.Notes</span> }</p>
 
@@ -239,8 +236,8 @@ else if (isDone)
 @* ── CNSS: saisie personnel temporarily hidden — status / docs / messages only ── *@
 @if (string.Equals(Model.Type, "CNSS", StringComparison.OrdinalIgnoreCase) || string.Equals(Model.Type, "AMO", StringComparison.OrdinalIgnoreCase))
 {
-    <div class="card shadow-sm mb-4" style="border-left: 4px solid #f59e0b;">
-        <div class="card-body px-4 py-3">
+    <div class="ex-board-card declaration-card accent-warning mb-4">
+        <div class="ex-panel-body py-3">
             <h6 class="fw-bold mb-1"><i class="bi bi-shield-check text-warning me-2"></i>CNSS — suivi simplifié</h6>
             <p class="text-muted mb-0 small">Pour le moment, votre cabinet gère le <strong>statut</strong>, les <strong>documents</strong> et les <strong>messages</strong>. Le détail du personnel et des cotisations sera réactivé plus tard.</p>
         </div>
@@ -250,9 +247,12 @@ else if (isDone)
     @if (checklist.Any())
     {
         <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-                    <span><i class="bi bi-ui-checks text-primary me-2"></i>Checklist pièces annuelles (@checklist.Count(c => c.IsReceived)/@checklist.Count)</span>
+            <div class="ex-panel">
+                <div class="ex-panel-head d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <h3><i class="bi bi-ui-checks text-primary me-2"></i>Checklist pièces</h3>
+                        <p>@checklist.Count(c => c.IsReceived)/@checklist.Count reçues</p>
+                    </div>
                     @if (checklist.All(c => !c.IsRequired || c.IsReceived))
                     {
                         <span class="badge bg-success rounded-pill">Complète</span>
@@ -262,7 +262,7 @@ else if (isDone)
                         <span class="badge bg-warning text-dark rounded-pill">En attente</span>
                     }
                 </div>
-                <div class="card-body p-0">
+                <div class="ex-panel-body p-0">
                     <div class="list-group list-group-flush">
                         @foreach (var item in checklist.OrderBy(c => c.SortOrder))
                         {
@@ -307,14 +307,17 @@ else if (isDone)
         </div>
     }
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-paperclip text-primary me-2"></i>Documents (@documents.Count)</span>
+        <div class="ex-panel h-100">
+            <div class="ex-panel-head d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h3><i class="bi bi-paperclip text-primary me-2"></i>Documents</h3>
+                    <p>@documents.Count fichier(s)</p>
+                </div>
                 <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#uploadFormClient">
                     Déposer
                 </button>
             </div>
-            <div class="card-body p-0">
+            <div class="ex-panel-body p-0">
                 <div class="collapse p-3" id="uploadFormClient">
                     <div class="p-3 rounded-3 bg-body-tertiary border">
                         <form asp-controller="Declarations" asp-action="UploadDocument" method="post" enctype="multipart/form-data">
@@ -365,65 +368,73 @@ else if (isDone)
     </div>
 
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100" id="messages">
-            <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-chat-dots text-primary me-2"></i>Messages (@messages.Count)</span>
-                <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#newMsgForm">Écrire</button>
-            </div>
-            <div class="card-body p-0">
-                <div class="collapse" id="newMsgForm">
-                    <div class="border-top p-3">
-                        <form asp-controller="Declarations" asp-action="SendMessage" method="post">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="declarationId" value="@Model.Id" />
-                            <input type="hidden" name="clientId" value="@Model.ClientId" />
-                            <div class="mb-2"><input type="text" name="sujet" class="form-control form-control-sm rounded-pill" placeholder="Objet (optionnel)" style="font-size:.85rem;" /></div>
-                            <div class="d-flex gap-2 align-items-end">
-                                <textarea name="contenu" class="form-control flex-grow-1" rows="2" placeholder="Écrivez votre message..." required style="border-radius:20px;"></textarea>
-                                <button type="submit" class="btn btn-primary btn-sm rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px; height:40px;" title="Envoyer"><i class="bi bi-send"></i></button>
-                            </div>
-                        </form>
-                    </div>
+        <div class="ex-panel h-100 ex-decl-chat" id="messages">
+            <div class="ex-panel-head d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h3><i class="bi bi-chat-dots text-primary me-2"></i>Messages</h3>
+                    <p>@messages.Count message(s) · répondez directement ici</p>
                 </div>
-
-                @if (messages.Any())
-                {
-                    <div class="d-flex flex-column gap-2 p-3" style="max-height:320px; overflow-y:auto;">
+                <a href="/MessagesExtranet?thread=@Model.Id" class="btn btn-sm btn-outline-primary rounded-pill">Messagerie</a>
+            </div>
+            <div class="ex-panel-body p-0 d-flex flex-column" style="min-height:380px;">
+                <div class="wa-log flex-grow-1">
+                    @if (messages.Any())
+                    {
+                        <ol class="wa-messages">
                         @{
                             DateTime? pDate = null;
+                            string? prevSender = null;
                         }
                         @foreach (var msg in messages.OrderBy(m => m.CreatedAt))
                         {
                             var isMe = msg.SenderRole == "Client";
+                            var sameSender = prevSender != null && string.Equals(prevSender, msg.SenderId + "|" + msg.SenderRole, StringComparison.Ordinal);
                             if (pDate == null || msg.CreatedAt.Date != pDate)
                             {
                                 pDate = msg.CreatedAt.Date;
+                                sameSender = false;
                                 var dl = msg.CreatedAt.Date == DateTime.Today ? "Aujourd'hui"
                                     : msg.CreatedAt.Date == DateTime.Today.AddDays(-1) ? "Hier"
                                     : msg.CreatedAt.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"));
-                                <div class="text-center text-muted small border-top border-bottom py-1 my-2"><span>@dl</span></div>
+                                <li class="wa-day"><span>@dl</span></li>
                             }
-                            <div class="d-flex @(isMe ? "justify-content-end" : "")">
-                                <div class="@(isMe ? "bg-primary text-white" : "bg-light border") rounded-3 p-3 @(isMe ? "ms-5" : "me-5")" style="max-width:80%;">
-                                    <div class="d-flex align-items-center gap-1 mb-1" style="font-size:.72rem; font-weight:600;">
-                                        <i class="bi @(isMe ? "bi-person" : "bi-building")"></i>
-                                        <span class="@(isMe ? "text-white-50" : "text-info")">@(isMe ? "Vous" : msg.SenderName)</span>
-                                    </div>
+                            <li class="wa-msg @(isMe ? "own" : "peer") @(sameSender ? "grouped" : "")">
+                                <article class="wa-bubble">
+                                    @if (!isMe && !sameSender)
+                                    {
+                                        <header class="wa-bubble-meta">@msg.SenderName</header>
+                                    }
                                     @if (!string.IsNullOrEmpty(msg.Sujet))
                                     {
-                                        <div class="@(isMe ? "text-white-75" : "fw-semibold")" style="font-size:.78rem; font-weight:600; margin-bottom:4px;">@msg.Sujet</div>
+                                        <div class="wa-subject">@msg.Sujet</div>
                                     }
-                                    <div>@msg.Contenu</div>
-                                    <div class="text-end small mt-1 @(isMe ? "text-white-50" : "text-muted")">@msg.CreatedAt.ToString("HH:mm")</div>
-                                </div>
-                            </div>
+                                    <p class="wa-text">@msg.Contenu</p>
+                                    <footer class="wa-meta">
+                                        <time>@msg.CreatedAt.ToString("HH:mm")</time>
+                                    </footer>
+                                </article>
+                            </li>
+                            prevSender = msg.SenderId + "|" + msg.SenderRole;
                         }
-                    </div>
-                }
-                else
-                {
-                    <div class="text-center py-4 text-muted">Aucun message</div>
-                }
+                        </ol>
+                    }
+                    else
+                    {
+                        <div class="wa-empty-inline py-4"><p class="mb-0">Aucun message — écrivez ci-dessous.</p></div>
+                    }
+                </div>
+                <div class="wa-composer">
+                    <form asp-controller="Declarations" asp-action="SendMessage" method="post" class="wa-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="declarationId" value="@Model.Id" />
+                        <input type="hidden" name="clientId" value="@Model.ClientId" />
+                        <input type="text" name="sujet" class="wa-sujet" placeholder="Objet (optionnel)" />
+                        <div class="wa-compose-row">
+                            <textarea name="contenu" rows="1" placeholder="Écrire un message au cabinet…" required></textarea>
+                            <button type="submit" class="wa-send" title="Envoyer"><i class="bi bi-send-fill"></i></button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
@@ -431,8 +442,8 @@ else if (isDone)
 
 @if (!string.IsNullOrEmpty(Model.PdfUrl))
 {
-    <div class="card shadow-sm mb-4">
-        <div class="card-body p-3 d-flex align-items-center justify-content-between">
+    <div class="ex-panel mb-4">
+        <div class="ex-panel-body p-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
             <span><i class="bi bi-file-earmark-pdf text-danger me-2"></i>Déclaration officielle PDF</span>
             <a href="@Model.PdfUrl" target="_blank" class="btn btn-primary btn-sm"><i class="bi bi-download me-1"></i>Télécharger</a>
         </div>
@@ -441,8 +452,8 @@ else if (isDone)
 
 @if (tvaData != null || isData != null || irData != null || cnssData != null)
 {
-    <div class="card shadow-sm mb-4">
-        <div class="card-body p-0">
+    <div class="ex-panel mb-4">
+        <div class="ex-panel-body p-0">
             <button class="btn w-100 text-start p-3 d-flex align-items-center border-0 text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#fiscalDetail" style="font-size:.85rem;">
                 <i class="bi bi-calculator text-primary me-2"></i>
                 <span class="text-body">Détail fiscal (optionnel)</span>

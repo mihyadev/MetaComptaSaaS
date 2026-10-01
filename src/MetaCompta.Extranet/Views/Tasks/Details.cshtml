@@ -17,7 +17,7 @@
 
 <div class="ex-page-hero">
     <div>
-        <a href="/Tasks" class="btn btn-sm btn-outline-secondary mb-2"><i class="bi bi-arrow-left me-1"></i>Mes tâches</a>
+        <a href="/Tasks" class="ex-icon-btn mb-2" title="Retour"><i class="bi bi-arrow-left"></i></a>
         <h4 class="mb-1">@step.StepName</h4>
         <p class="ex-sub mb-0">
             @(step.DeclarationType ?? decl?.Type ?? "Dossier") @(step.DeclarationPeriode ?? decl?.Periode)
@@ -27,7 +27,7 @@
     <span class="ex-status-pill bg-warning-subtle text-warning-emphasis">À votre charge</span>
 </div>
 
-<div class="ex-board-card accent-warning mb-4">
+<div class="ex-board-card declaration-card accent-warning mb-4">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
         <div>
             <div class="fw-bold">Action demandée par votre cabinet</div>

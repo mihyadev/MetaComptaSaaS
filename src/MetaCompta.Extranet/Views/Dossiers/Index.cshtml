@@ -1,0 +1,86 @@
+@model List<MetaCompta.Application.DTOs.ExtranetDossierSummaryDto>
+@{
+    ViewData["Title"] = "Mes dossiers";
+    var dossiers = Model ?? new List<ExtranetDossierSummaryDto>();
+    var exoAnnee = ViewBag.ExerciceAnnee as int?;
+    var exoStatut = ViewBag.ExerciceStatut as string ?? "Ouvert";
+}
+
+<div class="ex-page-hero">
+    <div>
+        <h4>Mes dossiers</h4>
+        <p class="ex-sub">
+            Suivi clair de vos obligations fiscales et sociales
+            @if (exoAnnee.HasValue)
+            {
+                <span class="mx-1">·</span>
+                <span>Exercice @exoAnnee</span>
+                <span class="badge exo-statut-badge @(string.Equals(exoStatut, "Ouvert", StringComparison.OrdinalIgnoreCase) ? "exo-ouvert" : "exo-cloture")">@exoStatut</span>
+            }
+        </p>
+    </div>
+</div>
+
+@if (!dossiers.Any())
+{
+    <div class="ex-board-card">
+        <div class="ex-empty py-5">
+            <i class="bi bi-folder2-open"></i>
+            <h5 class="mt-3 fw-bold text-muted">Aucun dossier</h5>
+            <p>Vos dossiers (TVA, IS, CNSS…) apparaîtront ici selon votre contrat et l'exercice sélectionné.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="ex-dossier-grid">
+        @foreach (var d in dossiers)
+        {
+            var accent = d.Type.ToUpperInvariant() switch
+            {
+                "TVA" => "dos-tva",
+                "IS" or "DRF" or "CM" or "ACOMPTES" or "REG_IS" => "dos-is",
+                "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "dos-ir",
+                "CNSS" or "AMO" or "DTS" => "dos-cnss",
+                _ => "dos-default"
+            };
+            var icon = d.Type.ToUpperInvariant() switch
+            {
+                "TVA" => "bi-percent",
+                "IS" or "DRF" or "CM" or "ACOMPTES" or "REG_IS" => "bi-bank",
+                "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "bi-person-badge",
+                "CNSS" or "AMO" => "bi-shield-check",
+                "DTS" => "bi-file-earmark-person",
+                _ => "bi-folder2-open"
+            };
+            <a href="/Dossiers/@d.Type" class="ex-dossier-card @accent text-decoration-none">
+                <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+                    <div class="ex-kpi-icon"><i class="bi @icon"></i></div>
+                    @if (d.Urgentes > 0)
+                    {
+                        <span class="badge bg-danger rounded-pill">@d.Urgentes urgente(s)</span>
+                    }
+                    else
+                    {
+                        <span class="ex-dossier-chip @accent">@d.Type</span>
+                    }
+                </div>
+                <h3>@d.DisplayName</h3>
+                <p class="ex-dossier-freq">@d.Frequency</p>
+                <div class="ex-dossier-stats">
+                    <span><strong>@d.EnCours</strong>en cours</span>
+                    <span><strong>@d.Cloturees</strong>clôturées</span>
+                    <span><strong>@d.Total</strong>total</span>
+                </div>
+                @if (d.NextDeadline.HasValue)
+                {
+                    <div class="ex-dossier-deadline">
+                        <i class="bi bi-calendar-event"></i>
+                        Prochaine échéance @d.NextDeadline.Value.ToString("dd/MM/yyyy")
+                    </div>
+                }
+                <span class="ex-dossier-cta">Ouvrir le dossier <i class="bi bi-arrow-right"></i></span>
+            </a>
+        }
+    </div>
+}

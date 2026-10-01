@@ -21,7 +21,8 @@ public class DocumentService : IDocumentService
 
     public async Task<ApiResponse<PagedResult<DocumentDto>>> GetAllAsync(
         int cabinetId, int? clientId = null, string? categorie = null,
-        int page = 1, int pageSize = 20, string? search = null)
+        int page = 1, int pageSize = 20, string? search = null,
+        bool extranetVisibleOnly = false, string? extranetUserId = null)
     {
         var query = _db.Documents
             .Include(d => d.Client)
@@ -33,6 +34,13 @@ public class DocumentService : IDocumentService
         if (!string.IsNullOrEmpty(categorie)) query = query.Where(d => d.Categorie == categorie);
         if (!string.IsNullOrEmpty(search))
             query = query.Where(d => d.Titre.Contains(search) || d.NomFichier.Contains(search));
+
+        if (extranetVisibleOnly)
+        {
+            query = query.Where(d =>
+                d.PartageExtranet
+                || (!string.IsNullOrEmpty(extranetUserId) && d.UploadedByUserId == extranetUserId));
+        }
 
         var total = await query.CountAsync();
         var items = await query

@@ -1,105 +1,105 @@
 @model List<PaySlipDto>
 @{
-    ViewData["Title"] = "Mes Bulletins de Paie";
+    ViewData["Title"] = "Bulletins de paie";
     var payslips = Model ?? new List<PaySlipDto>();
     var totalNet = payslips.Sum(p => p.SalaireNet);
     var totalBrut = payslips.Sum(p => p.SalaireBrut);
     var totalRetenues = payslips.Sum(p => p.CotisationCNSS + p.CotisationAMO + p.IR);
 }
 
-<div class="mb-4">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+<div class="ex-page-hero">
+    <div>
+        <h4>Bulletins de paie</h4>
+        <p class="ex-sub">Historique des bulletins partagés pour votre entreprise.</p>
+    </div>
+</div>
+
+<div class="ex-kpi-grid">
+    <div class="ex-kpi">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Bulletins</div><div class="ex-kpi-value">@payslips.Count</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Périodes</div>
+    </div>
+    <div class="ex-kpi purple">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Brut</div><div class="ex-kpi-value" style="font-size:1.35rem;">@totalBrut.ToString("N0")</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-cash-stack"></i></div>
+        </div>
+        <div class="ex-kpi-foot">MAD</div>
+    </div>
+    <div class="ex-kpi danger">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Retenues</div><div class="ex-kpi-value" style="font-size:1.35rem;">@totalRetenues.ToString("N0")</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-dash-circle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">CNSS + AMO + IR</div>
+    </div>
+    <div class="ex-kpi success">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Net</div><div class="ex-kpi-value" style="font-size:1.35rem;">@totalNet.ToString("N0")</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">MAD</div>
+    </div>
+</div>
+
+<div class="ex-board-card">
+    <div class="ex-panel-head">
         <div>
-            <h4 class="fw-bold mb-1">Mes Bulletins de Paie</h4>
-            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0" style="font-size:0.8rem;"><li class="breadcrumb-item"><a href="/Home" class="text-decoration-none">Accueil</a></li><li class="breadcrumb-item active">Bulletins de paie</li></ol></nav>
+            <h3><i class="bi bi-receipt text-primary me-2"></i>Historique</h3>
+            <p>Consultation des bulletins disponibles</p>
         </div>
     </div>
-</div>
-
-<div class="row g-3 mb-4">
-    <div class="col-xl-3 col-md-6">
-        <div class="card shadow-sm h-100 border-start border-primary border-4">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div><div class="small text-muted text-uppercase fw-semibold">Bulletins</div><div class="fs-3 fw-bold">@payslips.Count</div></div>
-                <div class="rounded-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-file-earmark-text fs-5"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="card shadow-sm h-100 border-start border-info border-4">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div><div class="small text-muted text-uppercase fw-semibold">Total Brut</div><div class="fs-4 fw-bold text-info">@totalBrut.ToString("N2")</div><div class="small text-muted">MAD</div></div>
-                <div class="rounded-3 d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-cash-stack fs-5"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="card shadow-sm h-100 border-start border-danger border-4">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div><div class="small text-muted text-uppercase fw-semibold">Retenues</div><div class="fs-4 fw-bold text-danger">@totalRetenues.ToString("N2")</div><div class="small text-muted">MAD</div></div>
-                <div class="rounded-3 d-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-dash-circle fs-5"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6">
-        <div class="card shadow-sm h-100 border-start border-success border-4">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div><div class="small text-muted text-uppercase fw-semibold">Total Net</div><div class="fs-4 fw-bold text-success">@totalNet.ToString("N2")</div><div class="small text-muted">MAD</div></div>
-                <div class="rounded-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success flex-shrink-0" style="width:48px;height:48px;"><i class="bi bi-check-circle fs-5"></i></div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card shadow-sm">
-    <div class="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-receipt text-primary me-2"></i>Historique des bulletins</span>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th class="ps-4">Période</th>
-                        <th class="text-end">Brut</th>
-                        <th class="text-end">CNSS</th>
-                        <th class="text-end">AMO</th>
-                        <th class="text-end">IR</th>
-                        <th class="text-end">Net à payer</th>
-                        <th class="text-end pe-4">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (payslips.Any())
-                    {
-                        @foreach (var p in payslips)
-                        {
-                            <tr>
-                                <td class="ps-4">
-                                    <div class="fw-semibold">@p.PeriodLabel</div>
-                                </td>
-                                <td class="text-end">@p.SalaireBrut.ToString("N2")</td>
-                                <td class="text-end text-danger">@p.CotisationCNSS.ToString("N2")</td>
-                                <td class="text-end text-danger">@p.CotisationAMO.ToString("N2")</td>
-                                <td class="text-end text-danger">@p.IR.ToString("N2")</td>
-                                <td class="text-end fw-bold text-success">@p.SalaireNet.ToString("N2") MAD</td>
-                                <td class="text-end pe-4">
-                                    <button class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Imprimer</button>
-                                </td>
-                            </tr>
-                        }
-                    }
-                    else
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 ex-table">
+            <thead>
+                <tr>
+                    <th>Période</th>
+                    <th class="text-end">Brut</th>
+                    <th class="text-end">CNSS</th>
+                    <th class="text-end">AMO</th>
+                    <th class="text-end">IR</th>
+                    <th class="text-end">Net à payer</th>
+                    <th class="text-end"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (payslips.Any())
+                {
+                    @foreach (var p in payslips)
                     {
                         <tr>
-                            <td colspan="7" class="text-center py-5">
-                                <i class="bi bi-file-earmark-x text-muted" style="font-size:2.8rem;"></i>
-                                <p class="mt-2 mb-0 text-muted">Aucun bulletin de paie disponible</p>
-                            </td>
+                            <td class="fw-semibold">@p.PeriodLabel</td>
+                            <td class="text-end">@p.SalaireBrut.ToString("N2")</td>
+                            <td class="text-end text-danger">@p.CotisationCNSS.ToString("N2")</td>
+                            <td class="text-end text-danger">@p.CotisationAMO.ToString("N2")</td>
+                            <td class="text-end text-danger">@p.IR.ToString("N2")</td>
+                            <td class="text-end fw-bold text-success">@p.SalaireNet.ToString("N2") MAD</td>
+                            <td class="text-end"><button class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Imprimer</button></td>
                         </tr>
                     }
-                </tbody>
-            </table>
-        </div>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7">
+                            <div class="ex-empty">
+                                <i class="bi bi-file-earmark-x"></i>
+                                @if (ViewBag.PaySlipsUnavailable as bool? == true)
+                                {
+                                    <p>Les bulletins seront bientôt disponibles dans votre espace client.</p>
+                                }
+                                else
+                                {
+                                    <p>Aucun bulletin de paie disponible.</p>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
     </div>
 </div>

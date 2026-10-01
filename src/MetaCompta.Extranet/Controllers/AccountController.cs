@@ -35,6 +35,17 @@ public class AccountController : ExtranetBaseController
             HttpContext.Session.SetString("ClientName", result.Data.User?.ClientName ?? "");
             HttpContext.Session.SetString("ClientId", result.Data.User?.ClientId?.ToString() ?? "");
             HttpContext.Session.SetString("CabinetName", result.Data.User?.CabinetName ?? "");
+
+            // Prefetch portal exercice + dossiers for the first authenticated hit
+            try
+            {
+                var ctx = await GetAsync<ApiResponse<ExtranetContextDto>>("api/client-context");
+                if (ctx?.Data?.CurrentExercice != null)
+                    SetExerciceSession(ctx.Data.CurrentExercice);
+                if (ctx?.Data?.ActiveServices != null)
+                    SetActiveServicesSession(ctx.Data.ActiveServices);
+            }
+            catch { /* context loads on next request */ }
         }
         return RedirectToAction("Index", "Home");
     }

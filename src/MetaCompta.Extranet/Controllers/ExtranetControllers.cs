@@ -17,10 +17,14 @@ public class HomeController : ExtranetBaseController
         if (string.IsNullOrEmpty(HttpContext.Session.GetString("JwtToken")))
             return RedirectToAction("Login", "Account");
 
-        var response = await GetAsync<ApiResponse<ExtranetDashboardDto>>("api/dashboard/extranet");
+        await EnsurePortalContextAsync();
+        var exoQs = SelectedExerciceId is > 0 ? $"?exerciceComptableId={SelectedExerciceId}" : "";
+        var response = await GetAsync<ApiResponse<ExtranetDashboardDto>>("api/dashboard/extranet" + exoQs);
         ViewBag.Dashboard = response?.Data;
         ViewBag.ClientName = HttpContext.Session.GetString("ClientName");
         ViewBag.UserName = HttpContext.Session.GetString("UserName");
+        ViewBag.ExerciceAnnee = SelectedExercice ?? response?.Data?.ExerciceAnnee;
+        ViewBag.ExerciceStatut = SelectedExerciceStatut ?? response?.Data?.ExerciceStatut ?? "Ouvert";
         return View();
     }
 }
@@ -44,14 +48,11 @@ public class DeclarationsController : ExtranetBaseController
 {
     public DeclarationsController(IHttpClientFactory http) : base(http) { }
 
-    public async Task<IActionResult> Index()
+    public IActionResult Index()
     {
         if (string.IsNullOrEmpty(HttpContext.Session.GetString("JwtToken")))
             return RedirectToAction("Login", "Account");
-
-        var response = await GetAsync<ApiResponse<PagedResult<DeclarationDto>>>("api/client-declarations");
-        var declarations = response?.Data?.Items ?? new List<DeclarationDto>();
-        return View(declarations);
+        return RedirectToAction("Index", "Dossiers");
     }
 
     public async Task<IActionResult> Details(int id)
@@ -195,11 +196,28 @@ public class DeclarationsController : ExtranetBaseController
     public async Task<IActionResult> SendMessage(int declarationId, int? clientId, string sujet, string contenu)
     {
         if (!IsAuthenticated) return RedirectToAction("Login", "Account");
+        if (string.IsNullOrWhiteSpace(contenu))
+        {
+            TempData["Error"] = "Le message ne peut pas être vide.";
+            return RedirectToAction("Details", new { id = declarationId });
+        }
+        if (!clientId.HasValue && int.TryParse(HttpContext.Session.GetString("ClientId"), out var sid) && sid > 0)
+            clientId = sid;
 
-        var msg = new { ClientId = clientId, DeclarationId = declarationId, Sujet = sujet, Contenu = contenu };
-        var result = await PostAsync<object, object>("api/messages", msg);
-        TempData[result != null ? "Success" : "Error"] =
-            result != null ? "Message envoyé." : "Erreur lors de l'envoi.";
+        var dto = new SendMessageDto
+        {
+            ClientId = clientId,
+            DeclarationId = declarationId > 0 ? declarationId : null,
+            Sujet = sujet ?? "",
+            Contenu = contenu.Trim()
+        };
+        var (api, status, err) = await PostApiAsync<SendMessageDto, MessageDto>("api/messages", dto);
+        if (api?.Success == true && api.Data != null)
+            TempData["Success"] = "Message envoyé.";
+        else
+            TempData["Error"] = api?.Message
+                ?? (status >= 400 ? $"Envoi impossible ({status})." : "Erreur lors de l'envoi.")
+                ?? "Erreur lors de l'envoi.";
         return RedirectToAction("Details", new { id = declarationId });
     }
 }
@@ -208,13 +226,83 @@ public class MessagesExtranetController : ExtranetBaseController
 {
     public MessagesExtranetController(IHttpClientFactory http) : base(http) { }
 
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(int? thread = null)
     {
         if (!IsAuthenticated) return RedirectToAction("Login", "Account");
 
-        var convResp = await GetAsync<ApiResponse<List<MessageDto>>>("api/messages/conversations");
-        ViewBag.Messages = convResp?.Data ?? new List<MessageDto>();
+        var clientId = int.TryParse(HttpContext.Session.GetString("ClientId"), out var cid) && cid > 0 ? cid : (int?)null;
+        ViewBag.ClientId = clientId;
+
+        // Full client history (not conversations roots-only) so threads show all replies
+        List<MessageDto> messages = new();
+        if (clientId.HasValue)
+        {
+            var full = await GetAsync<ApiResponse<List<MessageDto>>>($"api/messages/client/{clientId}");
+            messages = full?.Data ?? new List<MessageDto>();
+        }
+        if (!messages.Any())
+        {
+            var convResp = await GetAsync<ApiResponse<List<MessageDto>>>("api/messages/conversations");
+            messages = convResp?.Data ?? new List<MessageDto>();
+        }
+
+        // If a thread is open, ensure we have the full declaration thread
+        if (thread is > 0)
+        {
+            var declMsgs = await GetAsync<ApiResponse<List<MessageDto>>>($"api/messages/declaration/{thread}");
+            if (declMsgs?.Data != null && declMsgs.Data.Any())
+            {
+                var byId = messages.ToDictionary(m => m.Id);
+                foreach (var m in declMsgs.Data)
+                    byId[m.Id] = m;
+                messages = byId.Values.ToList();
+            }
+        }
+
+        ViewBag.Messages = messages.OrderBy(m => m.CreatedAt).ToList();
+        ViewBag.OpenThread = thread;
         return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendMessage(int declarationId, int? clientId, string? sujet, string contenu)
+    {
+        if (!IsAuthenticated) return RedirectToAction("Login", "Account");
+        if (string.IsNullOrWhiteSpace(contenu))
+        {
+            TempData["Error"] = "Le message ne peut pas être vide.";
+            return RedirectToAction(nameof(Index), new { thread = declarationId });
+        }
+        if (declarationId <= 0)
+        {
+            TempData["Error"] = "Sélectionnez une déclaration pour envoyer un message.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (!clientId.HasValue && int.TryParse(HttpContext.Session.GetString("ClientId"), out var sid) && sid > 0)
+            clientId = sid;
+
+        var dto = new SendMessageDto
+        {
+            ClientId = clientId,
+            DeclarationId = declarationId,
+            Sujet = sujet?.Trim() ?? "",
+            Contenu = contenu.Trim()
+        };
+        var (api, status, err) = await PostApiAsync<SendMessageDto, MessageDto>("api/messages", dto);
+        if (api?.Success == true && api.Data != null)
+            TempData["Success"] = "Message envoyé.";
+        else
+        {
+            var detail = api?.Message;
+            if (string.IsNullOrWhiteSpace(detail) && !string.IsNullOrWhiteSpace(err) && err.Length < 180)
+                detail = err;
+            TempData["Error"] = string.IsNullOrWhiteSpace(detail)
+                ? $"Erreur lors de l'envoi{(status > 0 ? $" ({status})" : "")}."
+                : detail;
+        }
+        return RedirectToAction(nameof(Index), new { thread = declarationId });
     }
 }
 
@@ -227,7 +315,7 @@ public class DocumentsController : ExtranetBaseController
         if (string.IsNullOrEmpty(HttpContext.Session.GetString("JwtToken")))
             return RedirectToAction("Login", "Account");
 
-        var docsResp = await GetAsync<ApiResponse<PagedResult<DocumentDto>>>("api/documents");
+        var docsResp = await GetAsync<ApiResponse<PagedResult<DocumentDto>>>("api/documents?pageSize=100");
         var docs = docsResp?.Data?.Items ?? new List<DocumentDto>();
         return View(docs);
     }
@@ -242,9 +330,16 @@ public class PaySlipsController : ExtranetBaseController
         if (string.IsNullOrEmpty(HttpContext.Session.GetString("JwtToken")))
             return RedirectToAction("Login", "Account");
 
-        var payResp = await GetAsync<ApiResponse<List<PaySlipDto>>>("api/payroll/myslips");
-        var payslips = payResp?.Data ?? new List<PaySlipDto>();
-        return View(payslips);
+        await EnsurePortalContextAsync();
+        if (!HasPaieService(ActiveServices))
+        {
+            TempData["Error"] = "Les bulletins de paie ne sont pas inclus dans vos services actifs.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        // Payroll API is BackOffice-only for now — show empty state until client myslips is available
+        ViewBag.PaySlipsUnavailable = true;
+        return View(new List<PaySlipDto>());
     }
 }
 public class BadgeCountsController : ExtranetBaseController
