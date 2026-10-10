@@ -122,15 +122,20 @@
         return html;
     }
 
-    function mdEditorHtml(prefix, m, d, label) {
+    /** yearHint: 'N' | 'N+1' | null (default YYYY). */
+    function mdEditorHtml(prefix, m, d, label, yearHint) {
         m = m || 1; d = d || 1;
-        return '<div class="pt-field">'
+        var yLabel = yearHint === 'N+1' ? '/N+1' : (yearHint === 'N' ? '/N' : '/YYYY');
+        var yTitle = yearHint === 'N+1'
+            ? 'Annee = annee de cl\u00f4ture + 1 (ex. d\u00e9cembre \u2192 janvier N+1)'
+            : (yearHint === 'N' ? 'Annee = annee de la p\u00e9riode' : 'Annee remplie a l\'execution');
+        return '<div class="pt-field' + (prefix === 'due' ? ' pt-due' : '') + '">'
             + '<label class="pt-field-label">' + (label || '') + '</label>'
             + '<div class="pt-md-row">'
             + '<input type="number" class="pt-' + prefix + '-d form-control form-control-sm" min="1" max="31" value="' + d + '" title="Jour" />'
             + '<span class="pt-sep">/</span>'
             + '<select class="pt-' + prefix + '-m form-select form-select-sm" title="Mois">' + monthOptionsHtml(m) + '</select>'
-            + '<span class="pt-yyyy" title="Annee courante a l\'execution">/YYYY</span>'
+            + '<span class="pt-yyyy' + (yearHint === 'N+1' ? ' pt-yyyy-next' : '') + '" title="' + yTitle + '">' + yLabel + '</span>'
             + '</div></div>';
     }
 
@@ -163,10 +168,10 @@
         if (freq === 'quarterly') {
             // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
             var qDefs = [
-                { label: 'T1 (' + monthNamesShort[1] + '-' + monthNamesShort[3] + ')', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
-                { label: 'T2 (' + monthNamesShort[4] + '-' + monthNamesShort[6] + ')', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
-                { label: 'T3 (' + monthNamesShort[7] + '-' + monthNamesShort[9] + ')', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 },
-                { label: 'T4 (' + monthNamesShort[10] + '-' + monthNamesShort[12] + ')', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 }
+                { label: '1er trimestre (janvier\u2013mars)', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
+                { label: '2e trimestre (avril\u2013juin)', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
+                { label: '3e trimestre (juillet\u2013septembre)', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 },
+                { label: '4e trimestre (octobre\u2013d\u00e9cembre)', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 }
             ];
             qDefs.forEach(function (q) {
                 rows.push(normalizePeriod({
@@ -253,13 +258,14 @@
         var html = '<div class="period-template-box period-template-pro">'
             + '<div class="pt-head">'
             + '<div><span>Modele de periodes</span><strong>' + tplTitle(freq) + '</strong></div>'
-            + '<div class="pt-head-hint">D\u00e9but / Fin / \u00c9ch\u00e9ance \u2014 JJ / Mois / <strong>YYYY</strong></div>'
+            + '<div class="pt-head-hint">D\u00e9but / Cl\u00f4ture / \u00c9ch\u00e9ance en ligne \u2014 une \u00e9ch\u00e9ance <strong>par</strong> p\u00e9riode</div>'
             + '</div>'
             + '<div class="pt-scroll pt-cards">';
         rows.forEach(function (r, i) {
             var s = parseMd(r.start) || { m: 1, d: 1 };
             var e = parseMd(r.end) || { m: 1, d: 1 };
             var du = parseMd(r.due) || eomNextMonth(e.m);
+            var dueNextYear = !!(du && e && du.m < e.m);
             var safeLabel = String(r.label || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             html += '<div class="pt-card" data-idx="' + i + '">'
                 + '<div class="pt-card-top">'
@@ -268,21 +274,17 @@
                 + '<button type="button" class="pt-del" title="Supprimer" onclick="WfCron.removePeriodRow(this)"><i class="bi bi-trash"></i></button>'
                 + '</div>'
                 + '<div class="pt-card-grid">'
-                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but')
-                + mdEditorHtml('end', e.m, e.d, 'Fin de p\u00e9riode')
-                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance')
+                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but', 'N')
+                + mdEditorHtml('end', e.m, e.d, 'Cl\u00f4ture de la p\u00e9riode', 'N')
+                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance d\u00e9claration en ligne', dueNextYear ? 'N+1' : 'N')
                 + '</div></div>';
         });
         html += '</div>'
             + '<div class="pt-foot">'
             + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter une periode</button>'
-            + '<span class="small text-muted">Chaque ligne a sa propre \u00e9ch\u00e9ance (fin du mois suivant par d\u00e9faut).</span>'
+            + '<span class="small text-muted">Chaque ligne a sa propre \u00e9ch\u00e9ance (fin du mois suivant ; d\u00e9c./T4 \u2192 janvier N+1).</span>'
             + '</div></div>';
         box.innerHTML = html;
-        box.querySelectorAll('.pt-due-d, .pt-due-m').forEach(function (el) {
-            var field = el.closest('.pt-field');
-            if (field) field.classList.add('pt-due');
-        });
         box.querySelectorAll('.pt-label, .pt-start-d, .pt-start-m, .pt-end-d, .pt-end-m, .pt-due-d, .pt-due-m').forEach(function (inp) {
             inp.addEventListener('change', function () { syncPeriodTable(card); });
             inp.addEventListener('input', function () {
@@ -367,24 +369,47 @@
         }
     }
 
-    /** Visible summary from per-row due dates. */
+    function fmtDmY(day, month, year) {
+        var dim = new Date(year, month, 0).getDate();
+        return pad2(Math.min(Math.max(day, 1), dim)) + '/' + pad2(month) + '/' + year;
+    }
+
+    /** Full-year calendar preview (Début clôture / échéance) — all rows, not just 4. */
     function updateEcheanceWorkPreview(card, periods, cfg) {
         var el = card && card.querySelector('.echeance-work-preview');
         if (!el) return;
         var year = new Date().getFullYear();
-        var samples = (periods || []).slice(0, 4).map(function (p) {
+        var list = periods || [];
+        if (!list.length) {
+            el.innerHTML = '<span class="text-muted">Aucune p\u00e9riode</span>';
+            return;
+        }
+        var rowsHtml = list.map(function (p, idx) {
             var e = parseMd(p.end);
+            var s = parseMd(p.start);
             var du = parseMd(p.due);
             if (!du && e) du = eomNextMonth(e.m);
-            if (!du) return null;
-            var dueYear = year;
-            if (e && du.m < e.m) dueYear = year + 1;
-            var dim = new Date(dueYear, du.m, 0).getDate();
-            var dd = pad2(Math.min(du.d, dim)) + '/' + pad2(du.m) + '/' + dueYear;
-            return (p.label || 'Periode') + ' \u2192 ' + dd;
-        }).filter(Boolean);
-        var rule = '\u00c9ch\u00e9ance par p\u00e9riode (fin du mois suivant)';
-        el.textContent = samples.length ? (rule + ' \u2014 ' + samples.join(' \u00b7 ')) : rule;
+            if (!e || !du) return '';
+            var endY = year;
+            var dueY = year;
+            if (du.m < e.m) dueY = year + 1;
+            var startY = year;
+            var closeStr = fmtDmY(e.d, e.m, endY);
+            var dueStr = fmtDmY(du.d, du.m, dueY);
+            var startStr = s ? fmtDmY(s.d, s.m, startY) : '\u2014';
+            var label = (p.label || ('Periode ' + (idx + 1)));
+            return '<tr>'
+                + '<td class="pt-cal-n">' + (idx + 1) + '</td>'
+                + '<td class="pt-cal-label">' + label.replace(/</g, '&lt;') + ' ' + year + '</td>'
+                + '<td class="pt-cal-close" title="D\u00e9but ' + startStr + '">' + closeStr + '</td>'
+                + '<td class="pt-cal-due">' + dueStr + '</td>'
+                + '</tr>';
+        }).join('');
+        el.innerHTML = '<div class="pt-cal-wrap">'
+            + '<div class="pt-cal-title">Calendrier ' + year + ' \u2014 \u00e9ch\u00e9ance par p\u00e9riode (fin du mois suivant)</div>'
+            + '<table class="pt-cal-table"><thead><tr>'
+            + '<th>#</th><th>P\u00e9riode TVA</th><th>Cl\u00f4ture</th><th>\u00c9ch\u00e9ance en ligne</th>'
+            + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
     }
 
     function loadPeriodTemplate(card, freq) {

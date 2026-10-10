@@ -646,6 +646,19 @@ public class WorkflowService : IWorkflowService
                                 && !string.IsNullOrWhiteSpace(dueEl.GetString()));
                         if (!hasDue) return true;
                     }
+                    // Quarterly labels: expect "… trimestre …" (not legacy "T1 (Jan-Mar)")
+                    if (wantTrim)
+                    {
+                        var first = periods.EnumerateArray().FirstOrDefault();
+                        if (first.ValueKind == System.Text.Json.JsonValueKind.Object
+                            && first.TryGetProperty("label", out var lb)
+                            && lb.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            var label = lb.GetString() ?? "";
+                            if (label.IndexOf("trimestre", StringComparison.OrdinalIgnoreCase) < 0)
+                                return true;
+                        }
+                    }
                 }
                 else return true;
             }
@@ -768,10 +781,10 @@ public class WorkflowService : IWorkflowService
             // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
             var q = new (string Label, int Sm, int Em, int Ed, int Dm, int Dd)[]
             {
-                ("T1 (Jan-Mar)", 1, 3, 31, 4, 30),
-                ("T2 (Avr-Juin)", 4, 6, 30, 7, 31),
-                ("T3 (Juil-Sep)", 7, 9, 30, 10, 31),
-                ("T4 (Oct-D\u00e9c)", 10, 12, 31, 1, 31)
+                ("1er trimestre (janvier\u2013mars)", 1, 3, 31, 4, 30),
+                ("2e trimestre (avril\u2013juin)", 4, 6, 30, 7, 31),
+                ("3e trimestre (juillet\u2013septembre)", 7, 9, 30, 10, 31),
+                ("4e trimestre (octobre\u2013d\u00e9cembre)", 10, 12, 31, 1, 31)
             };
             foreach (var (label, sm, em, ed, dm, dd) in q)
             {
