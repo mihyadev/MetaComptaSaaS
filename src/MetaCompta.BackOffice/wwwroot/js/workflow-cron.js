@@ -374,7 +374,7 @@
         return pad2(Math.min(Math.max(day, 1), dim)) + '/' + pad2(month) + '/' + year;
     }
 
-    /** Full-year calendar preview (Début clôture / échéance) — all rows, not just 4. */
+    /** Full-year calendar: D\u00e9but | Cl\u00f4ture | \u00c9ch\u00e9ance (ex. D\u00e9c 31/12/N \u2192 31/01/N+1). */
     function updateEcheanceWorkPreview(card, periods, cfg) {
         var el = card && card.querySelector('.echeance-work-preview');
         if (!el) return;
@@ -390,25 +390,25 @@
             var du = parseMd(p.due);
             if (!du && e) du = eomNextMonth(e.m);
             if (!e || !du) return '';
-            var endY = year;
-            var dueY = year;
-            if (du.m < e.m) dueY = year + 1;
-            var startY = year;
-            var closeStr = fmtDmY(e.d, e.m, endY);
+            var dueY = (du.m < e.m) ? (year + 1) : year;
+            var startStr = s ? fmtDmY(s.d, s.m, year) : '\u2014';
+            var closeStr = fmtDmY(e.d, e.m, year);
             var dueStr = fmtDmY(du.d, du.m, dueY);
-            var startStr = s ? fmtDmY(s.d, s.m, startY) : '\u2014';
             var label = (p.label || ('Periode ' + (idx + 1)));
             return '<tr>'
                 + '<td class="pt-cal-n">' + (idx + 1) + '</td>'
                 + '<td class="pt-cal-label">' + label.replace(/</g, '&lt;') + ' ' + year + '</td>'
-                + '<td class="pt-cal-close" title="D\u00e9but ' + startStr + '">' + closeStr + '</td>'
+                + '<td class="pt-cal-start">' + startStr + '</td>'
+                + '<td class="pt-cal-close">' + closeStr + '</td>'
                 + '<td class="pt-cal-due">' + dueStr + '</td>'
                 + '</tr>';
         }).join('');
         el.innerHTML = '<div class="pt-cal-wrap">'
-            + '<div class="pt-cal-title">Calendrier ' + year + ' \u2014 \u00e9ch\u00e9ance par p\u00e9riode (fin du mois suivant)</div>'
+            + '<div class="pt-cal-title">Calendrier ' + year
+            + ' \u2014 une \u00e9ch\u00e9ance par p\u00e9riode (fin du mois suivant ; d\u00e9c./T4 \u2192 31/01/'
+            + (year + 1) + ')</div>'
             + '<table class="pt-cal-table"><thead><tr>'
-            + '<th>#</th><th>P\u00e9riode TVA</th><th>Cl\u00f4ture</th><th>\u00c9ch\u00e9ance en ligne</th>'
+            + '<th>#</th><th>Mois / p\u00e9riode TVA</th><th>D\u00e9but</th><th>Cl\u00f4ture</th><th>\u00c9ch\u00e9ance en ligne</th>'
             + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
     }
 
@@ -459,9 +459,17 @@
         if (endEl && cfg.windowEndDay) endEl.value = String(cfg.windowEndDay);
         if (offEl && cfg.windowMonthOffset != null) offEl.value = String(cfg.windowMonthOffset);
 
-        var rows = Array.isArray(cfg.periods) && cfg.periods.length
-            ? cfg.periods.map(normalizePeriod)
-            : generatePeriodRows(freq);
+        var rows;
+        if (Array.isArray(cfg.periods) && cfg.periods.length) {
+            rows = cfg.periods.map(normalizePeriod);
+            // Legacy templates without per-row due: rebuild exact monthly/quarterly calendar
+            var missingDue = rows.some(function (p) { return !p.dueMonth || !p.dueDay; });
+            if (missingDue && (freq === 'monthly' || freq === 'quarterly')) {
+                rows = generatePeriodRows(freq);
+            }
+        } else {
+            rows = generatePeriodRows(freq);
+        }
         renderPeriodEditor(card, rows, freq);
         syncPeriodTable(card);
     }
