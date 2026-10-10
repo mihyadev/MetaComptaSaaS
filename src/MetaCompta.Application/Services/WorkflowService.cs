@@ -100,19 +100,36 @@ public class WorkflowService : IWorkflowService
         if (!Enum.TryParse<WorkflowDeclarationType>(dto.DeclarationType, true, out var declType))
             declType = WorkflowDeclarationType.All;
 
-        // Cabinet base: exactly one active template per declaration type
+        // Cabinet base: one active template per declaration type — except TVA (Mensuelle + Trimestrielle)
         if (!dto.ClientId.HasValue)
         {
-            dto.IsDefault = true;
-            var existingCabinet = await _db.WorkflowTemplates
-                .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
-                    && wt.ClientId == null
-                    && wt.DeclarationType == declType
-                    && wt.IsActive
-                    && !wt.Name.Contains("(ancien)"));
-            if (existingCabinet)
-                return ApiResponse<WorkflowTemplateDto>.Fail(
-                    "Un modèle cabinet existe déjà pour ce type de déclaration. Ouvrez-le dans le Builder pour le modifier (personnalisation client = fiche client → Workflow).");
+            if (declType == WorkflowDeclarationType.TVA)
+            {
+                var existingSameName = await _db.WorkflowTemplates
+                    .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                        && wt.ClientId == null
+                        && wt.DeclarationType == declType
+                        && wt.IsActive
+                        && !wt.Name.Contains("(ancien)")
+                        && wt.Name == dto.Name);
+                if (existingSameName)
+                    return ApiResponse<WorkflowTemplateDto>.Fail(
+                        "Un modèle cabinet TVA avec ce nom existe déjà. Ouvrez-le dans le Builder pour le modifier.");
+                // Keep dto.IsDefault as provided (Mensuelle=true, Trimestrielle=false)
+            }
+            else
+            {
+                dto.IsDefault = true;
+                var existingCabinet = await _db.WorkflowTemplates
+                    .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                        && wt.ClientId == null
+                        && wt.DeclarationType == declType
+                        && wt.IsActive
+                        && !wt.Name.Contains("(ancien)"));
+                if (existingCabinet)
+                    return ApiResponse<WorkflowTemplateDto>.Fail(
+                        "Un modèle cabinet existe déjà pour ce type de déclaration. Ouvrez-le dans le Builder pour le modifier (personnalisation client = fiche client → Workflow).");
+            }
         }
 
         var template = new WorkflowTemplate
@@ -121,7 +138,7 @@ public class WorkflowService : IWorkflowService
             Description = dto.Description,
             DeclarationType = declType,
             ClientId = dto.ClientId,
-            IsDefault = dto.ClientId == null || dto.IsDefault,
+            IsDefault = dto.IsDefault,
             IsSystem = false, // client / cabinet custom copies are never Plan Marocain system templates
             IsActive = true,
             Version = 1,
@@ -255,20 +272,24 @@ public class WorkflowService : IWorkflowService
         if (!template.ClientId.HasValue)
         {
             dto.ClientId = null;
-            dto.IsDefault = true;
+            if (declType != WorkflowDeclarationType.TVA)
+                dto.IsDefault = true;
 
-            if (declType != template.DeclarationType)
+            if (declType != template.DeclarationType
+                || (declType == WorkflowDeclarationType.TVA && !string.Equals(dto.Name, template.Name, StringComparison.OrdinalIgnoreCase)))
             {
-                var clash = await _db.WorkflowTemplates
-                    .AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
-                        && wt.ClientId == null
-                        && wt.DeclarationType == declType
-                        && wt.IsActive
-                        && !wt.Name.Contains("(ancien)")
-                        && wt.Id != id);
+                var clash = declType == WorkflowDeclarationType.TVA
+                    ? await _db.WorkflowTemplates.AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                        && wt.ClientId == null && wt.DeclarationType == declType && wt.IsActive
+                        && !wt.Name.Contains("(ancien)") && wt.Name == dto.Name && wt.Id != id)
+                    : await _db.WorkflowTemplates.AnyAsync(wt => wt.CabinetId == cabinetId && !wt.IsDeleted
+                        && wt.ClientId == null && wt.DeclarationType == declType && wt.IsActive
+                        && !wt.Name.Contains("(ancien)") && wt.Id != id);
                 if (clash)
                     return ApiResponse<WorkflowTemplateDto>.Fail(
-                        "Un modèle cabinet existe déjà pour ce type de déclaration. Un seul workflow de base par type.");
+                        declType == WorkflowDeclarationType.TVA
+                            ? "Un modèle cabinet TVA avec ce nom existe déjà."
+                            : "Un modèle cabinet existe déjà pour ce type de déclaration. Un seul workflow de base par type.");
             }
         }
 
@@ -278,7 +299,7 @@ public class WorkflowService : IWorkflowService
         if (!template.ClientId.HasValue)
         {
             template.ClientId = null;
-            template.IsDefault = true;
+            template.IsDefault = declType == WorkflowDeclarationType.TVA ? dto.IsDefault : true;
         }
         else
         {
@@ -456,13 +477,20 @@ public class WorkflowService : IWorkflowService
     {
         var createdTemplates = new List<WorkflowTemplateDto>();
         var templateDefinitions = GetAllDefaultTemplateDefinitions();
+        var seededNamesByType = new Dictionary<WorkflowDeclarationType, HashSet<string>>();
 
         foreach (var def in templateDefinitions)
         {
             if (!Enum.TryParse<WorkflowDeclarationType>(def.DeclarationType, true, out var declType))
                 continue;
 
-            // All cabinet-scoped templates for this type (duplicates, anciens, non-defaults)
+            if (!seededNamesByType.TryGetValue(declType, out var nameSet))
+            {
+                nameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                seededNamesByType[declType] = nameSet;
+            }
+            nameSet.Add(def.Name);
+
             var cabinetForType = await _db.WorkflowTemplates
                 .Include(t => t.Steps)
                 .Where(t => t.CabinetId == cabinetId && !t.IsDeleted
@@ -477,39 +505,64 @@ public class WorkflowService : IWorkflowService
                 old.UpdatedBy = userId;
             }
 
-            var activeBases = cabinetForType
-                .Where(t => !t.Name.Contains("(ancien)") && t.IsActive)
+            // Match by name (TVA Mensuelle / TVA Trimestrielle coexist)
+            var current = cabinetForType
+                .Where(t => !t.Name.Contains("(ancien)") && t.IsActive
+                    && string.Equals(t.Name, def.Name, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(t => t.IsDefault)
                 .ThenBy(t => t.Id)
-                .ToList();
+                .FirstOrDefault();
 
-            var current = activeBases.FirstOrDefault();
+            // Legacy single TVA template → treat as Mensuelle when seeding Mensuelle
+            if (current == null && declType == WorkflowDeclarationType.TVA
+                && def.Name.Equals("TVA Mensuelle", StringComparison.OrdinalIgnoreCase))
+            {
+                current = cabinetForType
+                    .Where(t => !t.Name.Contains("(ancien)") && t.IsActive
+                        && !t.Name.Equals("TVA Trimestrielle", StringComparison.OrdinalIgnoreCase)
+                        && !t.Name.Equals("TVA Mensuelle", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(t => t.IsDefault)
+                    .ThenBy(t => t.Id)
+                    .FirstOrDefault();
+            }
 
             if (!forceReset && current != null && !TemplateNeedsRefresh(current, def))
             {
-                // Keep exactly one active base; retire extras
-                foreach (var dup in activeBases.Skip(1))
+                // Retire same-name duplicates only
+                foreach (var dup in cabinetForType.Where(t => t.IsActive && !t.Name.Contains("(ancien)")
+                    && t.Id != current.Id
+                    && string.Equals(t.Name, current.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     dup.IsDefault = false;
                     dup.IsActive = false;
-                    if (!dup.Name.Contains("(ancien)"))
-                        dup.Name = $"{dup.Name} (ancien)";
+                    dup.Name = $"{dup.Name} (ancien)";
                     dup.UpdatedBy = userId;
                 }
-                if (!current.IsDefault)
+                if (current.IsDefault != def.IsDefault)
                 {
-                    current.IsDefault = true;
+                    current.IsDefault = def.IsDefault;
+                    current.UpdatedBy = userId;
+                }
+                if (!string.Equals(current.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    current.Name = def.Name;
                     current.UpdatedBy = userId;
                 }
                 continue;
             }
 
-            // Retire every cabinet base for this type (force reset or needs refresh)
-            foreach (var old in cabinetForType.Where(t => !t.Name.Contains("(ancien)")))
+            // Retire only the matching template (not the sibling TVA frequency)
+            var toRetire = cabinetForType.Where(t => !t.Name.Contains("(ancien)") && (
+                string.Equals(t.Name, def.Name, StringComparison.OrdinalIgnoreCase)
+                || (current != null && t.Id == current.Id)
+                || (declType != WorkflowDeclarationType.TVA && t.IsActive)
+            ));
+            foreach (var old in toRetire)
             {
                 old.IsDefault = false;
                 old.IsActive = false;
-                old.Name = $"{old.Name} (ancien)";
+                if (!old.Name.Contains("(ancien)"))
+                    old.Name = $"{old.Name} (ancien)";
                 old.UpdatedBy = userId;
             }
 
@@ -522,20 +575,15 @@ public class WorkflowService : IWorkflowService
 
         await _db.SaveChangesAsync();
 
-        // Retire orphan cabinet bases not in the official seed list (e.g. DeclarationType=All leftovers)
-        var seededTypes = templateDefinitions
-            .Select(d => Enum.TryParse<WorkflowDeclarationType>(d.DeclarationType, true, out var t) ? t : (WorkflowDeclarationType?)null)
-            .Where(t => t.HasValue)
-            .Select(t => t!.Value)
-            .ToHashSet();
-
+        // Retire orphans: wrong DeclarationType, or TVA names not in seed list
         var orphans = await _db.WorkflowTemplates
-            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted && t.ClientId == null
-                && !seededTypes.Contains(t.DeclarationType)
-                && t.IsActive)
+            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted && t.ClientId == null && t.IsActive)
             .ToListAsync();
         foreach (var old in orphans)
         {
+            var keep = seededNamesByType.TryGetValue(old.DeclarationType, out var names)
+                && names.Contains(old.Name);
+            if (keep) continue;
             old.IsDefault = false;
             old.IsActive = false;
             if (!old.Name.Contains("(ancien)"))
@@ -547,10 +595,10 @@ public class WorkflowService : IWorkflowService
 
         if (forceReset)
             return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates,
-                $"Réinitialisation terminée : {createdTemplates.Count} workflow(s) cabinet recréé(s) (1 par type de déclaration).");
+                $"Réinitialisation terminée : {createdTemplates.Count} workflow(s) cabinet recréé(s) (TVA mensuelle + trimestrielle inclus).");
 
         if (!createdTemplates.Any())
-            return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, "Tous les modèles par défaut sont à jour (TVA, IS, IR, CNSS…).");
+            return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, "Tous les modèles par défaut sont à jour (TVA Mensuelle, TVA Trimestrielle, IS, IR, CNSS…).");
 
         return ApiResponse<List<WorkflowTemplateDto>>.Ok(createdTemplates, $"{createdTemplates.Count} modèle(s) cabinet créé(s)/rafraîchi(s).");
     }
@@ -560,58 +608,68 @@ public class WorkflowService : IWorkflowService
         var steps = template.Steps?.Where(s => !s.IsDeleted).ToList() ?? new List<WorkflowStepTemplate>();
         if (steps.Count < def.Steps.Count) return true;
         if (steps.Any(s => s.StepType == WorkflowStepType.Relance)) return true;
-        // TVA / IS should embed relance on Collecte
         if (def.DeclarationType is "TVA" or "IS")
         {
             var collecte = steps.FirstOrDefault(s => s.StepType == WorkflowStepType.Collecte);
             if (collecte == null || collecte.MaxRetries <= 0) return true;
         }
+        if (def.DeclarationType == "TVA")
+        {
+            if (!string.Equals(template.Name, def.Name, StringComparison.OrdinalIgnoreCase)
+                && !def.Name.Equals("TVA Mensuelle", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var init = steps.FirstOrDefault(s => s.StepType == WorkflowStepType.Initialisation);
+            if (init == null || string.IsNullOrWhiteSpace(init.ActionConfigJson)) return true;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(init.ActionConfigJson);
+                var root = doc.RootElement;
+                var wantTrim = def.Name.Contains("Trimestrielle", StringComparison.OrdinalIgnoreCase);
+                if (root.TryGetProperty("periodFrequency", out var pf) && pf.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var freq = pf.GetString() ?? "";
+                    if (wantTrim && !freq.StartsWith("Trim", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (!wantTrim && freq.StartsWith("Trim", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                if (!root.TryGetProperty("windowEndDay", out var wed) || !wed.TryGetInt32(out var day) || day != 26)
+                    return true; // missing or stale deadline → refresh to working day 26
+                if (root.TryGetProperty("periods", out var periods) && periods.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var n = periods.GetArrayLength();
+                    if (wantTrim && n != 4) return true;
+                    if (!wantTrim && n != 12) return true;
+                }
+                else return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
         return false;
     }
 
     /// <summary>
-    /// Refresh TVA default template: deactivate old default (keep in-flight instances), create new aligned template.
+    /// Refresh TVA templates: ensure both Mensuelle and Trimestrielle are aligned.
     /// </summary>
     public async Task<ApiResponse<WorkflowTemplateDto>> RefreshTvaDefaultTemplateAsync(int cabinetId, string userId)
     {
-        var tvaDef = GetAllDefaultTemplateDefinitions()
-            .First(d => d.DeclarationType == "TVA");
-
-        var oldDefaults = await _db.WorkflowTemplates
+        var seeded = await SeedAllDefaultTemplatesAsync(cabinetId, userId, forceReset: false);
+        var mensuelle = await _db.WorkflowTemplates
             .Include(t => t.Steps)
-            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted
-                && t.DeclarationType == WorkflowDeclarationType.TVA && t.IsDefault)
-            .ToListAsync();
+            .Where(t => t.CabinetId == cabinetId && !t.IsDeleted && t.ClientId == null
+                && t.DeclarationType == WorkflowDeclarationType.TVA && t.IsActive
+                && t.Name == "TVA Mensuelle")
+            .OrderByDescending(t => t.IsDefault)
+            .FirstOrDefaultAsync();
 
-        var expectedSteps = tvaDef.Steps.Count;
-        var alreadyAligned = oldDefaults.Any(t => t.Steps.Count(s => !s.IsDeleted) >= expectedSteps
-            && t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Collecte && s.MaxRetries > 0)
-            && !t.Steps.Any(s => !s.IsDeleted && s.StepType == WorkflowStepType.Relance));
+        if (mensuelle == null)
+            return ApiResponse<WorkflowTemplateDto>.Fail(seeded.Message ?? "Échec refresh modèles TVA.");
 
-        if (alreadyAligned)
-            return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(oldDefaults.First(t => t.IsDefault)), "Modèle TVA déjà aligné.");
-
-        foreach (var old in oldDefaults)
-        {
-            old.IsDefault = false;
-            // Keep Active if in-flight instances exist so they continue; otherwise deactivate
-            var hasActive = await _db.WorkflowInstances.AnyAsync(wi =>
-                wi.WorkflowTemplateId == old.Id && wi.Status == WorkflowInstanceStatus.Active);
-            if (!hasActive)
-                old.IsActive = false;
-            old.Name = old.Name.Contains("(ancien)") ? old.Name : $"{old.Name} (ancien)";
-            old.UpdatedBy = userId;
-        }
-
-        await _db.SaveChangesAsync();
-
-        tvaDef.Name = "TVA — Déclaration de TVA";
-        var created = await CreateTemplateAsync(tvaDef, cabinetId, userId);
-        if (!created.Success || created.Data == null)
-            return ApiResponse<WorkflowTemplateDto>.Fail(created.Message ?? "Échec refresh modèle TVA.");
-
-        _logger.LogInformation("TVA template refreshed for cabinet {CabinetId}: new template {Id}", cabinetId, created.Data.Id);
-        return ApiResponse<WorkflowTemplateDto>.Ok(created.Data, $"Modèle TVA rafraîchi (cabinet {cabinetId}). Anciens modèles désactivés comme défaut.");
+        _logger.LogInformation("TVA templates refreshed for cabinet {CabinetId}: Mensuelle #{Id}", cabinetId, mensuelle.Id);
+        return ApiResponse<WorkflowTemplateDto>.Ok(MapTemplateDto(mensuelle),
+            seeded.Message ?? "Modèles TVA Mensuelle et Trimestrielle à jour.");
     }
 
     /// <summary>
@@ -660,34 +718,118 @@ public class WorkflowService : IWorkflowService
     }
 
     /// <summary>
+    /// Morocco TVA Init periods: taxable slice + filing window end-of-month / +1 month (CGI 110-111 teledeclaration).
+    /// </summary>
+    private static string BuildTvaInitActionConfigJson(bool mensuelle)
+    {
+        var periods = new List<object>();
+        if (mensuelle)
+        {
+            // ASCII-safe labels (accents via \u) — avoids mojibake if source encoding drifts
+            var labels = new[]
+            {
+                "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
+                "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
+            };
+            var dim = new[] { 0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+            for (var m = 1; m <= 12; m++)
+            {
+                periods.Add(new
+                {
+                    label = labels[m - 1],
+                    start = $"{m:D2}-01",
+                    end = $"{m:D2}-{dim[m]:D2}",
+                    startMonth = m,
+                    startDay = 1,
+                    endMonth = m,
+                    endDay = dim[m]
+                });
+            }
+        }
+        else
+        {
+            var q = new (string Label, int Sm, int Em, int Ed)[]
+            {
+                ("T1 (Jan-Mar)", 1, 3, 31),
+                ("T2 (Avr-Juin)", 4, 6, 30),
+                ("T3 (Juil-Sep)", 7, 9, 30),
+                ("T4 (Oct-D\u00e9c)", 10, 12, 31)
+            };
+            foreach (var (label, sm, em, ed) in q)
+            {
+                periods.Add(new
+                {
+                    label,
+                    start = $"{sm:D2}-01",
+                    end = $"{em:D2}-{ed:D2}",
+                    startMonth = sm,
+                    startDay = 1,
+                    endMonth = em,
+                    endDay = ed
+                });
+            }
+        }
+
+        var payload = new
+        {
+            initTrigger = "both",
+            allowManualInit = true,
+            periodFrequency = mensuelle ? "Mensuelle" : "Trimestrielle",
+            periodTemplate = mensuelle ? "Mensuelle" : "Trimestrielle",
+            windowStartDay = 1,
+            windowEndDay = 26, // échéance de travail fiduciaire: 26 du mois suivant
+            windowMonthOffset = 1,
+            periods
+        };
+        return System.Text.Json.JsonSerializer.Serialize(payload);
+    }
+
+    private static WorkflowTemplateCreateDto BuildTvaTemplateDefinition(bool mensuelle)
+    {
+        var freq = mensuelle ? "Mensuelle" : "Trimestrielle";
+        var initJson = BuildTvaInitActionConfigJson(mensuelle);
+        var cron = mensuelle ? "0 8 1 * *" : "0 8 1 1,4,7,10 *";
+        var cronDesc = mensuelle
+            ? "Le 1er de chaque mois \u00e0 08:00 \u2014 ouvre la TVA du mois pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance de travail le 26)"
+            : "Le 1er jan/avr/juil/oct \u00e0 08:00 \u2014 ouvre la TVA du trimestre pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance de travail le 26)";
+
+        return new WorkflowTemplateCreateDto
+        {
+            Name = mensuelle ? "TVA Mensuelle" : "TVA Trimestrielle",
+            Description = mensuelle
+                ? "Workflow TVA mensuelle (Maroc) : p\u00e9riode = mois, \u00e9ch\u00e9ance de travail = 26 du mois suivant. Cr\u00e9ation, documents, contr\u00f4le, calcul, SIMPL-TVA, paiement, cl\u00f4ture."
+                : "Workflow TVA trimestrielle (Maroc) : p\u00e9riodes T1\u2013T4, \u00e9ch\u00e9ance de travail = 26 du 1er mois du trimestre suivant. Cr\u00e9ation, documents, contr\u00f4le, calcul, SIMPL-TVA, paiement, cl\u00f4ture.",
+            DeclarationType = "TVA",
+            IsDefault = mensuelle, // Mensuelle = default; Trimestrielle also active for clients TypeTVA=Trimestrielle
+            Steps = new()
+            {
+                new() { Name = "Ouverture / cr\u00e9ation dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = $"Cr\u00e9ation automatique du dossier TVA {freq.ToLowerInvariant()} pour la p\u00e9riode", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard", IsScheduled = true, CronExpression = cron, CronDescription = cronDesc, ActionConfigJson = initJson },
+                new() { Name = "Demande documents", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Envoi de la demande de factures d'achat/vente au client", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0}" },
+                new() { Name = "R\u00e9ception documents (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Le client d\u00e9pose les factures \u2014 relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
+                new() { Name = "Contr\u00f4le exhaustivit\u00e9", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "V\u00e9rification exhaustivit\u00e9 pi\u00e8ces", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
+                new() { Name = "Import & calcul TVA", StepOrder = 4, StepType = "Saisie", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 36, Description = "Import factures, ventilation et calcul TVA", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculTVA, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.CalculTVA, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
+                new() { Name = "Traitement anomalies", StepOrder = 5, StepType = "Controle", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Correction des anomalies", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnAttenteCorrection, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Moyenne },
+                new() { Name = "Revue superviseur", StepOrder = 6, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approuver ou renvoyer \u00e0 corriger", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevueSuperviseur, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
+                new() { Name = "Soumission SIMPL-TVA", StepOrder = 7, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Soumission SIMPL-TVA", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnvoyeeSimplTva, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.EnvoyeeSimplTva, ActionOnComplete = "ExportXML", TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
+                new() { Name = "D\u00e9p\u00f4t confirm\u00e9", StepOrder = 8, StepType = "DepotSoumission", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Confirmation d\u00e9p\u00f4t", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Deposee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Deposee, TaskType = "Standard" },
+                new() { Name = "Paiement (si TVA due)", StepOrder = 9, StepType = "Paiement", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Paiement si TVA due", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.APayer, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Payee, ActionOnEntry = "PaymentReminder", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute },
+                new() { Name = "Rapprochement", StepOrder = 10, StepType = "Rapprochement", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Rapprochement comptable", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Rapprochee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Rapprochee, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
+                new() { Name = "Archivage & cl\u00f4ture", StepOrder = 11, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage puis cl\u00f4ture", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Archivee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Cloturee, ActionOnComplete = "ArchiveDeclaration", TaskType = "Archiving" }
+            }
+        };
+    }
+
+    /// <summary>
     /// Returns all per-type default template definitions.
     /// </summary>
     private static List<WorkflowTemplateCreateDto> GetAllDefaultTemplateDefinitions()
     {
         return new List<WorkflowTemplateCreateDto>
         {
-            // ── TVA (Cycle mensuel/trimestriel — end-to-end aligned) ─────
-            new()
-            {
-                Name = "TVA — Déclaration de TVA",
-                Description = "Workflow TVA bout-en-bout : création, demande/relance documents, contrôle, calcul, revue, SIMPL-TVA (stub), paiement, rapprochement et clôture.",
-                DeclarationType = "TVA", IsDefault = true,
-                Steps = new()
-                {
-                    new() { Name = "Ouverture / création dossier", StepOrder = 0, StepType = "Initialisation", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Création automatique du dossier TVA pour la période", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CreeeParSysteme, ActionOnEntry = "CreateDeclaration", LifecycleEndMode = "PeriodEnd", ActionOnLifecycleEnd = "ClotureDeclaration", TaskType = "Standard" },
-                    new() { Name = "Demande documents", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Envoi de la demande de factures d'achat/vente au client", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.DocumentsDemandes, ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0}" },
-                    new() { Name = "Réception documents (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 96, Description = "Le client dépose les factures — relances auto si retard", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.DocumentsRecus, TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "Suspend" },
-                    new() { Name = "Contrôle exhaustivité", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Vérification exhaustivité pièces; branche EnAttenteCorrection si incomplet", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.ControleEnCours, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1}" },
-                    new() { Name = "Import & calcul TVA", StepOrder = 4, StepType = "Saisie", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 36, Description = "Import factures, ventilation et calcul TVA (réutilise CalculateTVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.CalculTVA, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.CalculTVA, TaskType = "DataEntry", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Traitement anomalies", StepOrder = 5, StepType = "Controle", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Correction des anomalies (placeholder jusqu'au moteur d'anomalies)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnAttenteCorrection, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Moyenne },
-                    new() { Name = "Revue superviseur", StepOrder = 6, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approuver → Validée ; Refuser → À corriger", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnRevueSuperviseur, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
-                    new() { Name = "Soumission SIMPL-TVA", StepOrder = 7, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Stub SIMPL-TVA : XML local + accusé ACK placeholder", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.EnvoyeeSimplTva, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.EnvoyeeSimplTva, ActionOnComplete = "ExportXML", TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
-                    new() { Name = "Dépôt confirmé", StepOrder = 8, StepType = "DepotSoumission", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = true, AutoCreateTask = false, AutoNotify = true, SLAHours = 1, Description = "Confirmation dépôt après ACK stub", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Deposee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Deposee, TaskType = "Standard" },
-                    new() { Name = "Paiement (si TVA due)", StepOrder = 9, StepType = "Paiement", AssignmentType = "Employee", IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Stub paiement : confirmer → Payée (ignorer si crédit de TVA)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.APayer, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Payee, ActionOnEntry = "PaymentReminder", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Rapprochement", StepOrder = 10, StepType = "Rapprochement", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Rapprochement comptable (stub lien compta)", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Rapprochee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Rapprochee, TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute },
-                    new() { Name = "Archivage & clôture", StepOrder = 11, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage puis clôture du dossier", DeclarationStatusOnEntry = RefCodes.StatutDeclaration.Archivee, DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Cloturee, ActionOnComplete = "ArchiveDeclaration", TaskType = "Archiving" }
-                }
-            },
+            // ── TVA Mensuelle — échéance de travail = 26 du mois suivant ──
+            BuildTvaTemplateDefinition(mensuelle: true),
+            // ── TVA Trimestrielle — échéance de travail = 26 du 1er mois du trimestre suivant ──
+            BuildTvaTemplateDefinition(mensuelle: false),
 
             // ── IS (Déclaration fiscale — Liasse annuelle, pattern TVA + métier) ──
             new()
@@ -845,6 +987,26 @@ public class WorkflowService : IWorkflowService
                     new() { Name = "Validation DTS", StepOrder = 5, StepType = "ValidationInterne", AssignmentType = "Role", AssignedToRoleName = "Manager", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 12, Description = "Approbation finale de la déclaration des traitements et salaires", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Validee, TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Urgente, RequiredPermission = "workflow.validate" },
                     new() { Name = "Télédéclaration DGI / SIMPL-Salaires", StepOrder = 6, StepType = "DepotSoumission", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Soumission de l'État 9421 sur le portail DGI / SIMPL-Salaires", DeclarationStatusOnComplete = RefCodes.StatutDeclaration.Soumise, TaskType = "Submission", TaskPriority = RefCodes.PrioriteTache.Urgente },
                     new() { Name = "Clôture & archivage DTS", StepOrder = 7, StepType = "ClotureArchivage", AssignmentType = "AutoSystem", IsRequired = true, IsBlocking = false, AutoCreateTask = false, AutoNotify = true, SLAHours = 24, Description = "Archivage de l'accusé de dépôt et classement de l'État 9421", TaskType = "Archiving" }
+                }
+            },
+
+            // ── Domiciliation (courrier + documents — employee-initiated, not system) ──
+            new()
+            {
+                Name = "Domiciliation — Siège social & courrier",
+                Description = "Workflow opérationnel domiciliation initié par un collaborateur du cabinet (pas le système). Étapes employés + étapes client pour dépôt / actions.",
+                DeclarationType = "Domiciliation", IsDefault = true,
+                Steps = new()
+                {
+                    // Init = Employee (unlike TVA/CNSS AutoSystem CreateDeclaration)
+                    new() { Name = "Ouverture dossier par le collaborateur", StepOrder = 0, StepType = "Initialisation", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 8, Description = "Un employé du cabinet crée / démarre le dossier domiciliation pour ce client", TaskType = "Standard", TaskPriority = RefCodes.PrioriteTache.Haute, ServiceContratTypeCode = "DOMICILIATION", UseServiceContratAffectation = true, TriggerSource = "Employee" },
+                    new() { Name = "Demande documents KYC", StepOrder = 1, StepType = "DemandePieces", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Le collaborateur envoie la demande de pièces (CIN, RC, statuts…)", ActionOnEntry = "RequestDocuments", TaskType = "DocumentRequest", TaskPriority = RefCodes.PrioriteTache.Haute, ServiceContratTypeCode = "DOMICILIATION", ValidationRulesJson = "{\"requireDocuments\":false,\"minDocuments\":0,\"domain\":\"domiciliation\"}" },
+                    new() { Name = "Dépôt documents (client)", StepOrder = 2, StepType = "Collecte", AssignmentType = "Client", IsClientStep = true, IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 120, Description = "Le client dépose les pièces via l'extranet", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Haute, ValidationRulesJson = "{\"requireDocuments\":true,\"minDocuments\":1,\"domain\":\"domiciliation\"}", MaxRetries = 3, RetryIntervalHours = 360, OnMaxRetriesAction = "EscalateToManager" },
+                    new() { Name = "Contrôle / validation pièces", StepOrder = 3, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 48, Description = "Collaborateur : valider / rejeter / demander correction", TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ServiceContratTypeCode = "DOMICILIATION" },
+                    new() { Name = "Traitement courrier & opérations", StepOrder = 4, StepType = "Controle", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Collaborateur : réception, classement, traitement des courriers", TaskType = "Review", TaskPriority = RefCodes.PrioriteTache.Haute, ServiceContratTypeCode = "DOMICILIATION" },
+                    new() { Name = "Notification client (par le cabinet)", StepOrder = 5, StepType = "ValidationInterne", AssignmentType = "Employee", IsRequired = true, IsBlocking = true, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Le collaborateur notifie le client (correspondance / statut)", ActionOnComplete = "NotifyClient", TaskType = "Validation", TaskPriority = RefCodes.PrioriteTache.Haute, ServiceContratTypeCode = "DOMICILIATION" },
+                    new() { Name = "Actions client (retrait / réexpédition)", StepOrder = 6, StepType = "ValidationClient", AssignmentType = "Client", IsClientStep = true, IsRequired = false, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 72, Description = "Le client demande retrait ou réexpédition si besoin", TaskType = "ClientAction", TaskPriority = RefCodes.PrioriteTache.Moyenne },
+                    new() { Name = "Clôture dossier", StepOrder = 7, StepType = "ClotureArchivage", AssignmentType = "Employee", IsRequired = true, IsBlocking = false, AutoCreateTask = true, AutoNotify = true, SLAHours = 24, Description = "Collaborateur archive et clôture le cycle", TaskType = "Archiving", TaskPriority = RefCodes.PrioriteTache.Moyenne }
                 }
             }
         };
@@ -1022,9 +1184,11 @@ public class WorkflowService : IWorkflowService
 
         await _db.SaveChangesAsync();
 
-        // 6b. Auto-create / link declaration for typed workflows (CNSS, TVA, …)
-        // so the client sees it immediately on Extranet → Déclarations
-        if (!instance.DeclarationId.HasValue && template.DeclarationType != WorkflowDeclarationType.All)
+        // 6b. Auto-create / link declaration for typed fiscal workflows (CNSS, TVA, …).
+        // Domiciliation is operational (courrier/docs) — never create a Declaration shell.
+        if (!instance.DeclarationId.HasValue
+            && template.DeclarationType != WorkflowDeclarationType.All
+            && template.DeclarationType != WorkflowDeclarationType.Domiciliation)
         {
             instance.WorkflowTemplate = template;
             await EnsureDeclarationLinkedAsync(instance, cabinetId, userId);
@@ -2211,11 +2375,97 @@ public class WorkflowService : IWorkflowService
 
         await _db.SaveChangesAsync();
 
+        // Auto-start when affectation is saved with the flag (incl. Domiciliation)
+        if (dto.AutoStartWorkflow && dto.IsActive && dto.WorkflowTemplateId.HasValue)
+        {
+            await TryAutoStartClientWorkflowAsync(dto.ClientId, declType, dto.WorkflowTemplateId, cabinetId, userId);
+        }
+
         var configs = await GetClientConfigsAsync(dto.ClientId, cabinetId);
         var saved = configs.Data?.FirstOrDefault(c => c.DeclarationType == declType.ToString());
         return saved != null
             ? ApiResponse<ClientWorkflowConfigDto>.Ok(saved, "Workflow client enregistré (copie personnalisable).")
             : ApiResponse<ClientWorkflowConfigDto>.Fail("Erreur lors de la sauvegarde.");
+    }
+
+    /// <summary>
+    /// When DOMICILIATION (or another service) becomes active on a client: ensure cabinet template,
+    /// attach client config with AutoStart, and start an instance if none is already running.
+    /// </summary>
+    public async Task<ApiResponse<WorkflowInstanceDto?>> EnsureServiceWorkflowAsync(
+        int clientId, string serviceTypeCode, int cabinetId, string userId)
+    {
+        if (clientId <= 0 || string.IsNullOrWhiteSpace(serviceTypeCode))
+            return ApiResponse<WorkflowInstanceDto?>.Ok(null);
+
+        WorkflowDeclarationType? declType = serviceTypeCode.Trim().ToUpperInvariant() switch
+        {
+            "DOMICILIATION" => WorkflowDeclarationType.Domiciliation,
+            _ => null
+        };
+        if (declType == null)
+            return ApiResponse<WorkflowInstanceDto?>.Ok(null);
+
+        // Ensure a cabinet base template exists (seed if missing)
+        int? cabinetTplId = await _db.WorkflowTemplates.AsNoTracking()
+            .Where(t => t.CabinetId == cabinetId && t.ClientId == null && t.IsActive && !t.IsDeleted
+                && t.DeclarationType == declType.Value)
+            .OrderByDescending(t => t.IsDefault)
+            .ThenBy(t => t.Id)
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync();
+
+        if (cabinetTplId == null)
+        {
+            var def = GetAllDefaultTemplateDefinitions()
+                .FirstOrDefault(d => string.Equals(d.DeclarationType, declType.Value.ToString(), StringComparison.OrdinalIgnoreCase));
+            if (def != null)
+            {
+                var created = await CreateTemplateAsync(def, cabinetId, userId);
+                if (created.Success && created.Data != null)
+                    cabinetTplId = created.Data.Id;
+            }
+        }
+
+        if (cabinetTplId == null)
+            return ApiResponse<WorkflowInstanceDto?>.Fail("Aucun modèle de workflow Domiciliation. Ouvrez le Builder et lancez « Seed ».");
+
+        // Attach template only — a cabinet employee must start the instance (not AutoSystem).
+        var cfgDto = new ClientWorkflowConfigCreateDto
+        {
+            ClientId = clientId,
+            DeclarationType = declType.Value.ToString(),
+            WorkflowTemplateId = cabinetTplId,
+            AutoStartWorkflow = false,
+            DocumentRequestEnabled = true,
+            ClientValidationEnabled = true,
+            IsActive = true,
+            SLAMultiplier = 1m
+        };
+
+        var save = await SaveClientConfigAsync(cfgDto, cabinetId, userId);
+        if (!save.Success)
+            return ApiResponse<WorkflowInstanceDto?>.Fail(save.Message ?? "Impossible d'affecter le workflow domiciliation.");
+
+        return ApiResponse<WorkflowInstanceDto?>.Ok(null,
+            "Workflow domiciliation affecté. Un collaborateur doit le démarrer manuellement (fiche client → Workflow).");
+    }
+
+    private async Task TryAutoStartClientWorkflowAsync(
+        int clientId, WorkflowDeclarationType declType, int? templateId, int cabinetId, string userId)
+    {
+        var hasActive = await _db.WorkflowInstances.AsNoTracking()
+            .AnyAsync(i => i.CabinetId == cabinetId && i.ClientId == clientId && !i.IsDeleted
+                && i.WorkflowTemplate != null && i.WorkflowTemplate.DeclarationType == declType
+                && (i.Status == WorkflowInstanceStatus.Active || i.Status == WorkflowInstanceStatus.Paused));
+        if (hasActive) return;
+
+        await StartWorkflowAsync(new StartWorkflowDto
+        {
+            ClientId = clientId,
+            WorkflowTemplateId = templateId,
+            DeclarationType = declType.ToString()
+        }, cabinetId, userId);
     }
 
     public async Task<ApiResponse<WorkflowTemplateDto>> EnsureClientTemplateAsync(
@@ -2663,9 +2913,35 @@ public class WorkflowService : IWorkflowService
             .FirstOrDefaultAsync(wt => wt.CabinetId == cabinetId && wt.ClientId == clientId && wt.DeclarationType == WorkflowDeclarationType.All && wt.IsActive && wt.IsDefault);
         if (clientAll != null) return clientAll;
 
-        // Priority 3: Global + specific type
+        // Priority 3: Global + specific type (TVA: Mensuelle vs Trimestrielle from client.TypeTVA)
         if (declType.HasValue)
         {
+            if (declType.Value == WorkflowDeclarationType.TVA)
+            {
+                var typeTva = await _db.Clients.AsNoTracking()
+                    .Where(c => c.Id == clientId && c.CabinetId == cabinetId)
+                    .Select(c => c.TypeTVA)
+                    .FirstOrDefaultAsync();
+                var wantTrim = !string.IsNullOrWhiteSpace(typeTva)
+                    && typeTva.StartsWith("Trim", StringComparison.OrdinalIgnoreCase);
+
+                var tvaCandidates = await _db.WorkflowTemplates
+                    .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
+                    .Where(wt => wt.CabinetId == cabinetId && wt.ClientId == null
+                        && wt.DeclarationType == WorkflowDeclarationType.TVA
+                        && wt.IsActive && !wt.Name.Contains("(ancien)"))
+                    .ToListAsync();
+
+                var byFreq = tvaCandidates.FirstOrDefault(wt =>
+                    wantTrim
+                        ? wt.Name.Contains("Trimestrielle", StringComparison.OrdinalIgnoreCase)
+                        : wt.Name.Contains("Mensuelle", StringComparison.OrdinalIgnoreCase));
+                if (byFreq != null) return byFreq;
+
+                var tvaDefault = tvaCandidates.FirstOrDefault(wt => wt.IsDefault) ?? tvaCandidates.FirstOrDefault();
+                if (tvaDefault != null) return tvaDefault;
+            }
+
             var globalType = await _db.WorkflowTemplates
                 .Include(wt => wt.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepOrder))
                 .FirstOrDefaultAsync(wt => wt.CabinetId == cabinetId && wt.ClientId == null && wt.DeclarationType == declType.Value && wt.IsActive && wt.IsDefault);
@@ -2965,7 +3241,8 @@ public class WorkflowService : IWorkflowService
         if (declaration == null) return null;
 
         var periodEnd = declaration.DateFin.Date;
-        var day = Math.Clamp(template.DeadlineDay ?? 20, 1, 31);
+        var defaultDay = string.Equals(declaration?.Type, "TVA", StringComparison.OrdinalIgnoreCase) ? 26 : 20;
+        var day = Math.Clamp(template.DeadlineDay ?? defaultDay, 1, 31);
         var freq = InferDeclarationFrequency(declaration);
 
         return freq switch
@@ -3508,8 +3785,12 @@ public class WorkflowService : IWorkflowService
         if (instance.DeclarationId.HasValue) return;
         if (instance.ClientId <= 0) return;
 
-        var rawType = instance.WorkflowTemplate?.DeclarationType.ToString()
-            ?? (await _db.WorkflowTemplates.Where(t => t.Id == instance.WorkflowTemplateId).Select(t => t.DeclarationType.ToString()).FirstOrDefaultAsync())
+        var templateType = instance.WorkflowTemplate?.DeclarationType
+            ?? await _db.WorkflowTemplates.Where(t => t.Id == instance.WorkflowTemplateId).Select(t => (WorkflowDeclarationType?)t.DeclarationType).FirstOrDefaultAsync();
+        if (templateType == WorkflowDeclarationType.Domiciliation || templateType == WorkflowDeclarationType.All)
+            return;
+
+        var rawType = templateType?.ToString()
             ?? "TVA";
 
         var declType = DeclarationServiceCatalog.NormalizeType(rawType);
@@ -3578,7 +3859,7 @@ public class WorkflowService : IWorkflowService
         int? DeadlineYearOffset);
 
     /// <summary>
-    /// Reads Init period template table (periods[]) — source of truth for DateDebut / DateFin / échéance.
+    /// Reads Init periods[] (DateDebut/DateFin) + windowEndDay (DateLimite).
     /// </summary>
     private async Task<InitPeriodConfig> ResolveInitPeriodConfigAsync(int workflowTemplateId, string declarationType)
     {

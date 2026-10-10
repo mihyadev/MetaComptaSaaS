@@ -78,32 +78,38 @@ public class ClientService : IClientService
 
     public async Task<ApiResponse<ClientDto>> CreateAsync(ClientCreateDto dto, int cabinetId, string userId)
     {
-        // Validate uniqueness
-        if (!string.IsNullOrWhiteSpace(dto.ICE) && await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.ICE == dto.ICE))
-            return ApiResponse<ClientDto>.Fail("Un client avec cet ICE existe déjà.");
-        if (!string.IsNullOrWhiteSpace(dto.IF) && await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.IF == dto.IF))
-            return ApiResponse<ClientDto>.Fail("Un client avec cet IF existe déjà.");
+        NormalizeClientDto(dto);
+        var validation = await ValidateClientDtoAsync(dto, cabinetId, excludeClientId: null);
+        if (validation != null) return validation;
 
-        var client = _mapper.Map<Client>(dto);
-        client.CabinetId = cabinetId;
-        client.CreatedBy = userId;
-        client.Statut = "Active";
+        try
+        {
+            var client = _mapper.Map<Client>(dto);
+            client.CabinetId = cabinetId;
+            client.CreatedBy = userId;
+            client.Statut = "Active";
+            client.ManagerPrincipalId = dto.ManagerPrincipalId;
 
-        // ⚠️ Services are NOT manually created here.
-        // They are activated exclusively through the Contract lifecycle (ContratCommercial validation).
-        // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
+            // Services are activated exclusively through ContratCommercial validation.
+            _db.Clients.Add(client);
+            await _db.SaveChangesAsync();
 
-        _db.Clients.Add(client);
-        await _db.SaveChangesAsync();
+            var created = await _db.Clients
+                .Include(c => c.ServiceContrats)
+                .Include(c => c.Employees)
+                .Include(c => c.Declarations)
+                .FirstAsync(c => c.Id == client.Id);
 
-        // Reload with navigations for correct DTO mapping
-        var created = await _db.Clients
-            .Include(c => c.ServiceContrats)
-            .Include(c => c.Employees)
-            .Include(c => c.Declarations)
-            .FirstAsync(c => c.Id == client.Id);
-
-        return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(created), "Client créé avec succès.");
+            return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(created), "Client créé avec succès.");
+        }
+        catch (DbUpdateException ex)
+        {
+            return ApiResponse<ClientDto>.Fail(MapDbUpdateError(ex));
+        }
+        catch (Exception)
+        {
+            return ApiResponse<ClientDto>.Fail("Impossible de créer le client. Vérifiez les informations saisies (ICE, IF, manager) puis réessayez.");
+        }
     }
 
     public async Task<ApiResponse<ClientDto>> UpdateAsync(int id, ClientCreateDto dto, int cabinetId, string userId)
@@ -113,30 +119,143 @@ public class ClientService : IClientService
         if (client == null)
             return ApiResponse<ClientDto>.Fail("Client non trouvé.");
 
-        _mapper.Map(dto, client);
-        client.UpdatedBy = userId;
-        client.UpdatedAt = DateTime.UtcNow;
+        NormalizeClientDto(dto);
+        var validation = await ValidateClientDtoAsync(dto, cabinetId, excludeClientId: id);
+        if (validation != null) return validation;
 
-        // ⚠️ Services are NOT manually updated here.
-        // They are managed exclusively through the Contract lifecycle (ContratCommercial validation).
-        // Any ServicesFiduciaires submitted in the DTO are IGNORED by design.
-
-        await _db.SaveChangesAsync();
-
-        // Audit log
-        _db.AuditLogs.Add(new Domain.Common.AuditLog
+        try
         {
-            UserId = userId,
-            UserName = userId,
-            Action = "Update",
-            EntityType = "Client",
-            EntityId = id.ToString(),
-            CabinetId = cabinetId,
-            NewValues = JsonSerializer.Serialize(dto)
-        });
-        await _db.SaveChangesAsync();
+            // Preserve manager if the form omitted it (edit tabs may not bind the field)
+            var previousManager = client.ManagerPrincipalId;
+            _mapper.Map(dto, client);
+            if (string.IsNullOrWhiteSpace(dto.ManagerPrincipalId))
+                client.ManagerPrincipalId = previousManager;
+            else
+                client.ManagerPrincipalId = dto.ManagerPrincipalId;
 
-        return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(client), "Client modifié avec succès.");
+            client.UpdatedBy = userId;
+            client.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            _db.AuditLogs.Add(new Domain.Common.AuditLog
+            {
+                UserId = userId,
+                UserName = userId,
+                Action = "Update",
+                EntityType = "Client",
+                EntityId = id.ToString(),
+                CabinetId = cabinetId,
+                NewValues = JsonSerializer.Serialize(dto)
+            });
+            await _db.SaveChangesAsync();
+
+            return ApiResponse<ClientDto>.Ok(_mapper.Map<ClientDto>(client), "Client modifié avec succès.");
+        }
+        catch (DbUpdateException ex)
+        {
+            return ApiResponse<ClientDto>.Fail(MapDbUpdateError(ex));
+        }
+        catch (Exception)
+        {
+            return ApiResponse<ClientDto>.Fail("Impossible de modifier le client. Vérifiez les informations saisies (ICE, IF, manager) puis réessayez.");
+        }
+    }
+
+    private static void NormalizeClientDto(ClientCreateDto dto)
+    {
+        static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+
+        dto.RaisonSociale = (dto.RaisonSociale ?? string.Empty).Trim();
+        dto.ICE = Clean(dto.ICE);
+        dto.IF = Clean(dto.IF);
+        dto.RC = Clean(dto.RC);
+        dto.NumeroCNSS = Clean(dto.NumeroCNSS);
+        dto.NumeroPatente = Clean(dto.NumeroPatente);
+        dto.CodeActivite = Clean(dto.CodeActivite);
+        dto.FormeJuridique = Clean(dto.FormeJuridique);
+        dto.SecteurActivite = Clean(dto.SecteurActivite);
+        dto.AdresseSiegeSocial = Clean(dto.AdresseSiegeSocial);
+        dto.VilleSiegeSocial = Clean(dto.VilleSiegeSocial);
+        dto.TelephonePrincipal = Clean(dto.TelephonePrincipal);
+        dto.EmailPrincipal = Clean(dto.EmailPrincipal);
+        dto.ContactNom = Clean(dto.ContactNom);
+        dto.ContactFonction = Clean(dto.ContactFonction);
+        dto.ContactTelephone = Clean(dto.ContactTelephone);
+        dto.ContactEmail = Clean(dto.ContactEmail);
+        dto.ManagerPrincipalId = Clean(dto.ManagerPrincipalId);
+        dto.TypeTVA = string.IsNullOrWhiteSpace(dto.TypeTVA) ? "Mensuelle" : dto.TypeTVA.Trim();
+        dto.NotesInternes = Clean(dto.NotesInternes);
+        if (dto.MoisClotureExercice < 1 || dto.MoisClotureExercice > 12)
+            dto.MoisClotureExercice = 12;
+    }
+
+    private async Task<ApiResponse<ClientDto>?> ValidateClientDtoAsync(ClientCreateDto dto, int cabinetId, int? excludeClientId)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(dto.RaisonSociale))
+            errors.Add("La raison sociale est obligatoire.");
+        if (string.IsNullOrWhiteSpace(dto.ICE))
+            errors.Add("L'ICE est obligatoire.");
+        else if (dto.ICE.Length != 15 || !dto.ICE.All(char.IsDigit))
+            errors.Add("L'ICE doit contenir exactement 15 chiffres.");
+        if (string.IsNullOrWhiteSpace(dto.IF))
+            errors.Add("L'identifiant fiscal (IF) est obligatoire.");
+        if (dto.MoisClotureExercice < 1 || dto.MoisClotureExercice > 12)
+            errors.Add("Le mois de clôture doit être entre 1 et 12.");
+        if (!string.IsNullOrWhiteSpace(dto.EmailPrincipal) && !dto.EmailPrincipal.Contains('@'))
+            errors.Add("L'email principal n'est pas valide.");
+        if (!string.IsNullOrWhiteSpace(dto.ContactEmail) && !dto.ContactEmail.Contains('@'))
+            errors.Add("L'email du contact n'est pas valide.");
+
+        if (errors.Count > 0)
+            return ApiResponse<ClientDto>.Fail(errors[0], errors);
+
+        if (!string.IsNullOrWhiteSpace(dto.ICE) &&
+            await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.ICE == dto.ICE && (!excludeClientId.HasValue || c.Id != excludeClientId.Value)))
+            return ApiResponse<ClientDto>.Fail("Un client avec cet ICE existe déjà dans votre cabinet.");
+
+        if (!string.IsNullOrWhiteSpace(dto.IF) &&
+            await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.IF == dto.IF && (!excludeClientId.HasValue || c.Id != excludeClientId.Value)))
+            return ApiResponse<ClientDto>.Fail("Un client avec cet IF existe déjà dans votre cabinet.");
+
+        if (!string.IsNullOrWhiteSpace(dto.RC) &&
+            await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.RC == dto.RC && (!excludeClientId.HasValue || c.Id != excludeClientId.Value)))
+            return ApiResponse<ClientDto>.Fail("Un client avec ce RC existe déjà dans votre cabinet.");
+
+        if (!string.IsNullOrWhiteSpace(dto.NumeroCNSS) &&
+            await _db.Clients.AnyAsync(c => c.CabinetId == cabinetId && c.NumeroCNSS == dto.NumeroCNSS && (!excludeClientId.HasValue || c.Id != excludeClientId.Value)))
+            return ApiResponse<ClientDto>.Fail("Un client avec ce N° CNSS existe déjà dans votre cabinet.");
+
+        if (!string.IsNullOrWhiteSpace(dto.ManagerPrincipalId))
+        {
+            var managerExists = await _db.Users.AnyAsync(u =>
+                u.Id == dto.ManagerPrincipalId && u.CabinetId == cabinetId && u.IsActive);
+            if (!managerExists)
+                return ApiResponse<ClientDto>.Fail("Le manager principal est introuvable. Laissez le champ vide ou choisissez un utilisateur valide du cabinet.");
+        }
+
+        return null;
+    }
+
+    private static string MapDbUpdateError(DbUpdateException ex)
+    {
+        var raw = (ex.InnerException?.Message ?? ex.Message) ?? string.Empty;
+        var lower = raw.ToLowerInvariant();
+        if (lower.Contains("managerprincipal") || lower.Contains("fk_clients_aspnetusers"))
+            return "Le manager principal est invalide. Laissez le champ vide ou sélectionnez un utilisateur existant.";
+        if (lower.Contains("ice") && (lower.Contains("unique") || lower.Contains("duplicate") || lower.Contains("ix_")))
+            return "Un client avec cet ICE existe déjà dans votre cabinet.";
+        if ((lower.Contains("\"if\"") || lower.Contains("[if]") || lower.Contains("_if")) && (lower.Contains("unique") || lower.Contains("duplicate") || lower.Contains("ix_")))
+            return "Un client avec cet IF existe déjà dans votre cabinet.";
+        if (lower.Contains("numero_cnss") || lower.Contains("numerocnss"))
+            return "Un client avec ce N° CNSS existe déjà dans votre cabinet.";
+        if (lower.Contains("rc") && (lower.Contains("unique") || lower.Contains("duplicate") || lower.Contains("ix_")))
+            return "Un client avec ce RC existe déjà dans votre cabinet.";
+        if (lower.Contains("unique") || lower.Contains("duplicate") || lower.Contains("2627") || lower.Contains("2601"))
+            return "Une donnée unique est déjà utilisée (ICE, IF, RC ou CNSS). Vérifiez les identifiants saisis.";
+        return "Impossible d'enregistrer le client. Vérifiez les informations saisies et réessayez.";
     }
 
     public async Task<ApiResponse<bool>> DeleteAsync(int id, int cabinetId, string userId)
@@ -436,7 +555,7 @@ public class ClientService : IClientService
         switch (sc.TypeService?.ToUpperInvariant())
         {
             case "TVA":
-                sc.JourLimiteDeclaration = 20;  // 20th of M+1
+                sc.JourLimiteDeclaration = 26;  // working deadline: 26th of M+1
                 sc.DelaiDeclarationMois = 1;
                 break;
             case "IS":
@@ -487,7 +606,8 @@ public class ClientService : IClientService
         ServiceContrat svc, DateTime exDebut, DateTime exFin)
     {
         var periods = new List<(string Periode, DateTime DateDebut, DateTime DateFin, DateTime DateLimite)>();
-        var jourLimite = svc.JourLimiteDeclaration ?? 20;
+        var jourLimite = svc.JourLimiteDeclaration
+            ?? (string.Equals(svc.TypeService, "TVA", StringComparison.OrdinalIgnoreCase) ? 26 : 20);
         var delaiMois = svc.DelaiDeclarationMois ?? 1;
         var freq = DeclarationPeriodTemplate.NormalizeFrequency(svc.Frequence);
 

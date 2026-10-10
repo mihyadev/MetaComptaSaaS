@@ -793,6 +793,63 @@ public sealed class JuridiqueFacade : IJuridiqueFacade
         => await _api.PutAsync<bool>($"api/juridique/{id}/status", new { NewStatut = newStatut });
 }
 
+public sealed class DomiciliationFacade : IDomiciliationFacade
+{
+    private readonly IApiClient _api;
+    public DomiciliationFacade(IApiClient api) => _api = api;
+
+    public async Task<List<DomiciliationDashboardRowDto>> GetDashboardAsync()
+    {
+        var result = await _api.GetAsync<List<DomiciliationDashboardRowDto>>("api/domiciliation/dashboard");
+        return result?.Data ?? new();
+    }
+
+    public async Task<DomiciliationClientWorkspaceDto?> GetClientWorkspaceAsync(int clientId)
+    {
+        var result = await _api.GetAsync<DomiciliationClientWorkspaceDto>($"api/domiciliation/clients/{clientId}");
+        return result?.Data;
+    }
+
+    public async Task<List<DomiciliationTimelineDto>> GetTimelineAsync(int clientId, int take = 50)
+    {
+        var result = await _api.GetAsync<List<DomiciliationTimelineDto>>($"api/domiciliation/clients/{clientId}/timeline?take={take}");
+        return result?.Data ?? new();
+    }
+
+    public Task<ApiResponse<CourrierDomiciliationDto>?> ReceiveAsync(CourrierReceiveDto dto)
+        => _api.PostAsync<CourrierDomiciliationDto>("api/domiciliation/courriers", dto);
+
+    public async Task<CourrierDomiciliationDto?> GetCourrierAsync(int id)
+    {
+        var result = await _api.GetAsync<CourrierDomiciliationDto>($"api/domiciliation/courriers/{id}");
+        return result?.Data;
+    }
+
+    public Task<ApiResponse<CourrierDomiciliationDto>?> AttachScanAsync(int id, int documentId)
+        => _api.PostAsync<CourrierDomiciliationDto>($"api/domiciliation/courriers/{id}/scan/{documentId}", new { });
+
+    public Task<ApiResponse<CourrierDomiciliationDto>?> RemovePieceAsync(int id, int pieceId)
+        => _api.DeleteAsync<CourrierDomiciliationDto>($"api/domiciliation/courriers/{id}/pieces/{pieceId}");
+
+    public Task<ApiResponse<CourrierDomiciliationDto>?> SetPrimaryPieceAsync(int id, int pieceId)
+        => _api.PostAsync<CourrierDomiciliationDto>($"api/domiciliation/courriers/{id}/pieces/{pieceId}/primary", new { });
+
+    public Task<ApiResponse<CourrierDomiciliationDto>?> AdvanceCourrierAsync(int id, CourrierStatusActionDto dto)
+        => _api.PostAsync<CourrierDomiciliationDto>($"api/domiciliation/courriers/{id}/advance", dto);
+
+    public Task<ApiResponse<DemandeActionCourrierDto>?> AdvanceActionAsync(int actionId, DemandeActionAdvanceDto dto)
+        => _api.PostAsync<DemandeActionCourrierDto>($"api/domiciliation/actions/{actionId}/advance", dto);
+
+    public Task<ApiResponse<DemandeDocumentDomiciliationDto>?> CreateDocumentRequestAsync(DemandeDocumentCreateDto dto)
+        => _api.PostAsync<DemandeDocumentDomiciliationDto>("api/domiciliation/document-requests", dto);
+
+    public Task<ApiResponse<DemandeDocumentDomiciliationDto>?> ReviewDocumentAsync(int id, DemandeDocumentReviewDto dto)
+        => _api.PostAsync<DemandeDocumentDomiciliationDto>($"api/domiciliation/document-requests/{id}/review", dto);
+
+    public Task<ApiResponse<DemandeDocumentDomiciliationDto>?> AttachDocumentAsync(int demandeId, int documentId)
+        => _api.PostAsync<DemandeDocumentDomiciliationDto>($"api/domiciliation/document-requests/{demandeId}/attach/{documentId}", new { });
+}
+
 public sealed class PlanningFacade : IPlanningFacade
 {
     private readonly IApiClient _api;

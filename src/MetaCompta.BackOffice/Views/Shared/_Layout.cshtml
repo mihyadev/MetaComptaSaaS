@@ -9,7 +9,7 @@
     var hasClient = !string.IsNullOrEmpty(selectedClientId);
 
     // Client-dependent controllers
-    var clientControllers = new[] { "Declarations", "EtatsFiscaux", "Comptabilite", "Payroll", "Employees", "Juridique", "Documents" };
+    var clientControllers = new[] { "Declarations", "EtatsFiscaux", "Comptabilite", "Payroll", "Employees", "Juridique", "Documents", "Domiciliation" };
     var isClientSection = clientControllers.Contains(currentController);
 
     // Gateway = entry page (no menu). Elsewhere menu is dynamic: Cabinet vs Dossier Client.
@@ -244,7 +244,11 @@
                     var showFiscalFam = canFiscalAny && HasAny("TVA", "IR_SAL", "IR", "RAS_FONC", "RAS_DIV", "DRF", "CM", "ACOMPTES", "REG_IS", "IS", "LIASSEFISCALE");
                     var showIsFam = canFiscalIs && HasAny("ACOMPTES", "REG_IS", "IS", "DRF", "CM", "LIASSEFISCALE");
                     var showSocialFam = canSocial && HasAny("CNSS", "DTS", "PAIE");
+                    var canDomiciliation = PermissionHelper.HasAnyDomain(Context.Session, "domiciliation");
                     var showJuridiqueFam = canJuridique && HasAny("PV_AGO", "DEPOT_RC");
+                    // Permission required; if a client is selected, only show when that client has DOMICILIATION.
+                    var showDomiciliationFam = canDomiciliation
+                        && (string.IsNullOrEmpty(selectedClientId) || HasSvc("DOMICILIATION"));
                     var declType = ViewBag.Type?.ToString();
                     var isFiscalDeclPage = currentController == "Declarations"
                         && !string.Equals(declType, "CNSS", StringComparison.OrdinalIgnoreCase)
@@ -435,7 +439,24 @@
                 </li>
                 }
 
-                @if (!showExercices && !showFiscalFam && !showIsFam && !showComptaFam && !showSocialFam && !showJuridiqueFam)
+                @if (showDomiciliationFam)
+                {
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" data-bs-toggle="collapse" href="#menuDomiciliation" role="button"
+                       aria-expanded="@(currentController == "Domiciliation" ? "true" : "false")">
+                        <i class="bi bi-mailbox"></i><span>Domiciliation</span><i class="bi bi-chevron-down chevron-icon"></i>
+                    </a>
+                    <div class="collapse sidebar-submenu @(currentController == "Domiciliation" ? "show" : "")" id="menuDomiciliation">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Index", "Domiciliation")"><i class="bi bi-speedometer2"></i> Tableau de bord</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("Receive", "Domiciliation")"><i class="bi bi-plus-circle"></i> + Recevoir</a></li>
+                            <li class="nav-item"><a class="nav-link" href="@Url.Action("RequestDocument", "Domiciliation")"><i class="bi bi-file-earmark-plus"></i> + Demander document</a></li>
+                        </ul>
+                    </div>
+                </li>
+                }
+
+                @if (!showExercices && !showFiscalFam && !showIsFam && !showComptaFam && !showSocialFam && !showJuridiqueFam && !showDomiciliationFam)
                 {
                 <li class="nav-item px-3 py-2">
                     <div class="small text-body-secondary">

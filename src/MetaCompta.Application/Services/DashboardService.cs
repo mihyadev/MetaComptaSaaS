@@ -209,12 +209,34 @@ public class DashboardService : IDashboardService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var summaries = BuildDossierSummaries(access.ActiveServices, existingTypes, declarations, DateTime.UtcNow);
+        if (access.ActiveServices.Any(s => string.Equals(s, RefCodes.TypeService.Domiciliation, StringComparison.OrdinalIgnoreCase)))
+        {
+            var openMail = await _db.CourriersDomiciliation.CountAsync(c =>
+                c.ClientId == clientId && c.CabinetId == cabinetId && c.ClientNotifie && !c.IsDeleted
+                && c.Statut != "Archived" && c.Statut != "Closed");
+            var openDocs = await _db.DemandesDocumentDomiciliation.CountAsync(d =>
+                d.ClientId == clientId && d.CabinetId == cabinetId && !d.IsDeleted
+                && d.Statut != "Closed" && d.Statut != "Validated");
+            summaries.Add(new ExtranetDossierSummaryDto
+            {
+                Type = "DOMICILIATION",
+                DisplayName = "Domiciliation & courrier",
+                Frequency = "Continue",
+                IsShellOnly = true,
+                EnCours = openMail + openDocs,
+                Urgentes = 0,
+                Cloturees = 0,
+                Total = openMail + openDocs
+            });
+        }
+
         var dto = new ExtranetContextDto
         {
             CurrentExercice = current,
             Exercices = exercices,
             ActiveServices = access.ActiveServices,
-            DossierSummaries = BuildDossierSummaries(access.ActiveServices, existingTypes, declarations, DateTime.UtcNow)
+            DossierSummaries = summaries
         };
 
         return ApiResponse<ExtranetContextDto>.Ok(dto);

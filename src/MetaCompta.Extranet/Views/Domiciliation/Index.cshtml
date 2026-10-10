@@ -1,0 +1,206 @@
+@using MetaCompta.Domain.Common
+@{
+    ViewData["Title"] = "Domiciliation";
+    var courriers = ViewBag.Courriers as List<MetaCompta.Application.DTOs.CourrierDomiciliationDto> ?? new();
+    var docs = ViewBag.Documents as List<MetaCompta.Application.DTOs.DemandeDocumentDomiciliationDto> ?? new();
+    var actionNeeded = courriers.Count(c => c.ClientNotifie && c.Statut is not ("Closed" or "Archived")
+        && (c.ActionsClient == null || !c.ActionsClient.Any(a => a.Statut != "Closed")));
+    var docsPending = docs.Count(d => d.Statut is "ClientNotified" or "WaitingClient" or "Rejected" or "Requested");
+    var closed = courriers.Count(c => c.Statut is "Closed" or "Archived");
+}
+
+<div class="ex-page-hero">
+    <div>
+        <h4>Domiciliation</h4>
+        <p class="ex-sub">Correspondances notifiées par votre cabinet et demandes de documents.</p>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success" role="alert"><i class="bi bi-check-circle me-1"></i>@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]</div>
+}
+
+<div class="ex-kpi-grid">
+    <div class="ex-kpi">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Correspondances</div><div class="ex-kpi-value">@courriers.Count</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-envelope-open"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Notifiées</div>
+    </div>
+    <div class="ex-kpi warning">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">À traiter</div><div class="ex-kpi-value">@actionNeeded</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Action client</div>
+    </div>
+    <div class="ex-kpi danger">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Documents</div><div class="ex-kpi-value">@docsPending</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-file-earmark-arrow-up"></i></div>
+        </div>
+        <div class="ex-kpi-foot">À déposer</div>
+    </div>
+    <div class="ex-kpi success">
+        <div class="ex-kpi-top">
+            <div><div class="ex-kpi-label">Clôturées</div><div class="ex-kpi-value">@closed</div></div>
+            <div class="ex-kpi-icon"><i class="bi bi-check-circle"></i></div>
+        </div>
+        <div class="ex-kpi-foot">Archivées</div>
+    </div>
+</div>
+
+<div class="ex-board-card mb-4">
+    <div class="ex-panel-head">
+        <div>
+            <h3><i class="bi bi-mailbox text-primary me-2"></i>Correspondances reçues</h3>
+            <p>Courriers notifiés — ouvrez pour demander un retrait ou une réexpédition</p>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 ex-table">
+            <thead>
+                <tr>
+                    <th>Correspondance</th>
+                    <th>Type</th>
+                    <th>Date</th>
+                    <th>Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (courriers.Any())
+            {
+                foreach (var c in courriers.OrderByDescending(x => x.DateReception))
+                {
+                    var hasOpen = c.ActionsClient?.Any(a => a.Statut != "Closed") == true;
+                    var sClass = c.Statut switch
+                    {
+                        "ClientNotified" when !hasOpen => "warning",
+                        "Closed" or "Archived" => "secondary",
+                        _ when hasOpen => "info",
+                        _ => "primary"
+                    };
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-envelope-paper text-primary fs-5"></i>
+                                <div>
+                                    <div class="fw-semibold">@(c.Expediteur ?? c.TypeCourrier)</div>
+                                    @if (!string.IsNullOrEmpty(c.Reference))
+                                    {
+                                        <div class="small text-muted">Réf. @c.Reference</div>
+                                    }
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">@c.TypeCourrier</span></td>
+                        <td class="small">@c.DateReception.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                        <td><span class="badge bg-@sClass rounded-pill">@RefCodes.StatutCourrierDomiciliation.Label(c.Statut)</span></td>
+                        <td class="text-end">
+                            <a href="/Domiciliation/Courrier/@c.Id" class="btn btn-sm btn-primary">
+                                <i class="bi bi-arrow-right me-1"></i>Ouvrir
+                            </a>
+                        </td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="5">
+                        <div class="ex-empty">
+                            <i class="bi bi-mailbox"></i>
+                            <p>Aucune correspondance notifiée pour le moment.</p>
+                        </div>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="ex-board-card">
+    <div class="ex-panel-head">
+        <div>
+            <h3><i class="bi bi-file-earmark-text text-primary me-2"></i>Documents demandés</h3>
+            <p>Pièces demandées par le cabinet dans le cadre de la domiciliation</p>
+        </div>
+        <a href="/Documents" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open me-1"></i>Mes documents</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 ex-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Message</th>
+                    <th>Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (docs.Any())
+            {
+                foreach (var d in docs.OrderByDescending(x => x.Id))
+                {
+                    var canUpload = d.Statut is "ClientNotified" or "WaitingClient" or "Rejected" or "Requested";
+                    var sClass = d.Statut switch
+                    {
+                        "Validated" => "success",
+                        "Rejected" => "danger",
+                        "Uploaded" or "UnderReview" => "info",
+                        "ClientNotified" or "WaitingClient" or "Requested" => "warning",
+                        _ => "secondary"
+                    };
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-file-earmark-arrow-up text-primary fs-5"></i>
+                                <span class="fw-semibold">@d.DocumentType</span>
+                            </div>
+                        </td>
+                        <td class="small text-muted">@(string.IsNullOrEmpty(d.Message) ? "—" : d.Message)</td>
+                        <td>
+                            <span class="badge bg-@sClass rounded-pill">@RefCodes.StatutDemandeDocumentDomiciliation.Label(d.Statut)</span>
+                            @if (!string.IsNullOrEmpty(d.RejectionReasonCode))
+                            {
+                                <div class="small text-danger mt-1">Rejet : @d.RejectionReasonCode</div>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <a href="/Domiciliation/Documents/@d.Id" class="btn btn-sm @(canUpload ? "btn-primary" : "btn-outline-secondary")">
+                                @if (canUpload)
+                                {
+                                    <i class="bi bi-cloud-upload me-1"></i><span>Déposer</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-eye me-1"></i><span>Voir</span>
+                                }
+                            </a>
+                        </td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="4">
+                        <div class="ex-empty">
+                            <i class="bi bi-folder-x"></i>
+                            <p>Aucune demande de document en cours.</p>
+                        </div>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

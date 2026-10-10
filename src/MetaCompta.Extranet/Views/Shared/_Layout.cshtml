@@ -24,6 +24,8 @@
     string Nav(string c) => ctrl == c ? "ex-nav-link active" : "ex-nav-link";
     string DosNav(string type)
     {
+        if (string.Equals(type, "DOMICILIATION", StringComparison.OrdinalIgnoreCase) && ctrl == "Domiciliation")
+            return "ex-nav-link active";
         var active = ctrl == "Dossiers"
             && string.Equals(routeType, type, StringComparison.OrdinalIgnoreCase);
         return active ? "ex-nav-link active" : "ex-nav-link";
@@ -95,6 +97,7 @@
                         "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "bi-person-badge",
                         "CNSS" or "AMO" => "bi-shield-check",
                         "DTS" => "bi-file-earmark-person",
+                        "DOMICILIATION" => "bi-mailbox",
                         _ => "bi-folder2-open"
                     };
                     var accent = d.Type.ToUpperInvariant() switch
@@ -103,9 +106,11 @@
                         "IS" or "DRF" or "CM" or "ACOMPTES" or "REG_IS" => "dos-is",
                         "IR" or "IR_SAL" or "RAS_FONC" or "RAS_DIV" => "dos-ir",
                         "CNSS" or "AMO" or "DTS" => "dos-cnss",
+                        "DOMICILIATION" => "dos-default",
                         _ => "dos-default"
                     };
-                    <a class="@DosNav(d.Type) @accent" href="/Dossiers/@d.Type">
+                    var href = d.Type.ToUpperInvariant() == "DOMICILIATION" ? "/Domiciliation" : $"/Dossiers/{d.Type}";
+                    <a class="@DosNav(d.Type) @accent" href="@href">
                         <span class="ex-nav-ico"><i class="bi @icon"></i></span>
                         <span class="ex-nav-text">@d.DisplayName</span>
                         @if (d.Urgentes > 0)

@@ -110,12 +110,13 @@ public static class MoroccoDeclarationCalendar
         {
             "CNSS" => new(1, 10, 1),      // juillet → 1–10 août
             "IR_SAL" => new(1, 15, 1),
-            "TVA" => new(1, 20, 1),
+            // TVA: échéance de travail fiduciaire = 26 du mois suivant la période
+            "TVA" => new(1, 26, 1),
             "DTS" => new(1, 28, 2),       // fin fév. N+1 approx.
             "IS" or "REG_IS" or "CM" or "DRF" or "LIASSEFISCALE" => new(1, 31, 3), // mars N+1
             "IR" => new(1, 30, 4),        // avril N+1
             "ACOMPTES" => new(1, 31, 0),  // fin de trimestre
-            _ => UsesPostPeriodFilingWindow(t) ? new(1, 20, 1) : new(1, 31, 0)
+            _ => UsesPostPeriodFilingWindow(t) ? new(1, 26, 1) : new(1, 31, 0)
         };
     }
 
@@ -158,10 +159,11 @@ public static class MoroccoDeclarationCalendar
             return new DateTime(year, deadlineMonth.Value, Math.Min(day, dim));
         }
 
-        // Generic frequency defaults — not tied to declaration type
+        // Generic frequency defaults — not tied to declaration type.
+        // Trimestrielle Maroc (TVA): dépôt dans le 1er mois du trimestre suivant (+1), pas +3.
         var (defaultYears, defaultMonths) = freq switch
         {
-            "Trimestrielle" => (0, 3),
+            "Trimestrielle" => (0, 1),
             "Annuelle" => (1, 0),
             _ => (0, 1) // Mensuelle
         };
@@ -175,12 +177,13 @@ public static class MoroccoDeclarationCalendar
     public static (int Years, int Months, int StartDay, int EndDay) GetFrequencyLifecycleDefaults(string? frequency)
     {
         var freq = NormalizeFrequency(frequency);
+        // TVA / mensuel-trimestriel: échéance de travail = 26 du mois suivant la période.
         return freq switch
         {
-            "Trimestrielle" => (0, 3, 1, 1),
-            "Annuelle" => (1, 0, 1, 1),
-            "Periodique" => (0, 0, 1, 1),
-            _ => (0, 1, 1, 1) // Mensuelle
+            "Trimestrielle" => (0, 1, 1, 26),
+            "Annuelle" => (1, 0, 1, 31),
+            "Periodique" => (0, 0, 1, 26),
+            _ => (0, 1, 1, 26) // Mensuelle
         };
     }
 
@@ -278,9 +281,9 @@ public static class MoroccoDeclarationCalendar
         if (type is "IR_SAL")
             return DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 15);
 
-        // TVA — mensuelle or trimestrielle: typically 20th of month following period end
+        // TVA — échéance de travail fiduciaire: 26 du mois suivant la période
         if (type == "TVA")
-            return DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 20);
+            return DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 26);
 
         // Acomptes IS — échéance = fin du trimestre (31/03, 30/06, 30/09, 31/12)
         if (type == "ACOMPTES")
@@ -304,8 +307,8 @@ public static class MoroccoDeclarationCalendar
         return frequency switch
         {
             "Annuelle" => new DateTime(periodEnd.Year + 1, 3, 31),
-            "Trimestrielle" => DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 20),
-            _ => DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 20)
+            "Trimestrielle" => DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 26),
+            _ => DayOfMonthAfter(periodEnd, monthsAfter: 1, day: 26)
         };
     }
 

@@ -467,13 +467,14 @@
                         <input type="hidden" name="ClientId" value="@Model.Id" />
                         <div class="row g-3 align-items-end">
                             <div class="col-md-4">
-                                <label class="form-label small text-muted mb-1">Type de déclaration</label>
+                                <label class="form-label small text-muted mb-1">Type de workflow</label>
                                 <select name="DeclarationType" id="wfAffectType" class="form-select">
                                     <option value="All">Tous types</option>
                                     @foreach (var e in DeclarationServiceCatalog.All)
                                     {
                                         <option value="@e.DeclarationType">@e.DisplayName (@e.DeclarationType)</option>
                                     }
+                                    <option value="Domiciliation">Domiciliation — Siège social &amp; courrier (DOMICILIATION)</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
@@ -514,7 +515,7 @@
                             </div>
                             <div class="col-md-2">
                                 <div class="form-check form-switch">
-                                    <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" checked id="wfAuto" />
+                                    <input name="AutoStartWorkflow" type="checkbox" class="form-check-input" value="true" id="wfAuto" />
                                     <label class="form-check-label" for="wfAuto">Auto-start</label>
                                 </div>
                             </div>

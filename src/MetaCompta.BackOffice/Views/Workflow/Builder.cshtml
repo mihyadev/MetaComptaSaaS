@@ -11,12 +11,19 @@
     var isEditMode = editId.HasValue;
 
     var stepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Saisie", "Controle", "ValidationInterne", "ValidationClient", "DepotSoumission", "Paiement", "Rapprochement", "ClotureArchivage" };
+    var domiciliationStepTypes = new[] { "Initialisation", "DemandePieces", "Collecte", "Controle", "ValidationInterne", "ValidationClient", "ClotureArchivage" };
     var assignmentTypes = new[] { "Employee", "Role", "Department", "Client", "AutoSystem" };
     var priorities = new[] { "Faible", "Moyenne", "Haute", "Urgente" };
     var roles = new[] { "Gerant", "Manager", "Collaborateur", "Assistant", "Stagiaire" };
-    var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite" };
+    var declTypes = new[] { "All", "TVA", "IS", "IR", "CNSS", "DTS", "IR_SALAIRES", "Paie", "Juridique", "Comptabilite", "Domiciliation" };
     var declStatuses = new[] { "Brouillon", "ACompleter", "EnCours", "EnPreparation", "Completee", "EnRevision", "Validee", "Soumise", "Payee", "Refusee", "Rejetee", "DocumentsDemandes", "DocumentsRecus", "Suspendue", "Archivee" };
+    var domiciliationStatuses = new[] { "Requested", "ClientNotified", "Uploaded", "UnderReview", "Validated", "Rejected", "WaitingClient", "Closed", "Received", "ToProcess", "InProgress", "Completed", "Archived" };
     var actionTypes = new[] { "None", "CreateDeclaration", "CompleteDeclaration", "ValidateDeclaration", "SubmitDeclaration", "SuspendDeclaration", "ArchiveDeclaration", "ClotureDeclaration", "RelanceClient", "NotifyEmployee", "NotifyClient", "GeneratePDF", "ExportXML", "SendEmail", "CreateTask", "RequestDocuments", "ApproveByClient", "PaymentReminder" };
+    var domiciliationActionTypes = new[] { "None", "RequestDocuments", "NotifyClient", "NotifyEmployee", "RelanceClient", "CreateTask", "Custom" };
+    var isDomiciliationTpl = string.Equals(Model.DeclarationType, "Domiciliation", StringComparison.OrdinalIgnoreCase);
+    var activeStepTypes = isDomiciliationTpl ? domiciliationStepTypes : stepTypes;
+    var activeActionTypes = isDomiciliationTpl ? domiciliationActionTypes : actionTypes;
+    var activeStatuses = isDomiciliationTpl ? domiciliationStatuses : declStatuses;
     var routingModes = new[] { "Sequential", "ConditionalBranch", "SkipToStep", "EndWorkflow" };
     var triggerSources = new[] { "Manual", "System", "Employee", "Client", "Extranet", "API", "Schedule" };
     var onMaxRetries = new[] { "NextStep", "Suspend", "Cancel", "SkipStep", "EscalateToManager" };
@@ -31,6 +38,7 @@
         ["Juridique"] = ("#fee2e2", "#dc2626", "bi-file-earmark-text"),
         ["Comptabilite"] = ("#e0f2fe", "#0284c7", "bi-journal-bookmark-fill"),
         ["IR_SALAIRES"] = ("#f5f3ff", "#6d28d9", "bi-people-fill"),
+        ["Domiciliation"] = ("#ecfeff", "#0e7490", "bi-mailbox"),
         ["All"] = ("#f1f5f9", "#475569", "bi-grid-3x3-gap-fill")
     };
 
@@ -116,25 +124,30 @@
     .life-panel .life-unit input { border: 0; width: 3.2rem; text-align: center; font-weight: 700; font-size: 0.85rem; background: transparent; padding: 0.3rem 0; }
     .life-panel .life-unit input:focus { outline: none; box-shadow: none; }
     .life-panel .life-plus { color: var(--monday-muted); font-weight: 700; align-self: center; padding: 0 0.15rem; }
-    .period-template-box { margin-top: 0.35rem; border: 1px solid var(--monday-border); border-radius: 10px; overflow: hidden; background: var(--monday-surface); }
-    .period-template-box .pt-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.45rem 0.75rem; background: color-mix(in srgb, var(--monday-blue) 6%, var(--monday-surface)); border-bottom: 1px solid var(--monday-border); }
-    .period-template-box .pt-head span { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); }
-    .period-template-box .pt-head strong { font-size: 0.78rem; color: var(--monday-text); }
-    .period-template-box table { width: 100%; margin: 0; font-size: 0.75rem; }
-    .period-template-box th, .period-template-box td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--monday-border); vertical-align: middle; }
-    .period-template-box th { color: var(--monday-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
-    .period-template-box tr:last-child td { border-bottom: 0; }
-    .period-template-box .pt-scroll { max-height: 260px; overflow-y: auto; }
-    .period-template-box input[type="text"], .period-template-box input[type="date"], .period-template-box input[type="number"], .period-template-box select { border: 1px solid var(--monday-border); border-radius: 6px; padding: 0.2rem 0.35rem; font-size: 0.75rem; background: var(--monday-surface); }
-    .period-template-box input[type="text"] { width: 100%; }
-    .period-template-box .pt-md-row { display: flex; align-items: center; gap: 0.25rem; flex-wrap: nowrap; }
-    .period-template-box .pt-md-row input[type="number"] { width: 3.2rem; text-align: center; font-weight: 700; }
-    .period-template-box .pt-md-row select { min-width: 5.5rem; }
+    .period-template-box { margin-top: 0.35rem; border: 1px solid var(--monday-border); border-radius: 12px; overflow: hidden; background: var(--monday-surface); }
+    .period-template-box .pt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.65rem 0.9rem; background: linear-gradient(135deg, color-mix(in srgb, var(--monday-blue) 8%, var(--monday-surface)), var(--monday-surface)); border-bottom: 1px solid var(--monday-border); }
+    .period-template-box .pt-head span { display:block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--monday-muted); }
+    .period-template-box .pt-head strong { display:block; font-size: 0.88rem; color: var(--monday-text); margin-top: 0.1rem; }
+    .period-template-box .pt-head-hint { font-size: 0.72rem; color: var(--monday-muted); white-space: nowrap; }
+    .period-template-box .pt-scroll { max-height: 340px; overflow-y: auto; }
+    .period-template-box.period-template-pro .pt-cards { display: flex; flex-direction: column; gap: 0.55rem; padding: 0.75rem; }
+    .period-template-box .pt-card { border: 1px solid var(--monday-border); border-radius: 10px; background: #fff; padding: 0.65rem 0.75rem; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .period-template-box .pt-card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.55rem; }
+    .period-template-box .pt-card-title { display: flex; align-items: center; gap: 0.45rem; flex: 1; min-width: 0; }
+    .period-template-box .pt-badge { width: 1.45rem; height: 1.45rem; border-radius: 999px; background: color-mix(in srgb, var(--monday-blue) 14%, #fff); color: var(--monday-blue); font-size: 0.7rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .period-template-box .pt-label { font-weight: 600; }
+    .period-template-box .pt-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+    @@media (max-width: 720px) { .period-template-box .pt-card-grid { grid-template-columns: 1fr; } }
+    .period-template-box .pt-field-label { display:block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--monday-muted); margin-bottom: 0.25rem; }
+    .period-template-box .pt-md-row { display: flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap; }
+    .period-template-box .pt-md-row input[type="number"] { width: 3.6rem; text-align: center; font-weight: 700; }
+    .period-template-box .pt-md-row select { min-width: 8.5rem; flex: 1; }
     .period-template-box .pt-sep { color: var(--monday-muted); font-weight: 600; }
     .period-template-box .pt-yyyy { font-size: 0.72rem; font-weight: 700; color: var(--monday-blue); letter-spacing: .02em; white-space: nowrap; }
-    .period-template-box .pt-del { border: 0; background: transparent; color: var(--monday-muted); padding: 0.15rem 0.35rem; cursor: pointer; }
-    .period-template-box .pt-del:hover { color: #c0392b; }
-    .period-template-box .pt-add { font-size: 0.72rem; }
+    .period-template-box .pt-del { border: 0; background: transparent; color: var(--monday-muted); padding: 0.25rem 0.4rem; cursor: pointer; border-radius: 6px; }
+    .period-template-box .pt-del:hover { color: #c0392b; background: #fef2f2; }
+    .period-template-box .pt-foot { display:flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.65rem 0.85rem; border-top: 1px solid var(--monday-border); background: color-mix(in srgb, var(--monday-blue) 4%, var(--monday-surface)); }
+    .period-template-box .pt-add { font-size: 0.78rem; font-weight: 600; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -208,17 +221,31 @@
                             <input type="text" name="Name" value="@Model.Name" class="form-control form-control-sm" placeholder="Ex: TVA Mensuelle" required />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label-sm">Type de déclaration</label>
+                            <label class="form-label-sm">Type de workflow</label>
                             @if (isEditMode)
                             {
                                 <input type="hidden" name="DeclarationType" value="@Model.DeclarationType" />
-                                <input type="text" class="form-control form-control-sm" value="@Model.DeclarationType" disabled />
+                                <input type="text" class="form-control form-control-sm" value="@(isDomiciliationTpl ? "Domiciliation (courrier & documents)" : Model.DeclarationType)" disabled />
                             }
                             else
                             {
-                                <select name="DeclarationType" class="form-select form-select-sm">
-                                    @foreach (var dt in declTypes) { <option value="@dt" selected="@(Model.DeclarationType == dt)">@dt</option> }
+                                <select name="DeclarationType" id="builderDeclType" class="form-select form-select-sm" onchange="onBuilderTypeChanged(this)">
+                                    @foreach (var dt in declTypes)
+                                    {
+                                        var label = dt == "Domiciliation" ? "Domiciliation (courrier & docs)" : dt;
+                                        if (Model.DeclarationType == dt)
+                                        {
+                                            <option value="@dt" selected>@label</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@dt">@label</option>
+                                        }
+                                    }
                                 </select>
+                                <div class="form-text" id="domicilTypeHint" style="@(isDomiciliationTpl ? "" : "display:none")">
+                                    Étapes limitées aux documents / courrier. Affectation depuis la fiche client quand le service DOMICILIATION est actif.
+                                </div>
                             }
                         </div>
                         <div class="col-12">
@@ -266,7 +293,12 @@
                                             <div class="col-md-7">
                                                 <label class="form-label-sm">Type d'étape</label>
                                                 <select name="Steps[@i].StepType" class="form-select form-select-sm step-type-select" onchange="onStepTypeOrAssignChange(this)">
-                                                    @foreach (var st in stepTypes) { <option value="@st" selected="@(step.StepType == st)">@(stepTypeLabels.ContainsKey(st) ? stepTypeLabels[st] : st)</option> }
+                                                    @foreach (var st in activeStepTypes)
+                                                    {
+                                                        var stepTypeUiLabel = stepTypeLabels.ContainsKey(st) ? stepTypeLabels[st] : st;
+                                                        if (step.StepType == st) { <option value="@st" selected>@stepTypeUiLabel</option> }
+                                                        else { <option value="@st">@stepTypeUiLabel</option> }
+                                                    }
                                                     @if (string.Equals(step.StepType, "Relance", StringComparison.OrdinalIgnoreCase))
                                                     {
                                                         <option value="Relance" selected>Relance (obsolète → utiliser config ci-dessous)</option>
@@ -383,17 +415,25 @@
                                         <div class="field-section-title"><i class="bi bi-arrow-left-right"></i>Statut Déclaration</div>
                                         <div class="row g-2">
                                             <div class="col-md-6">
-                                                <label class="form-label-sm">É l'entrée de l'étape</label>
+                                                <label class="form-label-sm">À l'entrée de l'étape</label>
                                                 <select name="Steps[@i].DeclarationStatusOnEntry" class="form-select form-select-sm">
                                                     <option value="">Aucun changement</option>
-                                                    @foreach (var ds in declStatuses) { <option value="@ds" selected="@(step.DeclarationStatusOnEntry == ds)">@ds</option> }
+                                                    @foreach (var ds in activeStatuses)
+                                                    {
+                                                        if (step.DeclarationStatusOnEntry == ds) { <option value="@ds" selected>@ds</option> }
+                                                        else { <option value="@ds">@ds</option> }
+                                                    }
                                                 </select>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label-sm">É la complétion de l'étape</label>
+                                                <label class="form-label-sm">À la complétion de l'étape</label>
                                                 <select name="Steps[@i].DeclarationStatusOnComplete" class="form-select form-select-sm">
                                                     <option value="">Aucun changement</option>
-                                                    @foreach (var ds in declStatuses) { <option value="@ds" selected="@(step.DeclarationStatusOnComplete == ds)">@ds</option> }
+                                                    @foreach (var ds in activeStatuses)
+                                                    {
+                                                        if (step.DeclarationStatusOnComplete == ds) { <option value="@ds" selected>@ds</option> }
+                                                        else { <option value="@ds">@ds</option> }
+                                                    }
                                                 </select>
                                             </div>
                                         </div>
@@ -405,13 +445,21 @@
                                             <div class="col-md-6">
                                                 <label class="form-label-sm">Action à l'entrée</label>
                                                 <select name="Steps[@i].ActionOnEntry" class="form-select form-select-sm">
-                                                    @foreach (var a in actionTypes) { <option value="@a" selected="@(step.ActionOnEntry == a)">@a</option> }
+                                                    @foreach (var a in activeActionTypes)
+                                                    {
+                                                        if (step.ActionOnEntry == a) { <option value="@a" selected>@a</option> }
+                                                        else { <option value="@a">@a</option> }
+                                                    }
                                                 </select>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label-sm">Action à la complétion</label>
                                                 <select name="Steps[@i].ActionOnComplete" class="form-select form-select-sm">
-                                                    @foreach (var a in actionTypes) { <option value="@a" selected="@(step.ActionOnComplete == a)">@a</option> }
+                                                    @foreach (var a in activeActionTypes)
+                                                    {
+                                                        if (step.ActionOnComplete == a) { <option value="@a" selected>@a</option> }
+                                                        else { <option value="@a">@a</option> }
+                                                    }
                                                 </select>
                                             </div>
                                         </div>
@@ -439,7 +487,8 @@
                                                 <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
                                             </div>
                                             <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
-                                            <input type="hidden" name="Steps[@i].ActionConfigJson" class="action-config-input" value="@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":10,\"windowMonthOffset\":1}" : step.ActionConfigJson)" />
+                                            @* textarea keeps JSON quotes intact (attribute value="" would truncate at first ") *@
+                                            <textarea name="Steps[@i].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":26,\"windowMonthOffset\":1,\"periods\":[]}" : step.ActionConfigJson)</textarea>
                                         </div>
                                         <div class="cron-builder cron-freq-panel" data-cron="@step.CronExpression">
                                             <div class="init-freq-echeance mb-2 @(isInitStep ? "" : "d-none")">
@@ -452,11 +501,23 @@
                                                         <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="periodic" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'periodic')"><i class="bi bi-calendar-range"></i> Périodique</button>
                                                     </div>
                                                     <div class="period-template-editor mb-2"></div>
-                                                    <div class="row g-2 align-items-end">
-                                                        <div class="col-md-6">
+                                                    <div class="row g-2 align-items-end mb-2">
+                                                        <div class="col-md-3">
+                                                            <span class="life-label">Jour d'échéance</span>
+                                                            <input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="@winEnd" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <span class="life-label">Mois après fin période</span>
+                                                            <input type="number" class="form-control form-control-sm window-month-offset" min="0" max="24" value="@winMonths" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <span class="life-label">Jour ouverture fenêtre</span>
+                                                            <input type="number" class="form-control form-control-sm window-start-day" min="1" max="31" value="@winStart" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                                        </div>
+                                                        <div class="col-md-3">
                                                             <span class="life-label">Action à la fin</span>
                                                             <select name="Steps[@i].ActionOnLifecycleEnd" class="form-select form-select-sm" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))">
-                                                                @foreach (var a in actionTypes.Where(x => x != "None" && x != "CreateDeclaration"))
+                                                                @foreach (var a in activeActionTypes.Where(x => x != "None" && x != "CreateDeclaration"))
                                                                 {
                                                                     var aLabel = a switch
                                                                     {
@@ -476,11 +537,9 @@
                                                             </select>
                                                         </div>
                                                     </div>
+                                                    <div class="echeance-work-preview small text-muted mb-1"></div>
                                                     <input type="hidden" class="period-end-preview" />
-                                                    <input type="hidden" class="window-start-day" value="1" />
-                                                    <input type="hidden" class="window-end-day" value="1" />
-                                                    <input type="hidden" class="window-month-offset" value="1" />
-                                                    <input type="hidden" class="deadline-year-offset" value="0" />
+                                                    <input type="hidden" class="deadline-year-offset" value="@winYears" />
                                                 </div>
                                             </div>
                                             <div class="cron-freq-non-init-wrap @(isInitStep ? "d-none" : "")">
@@ -524,17 +583,17 @@
                                                 <label class="form-label-sm mb-1">Mois d'exécution</label>
                                                 <div class="d-flex flex-wrap gap-1 mb-2">
                                                     <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
-                                                    <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
+                                                    <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fev</button>
                                                     <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
                                                     <button type="button" class="cron-month-btn active" data-m="4" onclick="toggleCronMonth(this)">Avr</button>
                                                     <button type="button" class="cron-month-btn" data-m="5" onclick="toggleCronMonth(this)">Mai</button>
-                                                    <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Jun</button>
-                                                    <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Jul</button>
-                                                    <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Août</button>
+                                                    <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Juin</button>
+                                                    <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Juil</button>
+                                                    <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Aout</button>
                                                     <button type="button" class="cron-month-btn" data-m="9" onclick="toggleCronMonth(this)">Sep</button>
                                                     <button type="button" class="cron-month-btn active" data-m="10" onclick="toggleCronMonth(this)">Oct</button>
                                                     <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
-                                                    <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
+                                                    <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Dec</button>
                                                 </div>
                                                 <label class="form-label-sm">Jour</label>
                                                 <select class="form-select form-select-sm cron-quarterly-day" style="max-width:120px;" onchange="buildCron(this.closest('.cron-builder'))">
@@ -546,10 +605,10 @@
                                                 <div class="row g-2">
                                                     <div class="col-md-6">
                                                         <select class="form-select form-select-sm cron-annual-month" onchange="buildCron(this.closest('.cron-builder'))">
-                                                            <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+                                                            <option value="1">Janvier</option><option value="2">Fevrier</option><option value="3">Mars</option>
                                                             <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
-                                                            <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
-                                                            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                                                            <option value="7">Juillet</option><option value="8">Aout</option><option value="9">Septembre</option>
+                                                            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Decembre</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-md-6">
@@ -791,7 +850,7 @@
                 <div class="field-section-title"><i class="bi bi-arrow-left-right"></i>Statut Déclaration</div>
                 <div class="row g-2">
                     <div class="col-md-6">
-                        <label class="form-label-sm">É l'entrée</label>
+                        <label class="form-label-sm">À l'entrée</label>
                         <select name="Steps[__IDX__].DeclarationStatusOnEntry" class="form-select form-select-sm">
                             <option value="">Aucun changement</option>
                             <option value="Brouillon">Brouillon</option><option value="ACompleter">ACompleter</option><option value="EnCours">EnCours</option>
@@ -801,7 +860,7 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label-sm">É la complétion</label>
+                        <label class="form-label-sm">À la complétion</label>
                         <select name="Steps[__IDX__].DeclarationStatusOnComplete" class="form-select form-select-sm">
                             <option value="">Aucun changement</option>
                             <option value="Brouillon">Brouillon</option><option value="ACompleter">ACompleter</option><option value="EnCours">EnCours</option>
@@ -867,7 +926,7 @@
                         <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
                     </div>
                     <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
-                    <input type="hidden" name="Steps[__IDX__].ActionConfigJson" class="action-config-input" value='{"initTrigger":"both","allowManualInit":true,"periodFrequency":"Mensuelle","windowStartDay":1,"windowEndDay":10,"windowMonthOffset":1}' />
+                    <textarea name="Steps[__IDX__].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">{"initTrigger":"both","allowManualInit":true,"periodFrequency":"Mensuelle","windowStartDay":1,"windowEndDay":26,"windowMonthOffset":1,"periods":[]}</textarea>
                 </div>
                 <div class="cron-builder cron-freq-panel" data-cron="">
                     <div class="init-freq-echeance mb-2 d-none">
@@ -880,8 +939,20 @@
                                 <button type="button" class="cron-freq-btn period-tpl-btn" data-tpl="periodic" onclick="WfCron.loadPeriodTemplate(this.closest('.step-card'),'periodic')"><i class="bi bi-calendar-range"></i> Périodique</button>
                             </div>
                             <div class="period-template-editor mb-2"></div>
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-6">
+                            <div class="row g-2 align-items-end mb-2">
+                                <div class="col-md-3">
+                                    <span class="life-label">Jour d'échéance</span>
+                                    <input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="26" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="life-label">Mois après fin période</span>
+                                    <input type="number" class="form-control form-control-sm window-month-offset" min="0" max="24" value="1" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="life-label">Jour ouverture fenêtre</span>
+                                    <input type="number" class="form-control form-control-sm window-start-day" min="1" max="31" value="1" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                </div>
+                                <div class="col-md-3">
                                     <span class="life-label">Action à la fin</span>
                                     <select name="Steps[__IDX__].ActionOnLifecycleEnd" class="form-select form-select-sm" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))">
                                         <option value="ClotureDeclaration" selected>Clôturer</option>
@@ -896,10 +967,8 @@
                                     </select>
                                 </div>
                             </div>
+                            <div class="echeance-work-preview small text-muted mb-1"></div>
                             <input type="hidden" class="period-end-preview" />
-                            <input type="hidden" class="window-start-day" value="1" />
-                            <input type="hidden" class="window-end-day" value="1" />
-                            <input type="hidden" class="window-month-offset" value="1" />
                             <input type="hidden" class="deadline-year-offset" value="0" />
                         </div>
                     </div>
@@ -944,17 +1013,17 @@
                         <label class="form-label-sm mb-1">Mois d'exécution</label>
                         <div class="d-flex flex-wrap gap-1 mb-2">
                             <button type="button" class="cron-month-btn active" data-m="1" onclick="toggleCronMonth(this)">Jan</button>
-                            <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fév</button>
+                            <button type="button" class="cron-month-btn" data-m="2" onclick="toggleCronMonth(this)">Fev</button>
                             <button type="button" class="cron-month-btn" data-m="3" onclick="toggleCronMonth(this)">Mar</button>
                             <button type="button" class="cron-month-btn active" data-m="4" onclick="toggleCronMonth(this)">Avr</button>
                             <button type="button" class="cron-month-btn" data-m="5" onclick="toggleCronMonth(this)">Mai</button>
-                            <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Jun</button>
-                            <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Jul</button>
-                            <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Août</button>
+                            <button type="button" class="cron-month-btn" data-m="6" onclick="toggleCronMonth(this)">Juin</button>
+                            <button type="button" class="cron-month-btn active" data-m="7" onclick="toggleCronMonth(this)">Juil</button>
+                            <button type="button" class="cron-month-btn" data-m="8" onclick="toggleCronMonth(this)">Aout</button>
                             <button type="button" class="cron-month-btn" data-m="9" onclick="toggleCronMonth(this)">Sep</button>
                             <button type="button" class="cron-month-btn active" data-m="10" onclick="toggleCronMonth(this)">Oct</button>
                             <button type="button" class="cron-month-btn" data-m="11" onclick="toggleCronMonth(this)">Nov</button>
-                            <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Déc</button>
+                            <button type="button" class="cron-month-btn" data-m="12" onclick="toggleCronMonth(this)">Dec</button>
                         </div>
                         <label class="form-label-sm">Jour</label>
                         <select class="form-select form-select-sm cron-quarterly-day" style="max-width:120px;" onchange="buildCron(this.closest('.cron-builder'))">
@@ -966,10 +1035,10 @@
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <select class="form-select form-select-sm cron-annual-month" onchange="buildCron(this.closest('.cron-builder'))">
-                                    <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+                                    <option value="1">Janvier</option><option value="2">Fevrier</option><option value="3">Mars</option>
                                     <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
-                                    <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
-                                    <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+                                    <option value="7">Juillet</option><option value="8">Aout</option><option value="9">Septembre</option>
+                                    <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Decembre</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
@@ -1093,6 +1162,26 @@
         }))));
     const deptOptionsHtml = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
         string.Concat(departments.Select(d => $"<option value=\"{d.Id}\">{System.Net.WebUtility.HtmlEncode(d.Name)}</option>"))));
+
+    const DOMICIL_STEP_TYPES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(domiciliationStepTypes));
+    const ALL_STEP_TYPES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stepTypes));
+    const STEP_TYPE_LABELS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stepTypeLabels));
+
+    function onBuilderTypeChanged(sel) {
+        const isDom = (sel.value || '') === 'Domiciliation';
+        const hint = document.getElementById('domicilTypeHint');
+        if (hint) hint.style.display = isDom ? '' : 'none';
+        const allowed = isDom ? DOMICIL_STEP_TYPES : ALL_STEP_TYPES;
+        document.querySelectorAll('#stepsContainer .step-type-select, #stepTemplate .step-type-select').forEach(select => {
+            const current = select.value;
+            select.innerHTML = allowed.map(st => {
+                const label = STEP_TYPE_LABELS[st] || st;
+                return `<option value="${st}"${st === current ? ' selected' : ''}>${label}</option>`;
+            }).join('');
+            if (![...select.options].some(o => o.value === current) && select.options.length)
+                select.selectedIndex = 0;
+        });
+    }
 
     function normalizeSearch(s) {
         return (s || '').toString().toLowerCase()

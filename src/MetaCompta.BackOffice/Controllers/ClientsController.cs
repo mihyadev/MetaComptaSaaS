@@ -258,7 +258,7 @@ public class ClientsController : BaseController
             TempData["Success"] = result.Message;
             return RedirectToAction("Index");
         }
-        SetApiError(result, "Erreur lors de la création du client.");
+        ApplyApiErrorsToModelState(result, "Impossible de créer le client. Corrigez les erreurs ci-dessous.");
         await LoadReferenceDataToViewBagAsync(ClientRefCategories);
         return View(dto);
     }
@@ -326,7 +326,7 @@ public class ClientsController : BaseController
             TempData["Success"] = result.Message;
             return RedirectToAction("Details", new { id });
         }
-        SetApiError(result, "Erreur lors de la mise à jour du client.");
+        ApplyApiErrorsToModelState(result, "Impossible de modifier le client. Corrigez les erreurs ci-dessous.");
         ViewBag.ClientId = id;
         await LoadReferenceDataToViewBagAsync(ClientRefCategories);
         return View(dto);

@@ -118,6 +118,7 @@ builder.Services.AddScoped<IWorkflowSchedulerService, WorkflowSchedulerService>(
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IDomiciliationService, DomiciliationService>();
 builder.Services.AddScoped<IClientUserService, ClientUserService>();
 builder.Services.AddScoped<IComptabiliteService, ComptabiliteService>();
 builder.Services.AddScoped<IExerciceContextService, ExerciceContextService>();

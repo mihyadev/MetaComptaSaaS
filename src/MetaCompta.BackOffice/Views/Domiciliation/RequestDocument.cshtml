@@ -1,0 +1,66 @@
+@model MetaCompta.Application.DTOs.DemandeDocumentCreateDto
+@{
+    ViewData["Title"] = "Demander un document";
+    var clients = ViewBag.Clients as List<MetaCompta.Application.DTOs.ClientDto> ?? new();
+    var staff = ViewBag.Staff as List<MetaCompta.Application.DTOs.CabinetEmployeeDto> ?? new();
+    var clientLocked = ViewBag.ClientLocked as bool? == true;
+    var lockedName = ViewBag.LockedClientName as string;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-plus text-primary me-2"></i>+ Demander document</h4>
+        <small class="text-muted">Demander une pièce manquante ou mise à jour au client</small>
+    </div>
+    <a href="@Url.Action("Index")" class="btn btn-outline-secondary rounded-pill">Retour</a>
+</div>
+
+<form asp-action="RequestDocument" method="post" class="card border-0 shadow-sm rounded-4">
+    @Html.AntiForgeryToken()
+    <div class="card-body p-4">
+        <div asp-validation-summary="All" class="alert alert-danger"></div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Client <span class="text-danger">*</span></label>
+                @if (clientLocked)
+                {
+                    <input type="hidden" asp-for="ClientId" />
+                    <div class="form-control bg-light fw-semibold">@lockedName</div>
+                    <div class="form-text">Client du dossier sélectionné — pas besoin de le choisir à nouveau.</div>
+                }
+                else
+                {
+                    <select asp-for="ClientId" class="form-select" required>
+                        <option value="0">— Choisir —</option>
+                        @foreach (var c in clients)
+                        {
+                            <option value="@c.Id">@c.RaisonSociale</option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Type de document <span class="text-danger">*</span></label>
+                <input asp-for="DocumentType" class="form-control" required placeholder="Ex: CIN, RC, Statuts…" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Responsable</label>
+                <select asp-for="ResponsableUserId" class="form-select">
+                    <option value="">— Moi —</option>
+                    @foreach (var s in staff) { <option value="@s.Id">@s.NomComplet</option> }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Échéance</label>
+                <input asp-for="DateEcheance" type="date" class="form-control" />
+            </div>
+            <div class="col-12">
+                <label class="form-label fw-semibold">Message au client</label>
+                <textarea asp-for="Message" class="form-control" rows="3"></textarea>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+            <button type="submit" class="btn btn-primary rounded-pill px-4">Envoyer la demande</button>
+        </div>
+    </div>
+</form>

@@ -1,0 +1,62 @@
+@model List<MetaCompta.Application.DTOs.DomiciliationDashboardRowDto>
+@{
+    ViewData["Title"] = "Domiciliation";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0"><i class="bi bi-mailbox text-primary me-2"></i>Domiciliation</h4>
+        <small class="text-muted">Hub cabinet — sélectionnez un client pour n'afficher que sa société</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary rounded-pill px-3" href="@Url.Action("RequestDocument")"><i class="bi bi-file-earmark-plus me-1"></i>+ Demander</a>
+        <a class="btn btn-primary rounded-pill px-3" href="@Url.Action("Receive")"><i class="bi bi-plus-lg me-1"></i>+ Recevoir</a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Société</th>
+                    <th>Domiciliation</th>
+                    <th>Contrat</th>
+                    <th>Documents</th>
+                    <th class="text-center">Courriers</th>
+                    <th class="text-center">À traiter</th>
+                    <th class="text-center">En retard</th>
+                    <th>Dernière activité</th>
+                    <th>Responsable</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (Model == null || !Model.Any())
+            {
+                <tr><td colspan="10" class="text-center text-muted py-5">Aucun client avec service DOMICILIATION actif.</td></tr>
+            }
+            else
+            {
+                foreach (var r in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@r.RaisonSociale</td>
+                        <td><span class="badge bg-success-subtle text-success">@r.DomiciliationStatut</span></td>
+                        <td><span class="badge bg-primary-subtle text-primary">@r.ContratStatut</span></td>
+                        <td>@r.DocumentsStatut</td>
+                        <td class="text-center">@r.IncomingMailCount</td>
+                        <td class="text-center">@(r.PendingActions > 0 ? Html.Raw($"<span class=\"badge bg-warning text-dark\">{r.PendingActions}</span>") : Html.Raw("0"))</td>
+                        <td class="text-center">@(r.OverdueActions > 0 ? Html.Raw($"<span class=\"badge bg-danger\">{r.OverdueActions}</span>") : Html.Raw("0"))</td>
+                        <td>@(r.LastActivity?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                        <td>@(r.ResponsableNom ?? "—")</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-primary rounded-pill" href="@Url.Action("Client", new { id = r.ClientId })">Ouvrir</a>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

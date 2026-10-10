@@ -14,10 +14,11 @@ public static class DeclarationPeriodTemplate
         DateTime End,
         int Index);
 
+    // ASCII-safe source (accents via \u) — avoids mojibake if file encoding drifts.
     private static readonly string[] MonthLabelsFr =
     {
-        "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+        "", "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
+        "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
     };
 
     public static string NormalizeFrequency(string? value)
@@ -85,7 +86,8 @@ public static class DeclarationPeriodTemplate
             var startMonth = (q - 1) * 3 + 1;
             var start = new DateTime(year, startMonth, 1);
             var end = start.AddMonths(3).AddDays(-1);
-            list.Add(new Slice($"{year}-Q{q}", $"T{q}", start, end, q));
+            var shortM = new[] { "", "Jan", "F\u00e9v", "Mar", "Avr", "Mai", "Juin", "Juil", "Ao\u00fbt", "Sep", "Oct", "Nov", "D\u00e9c" };
+            list.Add(new Slice($"{year}-Q{q}", $"T{q} ({shortM[startMonth]}-{shortM[end.Month]})", start, end, q));
         }
         return list;
     }

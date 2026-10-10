@@ -18,11 +18,13 @@ public class CommercialService : ICommercialService
 {
     private readonly MetaComptaDbContext _db;
     private readonly IMapper _mapper;
+    private readonly IWorkflowService _workflow;
 
-    public CommercialService(MetaComptaDbContext db, IMapper mapper)
+    public CommercialService(MetaComptaDbContext db, IMapper mapper, IWorkflowService workflow)
     {
         _db = db;
         _mapper = mapper;
+        _workflow = workflow;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1173,11 +1175,12 @@ public class CommercialService : ICommercialService
         if (contrat.ParentContratId is int parentExcl)
             excludeIds.Add(parentExcl);
 
-        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: excludeIds);
-        if (overlapRef != null)
-            return ApiResponse<ContratCommercialDto>.Fail(
-                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
+        // Multiple active contracts are allowed for the same client when they cover different services.
+        var conflict = await FindOverlappingActiveContratConflictAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat,
+            GetContratServiceCodes(contrat), excludeContratIds: excludeIds);
+        if (conflict != null)
+            return ApiResponse<ContratCommercialDto>.Fail(conflict);
 
         var ancienStatut = contrat.Statut;
         contrat.Statut = RefCodes.StatutContrat.Valide;
@@ -1256,11 +1259,11 @@ public class CommercialService : ICommercialService
         if (!await _db.ContratMembres.AnyAsync(m => m.ContratId == contrat.Id))
             return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant réactivation.");
 
-        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: new[] { contrat.Id });
-        if (overlapRef != null)
-            return ApiResponse<ContratCommercialDto>.Fail(
-                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
+        var conflict = await FindOverlappingActiveContratConflictAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat,
+            GetContratServiceCodes(contrat), excludeContratIds: new[] { contrat.Id });
+        if (conflict != null)
+            return ApiResponse<ContratCommercialDto>.Fail(conflict);
 
         var ancienStatut = contrat.Statut;
         contrat.Statut = RefCodes.StatutContrat.Valide;
@@ -2164,6 +2167,8 @@ public class CommercialService : ICommercialService
                     : GetServiceLabel(svcLine.TypeService);
                 serviceExistant.Categorie = GetServiceCategory(svcLine.TypeService);
                 serviceExistant.Frequence = GetSmartFrequency(svcLine.TypeService, typeTVA);
+                if (string.Equals(svcLine.TypeService, "DOMICILIATION", StringComparison.OrdinalIgnoreCase))
+                    serviceExistant.AutoGenererDeclarations = false;
                 serviceExistant.DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow;
                 serviceExistant.DateFin = contrat.DateFinContrat;
                 serviceExistant.AutoGenererDeclarations = svcLine.AutoGenererDeclarations;
@@ -2189,7 +2194,9 @@ public class CommercialService : ICommercialService
                     ExerciceFiscal = exercice,
                     ExerciceComptableId = openExo?.Id,
                     Actif = true,
-                    AutoGenererDeclarations = svcLine.AutoGenererDeclarations,
+                    AutoGenererDeclarations = string.Equals(svcLine.TypeService, "DOMICILIATION", StringComparison.OrdinalIgnoreCase)
+                        ? false
+                        : svcLine.AutoGenererDeclarations,
                     DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow,
                     DateFin = contrat.DateFinContrat,
                     HonorairesMensuels = null,
@@ -2204,6 +2211,20 @@ public class CommercialService : ICommercialService
         // NOTE: We do NOT deactivate services not in this contract.
         // A client may have multiple contracts covering different services.
         // Service deactivation should only happen via explicit contract termination.
+
+        // When DOMICILIATION is activated: attach Builder template + auto-start client WF
+        if (serviceLines.Any(s => string.Equals(s.TypeService, RefCodes.TypeService.Domiciliation, StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                await _workflow.EnsureServiceWorkflowAsync(contrat.ClientId, RefCodes.TypeService.Domiciliation, cabinetId, userId);
+            }
+            catch
+            {
+                // Non-blocking: contract activation must not fail if WF seed/start is unavailable
+            }
+        }
+
         return null;
     }
 
@@ -2293,19 +2314,73 @@ public class CommercialService : ICommercialService
     }
 
     /// <summary>
-    /// Returns the Reference of another Valide/Actif contract for the same client
-    /// whose date window overlaps [debut, fin] (inclusive), or null if none.
+    /// Extracts TypeService codes from ServicesActivesJson and/or line items.
     /// </summary>
-    private async Task<string?> FindOverlappingActiveContratReferenceAsync(
+    private static HashSet<string> GetContratServiceCodes(ContratCommercial contrat)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
+        {
+            try
+            {
+                var lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                    contrat.ServicesActivesJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (lines != null)
+                {
+                    foreach (var l in lines)
+                        if (!string.IsNullOrWhiteSpace(l.TypeService))
+                            codes.Add(l.TypeService.Trim());
+                }
+            }
+            catch { /* ignore malformed JSON */ }
+        }
+
+        if (contrat.Lignes != null)
+        {
+            foreach (var l in contrat.Lignes)
+                if (!string.IsNullOrWhiteSpace(l.TypeService))
+                    codes.Add(l.TypeService.Trim());
+        }
+
+        return codes;
+    }
+
+    private static HashSet<string> ParseServiceCodesFromJson(string? json)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return codes;
+        try
+        {
+            var lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (lines == null) return codes;
+            foreach (var l in lines)
+                if (!string.IsNullOrWhiteSpace(l.TypeService))
+                    codes.Add(l.TypeService.Trim());
+        }
+        catch { /* ignore malformed JSON */ }
+        return codes;
+    }
+
+    /// <summary>
+    /// Conflict only when another Valide/Actif contract overlaps the period AND shares at least one service.
+    /// Different services on the same client/period are allowed.
+    /// </summary>
+    private async Task<string?> FindOverlappingActiveContratConflictAsync(
         int clientId,
         int cabinetId,
         DateTime? debut,
         DateTime? fin,
+        ISet<string> serviceCodes,
         int? excludeContratId = null,
         IEnumerable<int>? excludeContratIds = null)
     {
         if (!debut.HasValue || !fin.HasValue)
             return null;
+        if (serviceCodes == null || serviceCodes.Count == 0)
+            return null; // no services to conflict on
 
         var start = debut.Value.Date;
         var end = fin.Value.Date;
@@ -2315,7 +2390,7 @@ public class CommercialService : ICommercialService
         if (excludeContratIds != null)
             foreach (var x in excludeContratIds) excludes.Add(x);
 
-        var query = _db.ContratsCommerciaux
+        var candidates = await _db.ContratsCommerciaux
             .AsNoTracking()
             .Where(c => c.ClientId == clientId
                 && c.CabinetId == cabinetId
@@ -2324,15 +2399,51 @@ public class CommercialService : ICommercialService
                 && c.DateDebutContrat != null
                 && c.DateFinContrat != null
                 && c.DateDebutContrat.Value.Date <= end
-                && c.DateFinContrat.Value.Date >= start);
+                && c.DateFinContrat.Value.Date >= start)
+            .Select(c => new { c.Id, c.Reference, c.ServicesActivesJson, c.DateValidation })
+            .ToListAsync();
 
         if (excludes.Count > 0)
-            query = query.Where(c => !excludes.Contains(c.Id));
+            candidates = candidates.Where(c => !excludes.Contains(c.Id)).ToList();
 
-        return await query
-            .OrderByDescending(c => c.DateValidation)
-            .Select(c => c.Reference)
-            .FirstOrDefaultAsync();
+        // Also load TypeService from lines for candidates (covers older contracts without JSON)
+        var candidateIds = candidates.Select(c => c.Id).ToList();
+        var ligneServices = candidateIds.Count == 0
+            ? new List<(int ContratId, string TypeService)>()
+            : (await _db.LignesDocumentsCommerciaux
+                .AsNoTracking()
+                .Where(l => l.ContratId != null
+                    && candidateIds.Contains(l.ContratId.Value)
+                    && l.TypeService != null
+                    && l.TypeService != "")
+                .Select(l => new { ContratId = l.ContratId!.Value, TypeService = l.TypeService! })
+                .ToListAsync())
+                .Select(x => (x.ContratId, x.TypeService))
+                .ToList();
+
+        var ligneByContrat = ligneServices
+            .GroupBy(x => x.ContratId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.TypeService).ToList());
+
+        foreach (var c in candidates.OrderByDescending(x => x.DateValidation))
+        {
+            var otherCodes = ParseServiceCodesFromJson(c.ServicesActivesJson);
+            if (ligneByContrat.TryGetValue(c.Id, out var fromLignes))
+                foreach (var s in fromLignes)
+                    otherCodes.Add(s.Trim());
+
+            var shared = serviceCodes
+                .Where(s => otherCodes.Contains(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s)
+                .ToList();
+            if (shared.Count == 0) continue;
+
+            var labels = string.Join(", ", shared.Select(GetServiceLabel));
+            return $"Un contrat actif ({c.Reference}) couvre déjà le(s) service(s) {labels} sur cette période pour ce client.";
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -2377,6 +2488,7 @@ public class CommercialService : ICommercialService
             "ETATSFISCAUX" => "États fiscaux (CPC, ESG, TFT)",
             "LIASSEFISCALE" => "Liasse fiscale",
             "JURIDIQUE" => "Dossiers Juridiques",
+            "DOMICILIATION" => "Domiciliation – Siège social et courrier",
             _ => typeService ?? ""
         };
     }
@@ -2390,7 +2502,7 @@ public class CommercialService : ICommercialService
                 => RefCodes.CategorieService.Fiscal,
             "CNSS" or "DTS" or "PAIE" or "DCH_ETS" => RefCodes.CategorieService.Social,
             "COMPTABILITE" or "TRESORERIE" or "IMMOBILISATION" or "BILAN" => RefCodes.CategorieService.Comptable,
-            "PV_AGO" or "DEPOT_RC" or "JURIDIQUE" => RefCodes.CategorieService.Juridique,
+            "PV_AGO" or "DEPOT_RC" or "JURIDIQUE" or "DOMICILIATION" => RefCodes.CategorieService.Juridique,
             "AUDITCOMPTABLE" or "CONSEILFISCAL" => RefCodes.CategorieService.Conseil,
             _ => RefCodes.CategorieService.Autre
         };
@@ -2401,7 +2513,7 @@ public class CommercialService : ICommercialService
         return typeService?.ToUpperInvariant() switch
         {
             "TVA" => typeTVA == RefCodes.Frequence.Trimestrielle ? RefCodes.Frequence.Trimestrielle : RefCodes.Frequence.Mensuelle,
-            "IR_SAL" or "CNSS" or "PAIE" or "COMPTABILITE" or "TRESORERIE" => RefCodes.Frequence.Mensuelle,
+            "IR_SAL" or "CNSS" or "PAIE" or "COMPTABILITE" or "TRESORERIE" or "DOMICILIATION" => RefCodes.Frequence.Mensuelle,
             "ACOMPTES" => RefCodes.Frequence.Trimestrielle,
             "CM" or "DRF" or "REG_IS" or "BILAN" or "LIASSEFISCALE" or "ETATSFISCAUX" or "DTS" or "PV_AGO" or "DEPOT_RC" or "EG"
                 => RefCodes.Frequence.Annuelle,
@@ -2415,7 +2527,7 @@ public class CommercialService : ICommercialService
         switch (sc.TypeService?.ToUpperInvariant())
         {
             case "TVA":
-                sc.JourLimiteDeclaration = 30; // 30th of following month (SIMPL)
+                sc.JourLimiteDeclaration = 26; // working deadline: 26th of following month
                 sc.DelaiDeclarationMois = 1;
                 break;
             case "IR_SAL":

@@ -227,6 +227,23 @@ public interface IJuridiqueFacade
     Task<ApiResponse<bool>?> ChangeStatusAsync(int id, string newStatut);
 }
 
+public interface IDomiciliationFacade
+{
+    Task<List<DomiciliationDashboardRowDto>> GetDashboardAsync();
+    Task<DomiciliationClientWorkspaceDto?> GetClientWorkspaceAsync(int clientId);
+    Task<List<DomiciliationTimelineDto>> GetTimelineAsync(int clientId, int take = 50);
+    Task<ApiResponse<CourrierDomiciliationDto>?> ReceiveAsync(CourrierReceiveDto dto);
+    Task<CourrierDomiciliationDto?> GetCourrierAsync(int id);
+    Task<ApiResponse<CourrierDomiciliationDto>?> AttachScanAsync(int id, int documentId);
+    Task<ApiResponse<CourrierDomiciliationDto>?> RemovePieceAsync(int id, int pieceId);
+    Task<ApiResponse<CourrierDomiciliationDto>?> SetPrimaryPieceAsync(int id, int pieceId);
+    Task<ApiResponse<CourrierDomiciliationDto>?> AdvanceCourrierAsync(int id, CourrierStatusActionDto dto);
+    Task<ApiResponse<DemandeActionCourrierDto>?> AdvanceActionAsync(int actionId, DemandeActionAdvanceDto dto);
+    Task<ApiResponse<DemandeDocumentDomiciliationDto>?> CreateDocumentRequestAsync(DemandeDocumentCreateDto dto);
+    Task<ApiResponse<DemandeDocumentDomiciliationDto>?> ReviewDocumentAsync(int id, DemandeDocumentReviewDto dto);
+    Task<ApiResponse<DemandeDocumentDomiciliationDto>?> AttachDocumentAsync(int demandeId, int documentId);
+}
+
 /// <summary>Facade for Planning & Calendar operations.</summary>
 public interface IPlanningFacade
 {

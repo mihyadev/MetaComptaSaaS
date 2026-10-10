@@ -1,4 +1,5 @@
 using MetaCompta.Domain.Common;
+using System.ComponentModel.DataAnnotations;
 
 namespace MetaCompta.Application.DTOs;
 
@@ -142,33 +143,85 @@ public class GenerateDeclarationsResultDto
     public List<string> Warnings { get; set; } = new();
 }
 
+// ===== Client Create/Edit =====
 public class ClientCreateDto
 {
+    [Required(ErrorMessage = "La raison sociale est obligatoire.")]
+    [StringLength(200, ErrorMessage = "La raison sociale ne peut pas dépasser 200 caractères.")]
     public string RaisonSociale { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "L'ICE est obligatoire.")]
+    [RegularExpression(@"^\d{15}$", ErrorMessage = "L'ICE doit contenir exactement 15 chiffres.")]
     public string? ICE { get; set; }
+
+    [Required(ErrorMessage = "L'identifiant fiscal (IF) est obligatoire.")]
+    [StringLength(50, ErrorMessage = "L'IF ne peut pas dépasser 50 caractères.")]
     public string? IF { get; set; }
+
+    [StringLength(50, ErrorMessage = "Le RC ne peut pas dépasser 50 caractères.")]
     public string? RC { get; set; }
+
+    [StringLength(50, ErrorMessage = "Le N° CNSS ne peut pas dépasser 50 caractères.")]
     public string? NumeroCNSS { get; set; }
+
+    [StringLength(50)]
     public string? NumeroPatente { get; set; }
+
     public DateTime? DateDebutActivite { get; set; }
+
+    [StringLength(20)]
     public string? CodeActivite { get; set; }
+
+    [StringLength(50)]
     public string? FormeJuridique { get; set; }
+
+    [StringLength(100)]
     public string? SecteurActivite { get; set; }
+
     public DateTime? DateCreation { get; set; }
     public decimal? CapitalSocial { get; set; }
+
+    [StringLength(300)]
     public string? AdresseSiegeSocial { get; set; }
+
+    [StringLength(100)]
     public string? VilleSiegeSocial { get; set; }
+
+    [StringLength(30)]
     public string? TelephonePrincipal { get; set; }
+
+    [EmailAddress(ErrorMessage = "L'email principal n'est pas valide.")]
+    [StringLength(150)]
     public string? EmailPrincipal { get; set; }
+
+    [StringLength(120)]
     public string? ContactNom { get; set; }
+
+    [StringLength(80)]
     public string? ContactFonction { get; set; }
+
+    [StringLength(30)]
     public string? ContactTelephone { get; set; }
+
+    [EmailAddress(ErrorMessage = "L'email du contact n'est pas valide.")]
+    [StringLength(150)]
     public string? ContactEmail { get; set; }
+
+    [StringLength(450)]
     public string? ManagerPrincipalId { get; set; }
+
+    [Required(ErrorMessage = "Le régime TVA est obligatoire.")]
+    [StringLength(30)]
     public string TypeTVA { get; set; } = "Mensuelle";
+
+    [Range(1, 12, ErrorMessage = "Le mois de clôture doit être entre 1 et 12.")]
     public int MoisClotureExercice { get; set; } = 12;
+
     public DateTime? DateDebutContrat { get; set; }
+
+    [StringLength(2000)]
     public string? NotesInternes { get; set; }
+
     public List<ServiceContratCreateDto> ServicesFiduciaires { get; set; } = new();
 }
 
@@ -1442,6 +1495,186 @@ public class CnssEmployeeImportResultDto
     public int Updated { get; set; }
     public List<string> Errors { get; set; } = new();
     public CnssEmployeeRosterDto? Roster { get; set; }
+}
+
+// ===== Domiciliation =====
+public class DomiciliationDashboardRowDto
+{
+    public int ClientId { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public string DomiciliationStatut { get; set; } = "Active";
+    public string ContratStatut { get; set; } = "Actif";
+    public string DocumentsStatut { get; set; } = "OK";
+    public int IncomingMailCount { get; set; }
+    public int PendingActions { get; set; }
+    public int OverdueActions { get; set; }
+    public DateTime? LastActivity { get; set; }
+    public string? ResponsableNom { get; set; }
+    public string? ResponsableUserId { get; set; }
+}
+
+public class CourrierDomiciliationDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientNom { get; set; }
+    public DateTime DateReception { get; set; }
+    public string? Expediteur { get; set; }
+    public string TypeCourrier { get; set; } = "Courrier";
+    public string? Reference { get; set; }
+    public string Confidentialite { get; set; } = "Normal";
+    public int? ScanDocumentId { get; set; }
+    public string? ScanDocumentTitre { get; set; }
+    public bool ScanPartageExtranet { get; set; }
+    public bool ActionRequise { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public string? ResponsableNom { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string Statut { get; set; } = "Received";
+    public bool ClientNotifie { get; set; }
+    public bool PartageDocumentClient { get; set; }
+    public string? Notes { get; set; }
+    public int? LinkedTaskItemId { get; set; }
+    public List<CourrierPieceJointeDto> Pieces { get; set; } = new();
+    public List<DemandeActionCourrierDto> ActionsClient { get; set; } = new();
+}
+
+public class CourrierPieceJointeDto
+{
+    public int Id { get; set; }
+    public int CourrierId { get; set; }
+    public int DocumentId { get; set; }
+    public string Titre { get; set; } = string.Empty;
+    public string NomFichier { get; set; } = string.Empty;
+    public string? ContentType { get; set; }
+    public long TailleFichier { get; set; }
+    public string TailleLabel => TailleFichier <= 0 ? "—"
+        : TailleFichier < 1024 ? $"{TailleFichier} o"
+        : TailleFichier < 1024 * 1024 ? $"{TailleFichier / 1024.0:0.#} Ko"
+        : $"{TailleFichier / (1024.0 * 1024.0):0.#} Mo";
+    public bool IsPrimary { get; set; }
+    public int SortOrder { get; set; }
+    public string? Label { get; set; }
+    public bool IsImage => (ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    public bool IsPdf => (ContentType ?? "").Contains("pdf", StringComparison.OrdinalIgnoreCase)
+        || NomFichier.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CourrierReceiveDto
+{
+    public int ClientId { get; set; }
+    public DateTime? DateReception { get; set; }
+    public string? Expediteur { get; set; }
+    public string TypeCourrier { get; set; } = "Courrier";
+    public string? Reference { get; set; }
+    public string Confidentialite { get; set; } = "Normal";
+    public bool ActionRequise { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string? Notes { get; set; }
+    public int? ScanDocumentId { get; set; }
+}
+
+public class CourrierStatusActionDto
+{
+    public string Action { get; set; } = string.Empty; // classify, assign, start, complete, notify, archive, close
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public bool? ActionRequise { get; set; }
+    public bool PartageDocumentClient { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeActionCourrierDto
+{
+    public int Id { get; set; }
+    public int CourrierId { get; set; }
+    public string TypeAction { get; set; } = "Pickup";
+    public string? AdresseForward { get; set; }
+    public string? ShippingReference { get; set; }
+    public string Statut { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public bool IdentityCheckDone { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class DemandeActionCreateDto
+{
+    public string TypeAction { get; set; } = "Pickup";
+    public string? AdresseForward { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeActionAdvanceDto
+{
+    public string Action { get; set; } = string.Empty;
+    public string? ShippingReference { get; set; }
+    public string? AdresseForward { get; set; }
+    public bool IdentityCheckDone { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeDocumentDomiciliationDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientNom { get; set; }
+    public string DocumentType { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public string? ResponsableNom { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string Statut { get; set; } = "Requested";
+    public int? CurrentDocumentId { get; set; }
+    public int? RootDocumentId { get; set; }
+    public string? RejectionReasonCode { get; set; }
+    public string? RejectionReasonText { get; set; }
+    public List<DocumentDto> Versions { get; set; } = new();
+}
+
+public class DemandeDocumentCreateDto
+{
+    public int ClientId { get; set; }
+    public string DocumentType { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+}
+
+public class DemandeDocumentReviewDto
+{
+    public bool Approve { get; set; }
+    public string? RejectionReasonCode { get; set; }
+    public string? RejectionReasonText { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DomiciliationTimelineDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string RelatedType { get; set; } = string.Empty;
+    public int RelatedId { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string? PreviousStatus { get; set; }
+    public string? NewStatus { get; set; }
+    public string? UserName { get; set; }
+    public string? Note { get; set; }
+    public int? DocumentId { get; set; }
+    public DateTime At { get; set; }
+}
+
+public class DomiciliationClientWorkspaceDto
+{
+    public int ClientId { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public List<CourrierDomiciliationDto> Courriers { get; set; } = new();
+    public List<DemandeDocumentDomiciliationDto> DemandesDocuments { get; set; } = new();
+    public List<DomiciliationTimelineDto> Timeline { get; set; } = new();
+    public int PendingActions { get; set; }
+    public int OverdueActions { get; set; }
 }
 
 // ===== API Response =====

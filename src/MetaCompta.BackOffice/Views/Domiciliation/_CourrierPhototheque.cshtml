@@ -1,0 +1,101 @@
+@model MetaCompta.Application.DTOs.CourrierDomiciliationDto
+@{
+    var pieces = Model.Pieces ?? new();
+    var canEdit = ViewBag.CanEditPieces == true;
+    var terminal = Model.Statut is "Closed" or "Archived";
+    canEdit = canEdit && !terminal;
+}
+
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-header bg-transparent border-0 pt-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <div class="fw-bold"><i class="bi bi-images text-primary me-2"></i>Photothèque</div>
+            <div class="small text-muted">@pieces.Count document(s) — scans du courrier</div>
+        </div>
+        @if (canEdit)
+        {
+            <form asp-action="AttachScan" asp-route-id="@Model.Id" method="post" enctype="multipart/form-data" class="d-flex align-items-center gap-2">
+                @Html.AntiForgeryToken()
+                <input type="file" name="scanFiles" id="photoAddFiles" class="form-control form-control-sm" style="max-width:260px;" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp" multiple required />
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Ajouter</button>
+            </form>
+        }
+    </div>
+    <div class="card-body pt-0 px-4 pb-4">
+        @if (!pieces.Any())
+        {
+            <div class="text-center text-muted py-4 border rounded-3 bg-light">
+                <i class="bi bi-image fs-2 d-block mb-2 opacity-50"></i>
+                <div class="fw-semibold">Aucun document déposé</div>
+                <div class="small">Ajoutez un ou plusieurs scans (PDF / images).</div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var p in pieces)
+                {
+                    var previewUrl = Url.Action("PreviewDocument", "Domiciliation", new { documentId = p.DocumentId });
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="border rounded-3 overflow-hidden h-100 d-flex flex-column @(p.IsPrimary ? "border-primary shadow-sm" : "")" style="background:#f8fafc;">
+                            <div class="position-relative" style="aspect-ratio:1/1;background:#e2e8f0;">
+                                @if (p.IsImage)
+                                {
+                                    <a href="@previewUrl" target="_blank" title="Aperçu">
+                                        <img src="@previewUrl" alt="@p.Titre" class="w-100 h-100" style="object-fit:cover;" />
+                                    </a>
+                                }
+                                else if (p.IsPdf)
+                                {
+                                    <a href="@previewUrl" target="_blank" class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-decoration-none text-danger">
+                                        <i class="bi bi-file-earmark-pdf" style="font-size:2.4rem;"></i>
+                                        <span class="small fw-semibold mt-1">PDF</span>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a href="@previewUrl" target="_blank" class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-decoration-none text-secondary">
+                                        <i class="bi bi-file-earmark" style="font-size:2.4rem;"></i>
+                                        <span class="small fw-semibold mt-1">Fichier</span>
+                                    </a>
+                                }
+                                @if (p.IsPrimary)
+                                {
+                                    <span class="badge bg-primary position-absolute top-0 start-0 m-2">Principal</span>
+                                }
+                            </div>
+                            <div class="p-2 flex-grow-1 d-flex flex-column">
+                                <div class="fw-semibold text-truncate" style="font-size:0.8rem;" title="@p.Titre">@p.Titre</div>
+                                <div class="small text-muted text-truncate" title="@p.NomFichier">@p.NomFichier</div>
+                                <div class="small text-muted">@p.TailleLabel · @p.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</div>
+                                @if (canEdit)
+                                {
+                                    <div class="d-flex gap-1 mt-2">
+                                        @if (!p.IsPrimary)
+                                        {
+                                            <form asp-action="SetPrimaryPiece" method="post" class="flex-grow-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@Model.Id" />
+                                                <input type="hidden" name="pieceId" value="@p.Id" />
+                                                <button type="submit" class="btn btn-outline-primary btn-sm w-100" title="Définir comme principal">
+                                                    <i class="bi bi-star"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                        <a href="@previewUrl" target="_blank" class="btn btn-outline-secondary btn-sm" title="Ouvrir"><i class="bi bi-eye"></i></a>
+                                        <form asp-action="RemovePiece" method="post" onsubmit="return confirm('Retirer ce document de la photothèque ?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@Model.Id" />
+                                            <input type="hidden" name="pieceId" value="@p.Id" />
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Retirer"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

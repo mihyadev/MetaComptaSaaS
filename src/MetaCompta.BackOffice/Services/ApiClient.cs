@@ -196,7 +196,9 @@ public sealed class ApiClient : IApiClient
 
             var reason = response.ReasonPhrase ?? "Erreur inconnue";
             _logger.LogWarning("Empty error response: {Method} {Url} → HTTP {StatusCode} {Reason}", method, url, statusCode, reason);
-            return ApiResponse<T>.Fail($"Erreur HTTP {statusCode} ({reason}) — le serveur n'a retourné aucun détail. [{method} {url}]");
+            if (statusCode >= 500)
+                return ApiResponse<T>.Fail("Impossible d'enregistrer pour le moment. Vérifiez les informations saisies puis réessayez.");
+            return ApiResponse<T>.Fail("La requête a échoué. Vérifiez les informations saisies puis réessayez.");
         }
 
         // ── Try to deserialize as ApiResponse<T> (our standard envelope) ─
@@ -263,6 +265,8 @@ public sealed class ApiClient : IApiClient
                     message = $"{message} — {string.Join(" | ", errors)}";
 
                 _logger.LogWarning("API error response: {Method} {Url} → HTTP {StatusCode}: {Message}", method, url, statusCode, message);
+                if (statusCode >= 500)
+                    return ApiResponse<T>.Fail("Impossible d'enregistrer pour le moment. Vérifiez les informations saisies (champs obligatoires, identifiants uniques) puis réessayez.", errors.Count > 0 ? errors : null);
                 return ApiResponse<T>.Fail(message, errors.Count > 0 ? errors : null);
             }
             catch (JsonException)
@@ -276,11 +280,13 @@ public sealed class ApiClient : IApiClient
         {
             var truncatedBody = body.Length > 500 ? body[..500] + "…" : body;
             _logger.LogWarning("API plain text error: {Method} {Url} → HTTP {StatusCode}: {Body}", method, url, statusCode, truncatedBody);
-            return ApiResponse<T>.Fail($"Erreur HTTP {statusCode}: {truncatedBody}");
+            if (statusCode >= 500)
+                return ApiResponse<T>.Fail("Impossible d'enregistrer. Vérifiez les informations saisies puis réessayez.");
+            return ApiResponse<T>.Fail(truncatedBody.Length > 200 ? truncatedBody[..200] + "…" : truncatedBody);
         }
 
         // ── Success but body isn't parseable as ApiResponse<T> ───────
         _logger.LogWarning("API returned unparseable success body: {Method} {Url} → HTTP {StatusCode}", method, url, statusCode);
-        return ApiResponse<T>.Fail($"Réponse inattendue de l'API (HTTP {statusCode}). Le format de la réponse est incorrect. [{method} {url}]");
+        return ApiResponse<T>.Fail("Réponse inattendue de l'API. Veuillez réessayer.");
     }
 }

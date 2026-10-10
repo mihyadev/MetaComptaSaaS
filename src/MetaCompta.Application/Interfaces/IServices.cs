@@ -290,6 +290,8 @@ public interface IWorkflowService
     // ── Client Workflow Config ───────────────────────────────────
     Task<ApiResponse<List<ClientWorkflowConfigDto>>> GetClientConfigsAsync(int clientId, int cabinetId);
     Task<ApiResponse<ClientWorkflowConfigDto>> SaveClientConfigAsync(ClientWorkflowConfigCreateDto dto, int cabinetId, string userId);
+    /// <summary>Attach + auto-start workflow when a service (e.g. DOMICILIATION) is activated on a client.</summary>
+    Task<ApiResponse<WorkflowInstanceDto?>> EnsureServiceWorkflowAsync(int clientId, string serviceTypeCode, int cabinetId, string userId);
     /// <summary>Remove client workflow affectation (unassign template from client).</summary>
     Task<ApiResponse<bool>> DeleteClientConfigAsync(int configId, int clientId, int cabinetId, string userId);
     /// <summary>Clone a cabinet template into a client-owned copy (or return existing). Used by Personnaliser.</summary>

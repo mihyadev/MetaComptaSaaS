@@ -23,9 +23,10 @@
     <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-arrow-left me-1"></i> Retour</a>
 </div>
 
-<form asp-action="Edit" asp-route-id="@clientId" method="post">
+<form asp-action="Edit" asp-route-id="@clientId" method="post" id="formEditClient" novalidate>
     @Html.AntiForgeryToken()
-    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+    <input type="hidden" asp-for="ManagerPrincipalId" />
+    <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
 
     <ul class="nav nav-pills mb-3" id="editTabs" role="tablist">
         <li class="nav-item"><a class="nav-link active rounded-pill" data-bs-toggle="pill" href="#tabId">Identite</a></li>
@@ -56,12 +57,14 @@
                             <input asp-for="CapitalSocial" class="form-control" type="number" step="0.01" />
                         </div>
                         <div class="col-md-3">
-                            <label asp-for="ICE" class="form-label">ICE</label>
-                            <input asp-for="ICE" class="form-control" />
+                            <label asp-for="ICE" class="form-label">ICE <span class="text-danger">*</span></label>
+                            <input asp-for="ICE" class="form-control" maxlength="15" />
+                            <span asp-validation-for="ICE" class="text-danger small"></span>
                         </div>
                         <div class="col-md-3">
-                            <label asp-for="IF" class="form-label">IF</label>
+                            <label asp-for="IF" class="form-label">IF <span class="text-danger">*</span></label>
                             <input asp-for="IF" class="form-control" />
+                            <span asp-validation-for="IF" class="text-danger small"></span>
                         </div>
                         <div class="col-md-3">
                             <label asp-for="RC" class="form-label">RC</label>
@@ -311,7 +314,6 @@
 
 @section Scripts {
 <script>
-    // Generate declarations button
     document.getElementById('btnGenerateDecl')?.addEventListener('click', function() {
         var clientId = @(ViewBag.ClientId ?? 0);
         var year = new Date().getFullYear();
@@ -329,5 +331,93 @@
                 .catch(function() { alert('Erreur réseau.'); });
         }
     });
+
+    (function () {
+        var form = document.getElementById('formEditClient');
+        if (!form) return;
+
+        function clearFieldErrors() {
+            form.querySelectorAll('.is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+            form.querySelectorAll('.js-field-error').forEach(function (el) { el.remove(); });
+        }
+
+        function setFieldError(name, message) {
+            var input = form.querySelector('[name="' + name + '"]');
+            if (!input) return;
+            input.classList.add('is-invalid');
+            var span = document.createElement('div');
+            span.className = 'invalid-feedback d-block js-field-error';
+            span.textContent = message;
+            input.parentElement.appendChild(span);
+        }
+
+        function showTab(href) {
+            var link = document.querySelector('#editTabs a[href="' + href + '"]');
+            if (link && window.bootstrap) {
+                window.bootstrap.Tab.getOrCreateInstance(link).show();
+            } else if (link) {
+                link.click();
+            }
+        }
+
+        function isEmail(v) {
+            return !v || /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/.test(v);
+        }
+
+        form.addEventListener('submit', function (e) {
+            clearFieldErrors();
+            var msgs = [];
+            var firstTab = null;
+
+            function fail(name, msg, tab) {
+                msgs.push(msg);
+                setFieldError(name, msg);
+                if (!firstTab) firstTab = tab;
+            }
+
+            var rs = (form.querySelector('[name="RaisonSociale"]')?.value || '').trim();
+            var ice = (form.querySelector('[name="ICE"]')?.value || '').trim();
+            var iff = (form.querySelector('[name="IF"]')?.value || '').trim();
+            var email = (form.querySelector('[name="EmailPrincipal"]')?.value || '').trim();
+            var cemail = (form.querySelector('[name="ContactEmail"]')?.value || '').trim();
+            var mois = parseInt(form.querySelector('[name="MoisClotureExercice"]')?.value || '12', 10);
+
+            if (!rs) fail('RaisonSociale', 'La raison sociale est obligatoire.', '#tabId');
+            if (!ice) fail('ICE', "L'ICE est obligatoire.", '#tabId');
+            else if (!/^\d{15}$/.test(ice)) fail('ICE', "L'ICE doit contenir exactement 15 chiffres.", '#tabId');
+            if (!iff) fail('IF', "L'identifiant fiscal (IF) est obligatoire.", '#tabId');
+            if (email && !isEmail(email)) fail('EmailPrincipal', "L'email principal n'est pas valide.", '#tabCo');
+            if (cemail && !isEmail(cemail)) fail('ContactEmail', "L'email du contact n'est pas valide.", '#tabCo');
+            if (!(mois >= 1 && mois <= 12)) fail('MoisClotureExercice', 'Le mois de clôture doit être entre 1 et 12.', '#tabFi');
+
+            if (msgs.length) {
+                e.preventDefault();
+                var box = form.querySelector('.validation-summary-errors, .alert-danger, [asp-validation-summary]');
+                if (!box) box = form.querySelector('.alert');
+                if (box) {
+                    box.classList.remove('validation-summary-valid', 'd-none');
+                    box.style.display = 'block';
+                    box.innerHTML = '<ul class="mb-0">' + msgs.map(function (m) { return '<li>' + m + '</li>'; }).join('') + '</ul>';
+                }
+                showTab(firstTab || '#tabId');
+                return false;
+            }
+
+            var mgr = form.querySelector('[name="ManagerPrincipalId"]');
+            if (mgr && !(mgr.value || '').trim()) mgr.value = '';
+        });
+
+        // On server errors, open the first tab that has a field error
+        @if (!ViewData.ModelState.IsValid)
+        {
+            var errKeys = ViewData.ModelState.Where(kv => kv.Value?.Errors.Count > 0).Select(kv => kv.Key).ToList();
+            var tab = "#tabId";
+            if (errKeys.Any(k => k is "EmailPrincipal" or "ContactEmail" or "AdresseSiegeSocial" or "TelephonePrincipal" or "ContactNom" or "ContactEmail"))
+                tab = "#tabCo";
+            else if (errKeys.Any(k => k is "TypeTVA" or "MoisClotureExercice" or "ManagerPrincipalId" or "NotesInternes" or "DateDebutContrat"))
+                tab = "#tabFi";
+            <text>showTab('@tab');</text>
+        }
+    })();
 </script>
 }
