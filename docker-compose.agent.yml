@@ -1,0 +1,39 @@
+# Local/agent override: SQL Server in Docker.
+# API uses host.docker.internal (bridge TCP between containers is unreliable here).
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: metacompta-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "RS2iRS2i!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - metacompta-sql:/var/opt/mssql
+    networks:
+      - metacompta-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'RS2iRS2i!' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  api:
+    environment:
+      - "ConnectionStrings__DefaultConnection=Server=host.docker.internal,1433;Database=MetaComptaSASDb_Dev;User Id=sa;Password=RS2iRS2i!;TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      sql:
+        condition: service_healthy
+
+  backoffice:
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  metacompta-sql:
