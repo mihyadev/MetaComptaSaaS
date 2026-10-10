@@ -1,6 +1,6 @@
 /**
  * Shared cron / Init period-table builder for Workflow Builder + Client Personnaliser.
- * Init source of truth: editable periods[] (label, start, end = \u00e9ch\u00e9ance).
+ * Init source of truth: editable periods[] (label, start, end, due) — due = \u00e9ch\u00e9ance per row.
  */
 (function (global) {
     'use strict';
@@ -41,6 +41,17 @@
         return [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][Math.min(12, Math.max(1, month))] || 31;
     }
 
+    /** Non-leap EOM pattern (Feb=28) — leap day clamped at runtime materialization. */
+    function daysInMonthPattern(month) {
+        return [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][Math.min(12, Math.max(1, month))] || 31;
+    }
+
+    /** Due = last day of calendar month after period-end month (Dec \u2192 Jan). */
+    function eomNextMonth(endMonth) {
+        var nm = endMonth >= 12 ? 1 : (endMonth + 1);
+        return { m: nm, d: daysInMonthPattern(nm) };
+    }
+
     /** Parse "MM-DD" or legacy "yyyy-MM-dd" / "dd/MM/yyyy" \u2192 { m, d } (year ignored). */
     function parseMd(s) {
         if (!s) return null;
@@ -77,8 +88,12 @@
     function normalizePeriod(p) {
         var s = parseMd(p && (p.start || p.startMd));
         var e = parseMd(p && (p.end || p.endMd));
+        var du = parseMd(p && (p.due || p.dueMd || p.echeance));
         if (p && p.startMonth && p.startDay) s = { m: +p.startMonth, d: +p.startDay };
         if (p && p.endMonth && p.endDay) e = { m: +p.endMonth, d: +p.endDay };
+        if (p && p.dueMonth && p.dueDay) du = { m: +p.dueMonth, d: +p.dueDay };
+        // Default due = EOM of month after period end when missing
+        if (!du && e && e.m) du = eomNextMonth(e.m);
         var label = fixMojibake((p && p.label) || '');
         // Prefer clean locale month name when label looks corrupted
         if (s && s.m >= 1 && s.m <= 12 && /\u00c3./.test(label)) {
@@ -88,10 +103,13 @@
             label: label,
             start: s ? md(s.m, s.d) : '',
             end: e ? md(e.m, e.d) : '',
+            due: du ? md(du.m, du.d) : '',
             startMonth: s ? s.m : null,
             startDay: s ? s.d : null,
             endMonth: e ? e.m : null,
-            endDay: e ? e.d : null
+            endDay: e ? e.d : null,
+            dueMonth: du ? du.m : null,
+            dueDay: du ? du.d : null
         };
     }
 
@@ -133,42 +151,53 @@
     }
 
     function tplTitle(freq) {
-        // Morocco TVA: working deadline = 26th of the month after period end.
-        if (freq === 'quarterly') return 'TVA trimestrielle \u2014 4 periodes (\u00e9ch\u00e9ance le 26)';
+        if (freq === 'quarterly') return 'TVA trimestrielle \u2014 4 periodes (\u00e9ch\u00e9ance = fin du mois suivant)';
         if (freq === 'annually') return 'Annuel \u2014 1 periode';
         if (freq === 'periodic') return 'Periodique \u2014 periodes manuelles';
-        return 'TVA mensuelle \u2014 12 periodes (\u00e9ch\u00e9ance le 26)';
+        return 'TVA mensuelle \u2014 12 periodes (\u00e9ch\u00e9ance = fin du mois suivant)';
     }
 
-    /** Seed rows as year-agnostic MM-DD patterns (taxable period; echeance = +1 month day 26). */
+    /** Seed rows: taxable start/end + per-row due (EOM of month after period end). */
     function generatePeriodRows(freq) {
         var rows = [];
         if (freq === 'quarterly') {
-            // Q1 Jan-Mar (due 26 Apr), Q2 Apr-Jun (due 26 Jul), Q3 Jul-Sep (due 26 Oct), Q4 Oct-Dec (due 26 Jan)
-            var qLabels = [
-                'T1 (' + monthNamesShort[1] + '-' + monthNamesShort[3] + ')',
-                'T2 (' + monthNamesShort[4] + '-' + monthNamesShort[6] + ')',
-                'T3 (' + monthNamesShort[7] + '-' + monthNamesShort[9] + ')',
-                'T4 (' + monthNamesShort[10] + '-' + monthNamesShort[12] + ')'
+            // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
+            var qDefs = [
+                { label: 'T1 (' + monthNamesShort[1] + '-' + monthNamesShort[3] + ')', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
+                { label: 'T2 (' + monthNamesShort[4] + '-' + monthNamesShort[6] + ')', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
+                { label: 'T3 (' + monthNamesShort[7] + '-' + monthNamesShort[9] + ')', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 },
+                { label: 'T4 (' + monthNamesShort[10] + '-' + monthNamesShort[12] + ')', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 }
             ];
-            for (var q = 1; q <= 4; q++) {
-                var sm = (q - 1) * 3 + 1;
-                var em = sm + 2;
-                rows.push(normalizePeriod({ label: qLabels[q - 1], start: md(sm, 1), end: md(em, daysInMonth(em)) }));
-            }
+            qDefs.forEach(function (q) {
+                rows.push(normalizePeriod({
+                    label: q.label,
+                    start: md(q.sm, 1), end: md(q.em, q.ed), due: md(q.dm, q.dd),
+                    startMonth: q.sm, startDay: 1, endMonth: q.em, endDay: q.ed,
+                    dueMonth: q.dm, dueDay: q.dd
+                }));
+            });
             return rows;
         }
         if (freq === 'annually') {
-            rows.push(normalizePeriod({ label: 'Ann\u00e9e', start: md(1, 1), end: md(12, 31) }));
+            rows.push(normalizePeriod({ label: 'Ann\u00e9e', start: md(1, 1), end: md(12, 31), due: md(3, 31) }));
             return rows;
         }
         if (freq === 'periodic') {
-            rows.push(normalizePeriod({ label: 'Periode 1', start: md(1, 1), end: md(6, 30) }));
+            rows.push(normalizePeriod({ label: 'Periode 1', start: md(1, 1), end: md(6, 30), due: md(7, 31) }));
             return rows;
         }
-        // Monthly TVA: period = calendar month; working deadline = 26th of next month
+        // Monthly: Jan→28/02 … Dec→31/01/N+1
         for (var m = 1; m <= 12; m++) {
-            rows.push(normalizePeriod({ label: monthNames[m], start: md(m, 1), end: md(m, daysInMonth(m)) }));
+            var due = eomNextMonth(m);
+            rows.push(normalizePeriod({
+                label: monthNames[m],
+                start: md(m, 1),
+                end: md(m, daysInMonthPattern(m)),
+                due: md(due.m, due.d),
+                startMonth: m, startDay: 1,
+                endMonth: m, endDay: daysInMonthPattern(m),
+                dueMonth: due.m, dueDay: due.d
+            }));
         }
         return rows;
     }
@@ -196,13 +225,21 @@
             var sd = parseInt((tr.querySelector('.pt-start-d') || {}).value, 10) || 0;
             var em = parseInt((tr.querySelector('.pt-end-m') || {}).value, 10) || 0;
             var ed = parseInt((tr.querySelector('.pt-end-d') || {}).value, 10) || 0;
+            var dm = parseInt((tr.querySelector('.pt-due-m') || {}).value, 10) || 0;
+            var dd = parseInt((tr.querySelector('.pt-due-d') || {}).value, 10) || 0;
             if (!sm && !em && !label) return;
             if (sd) sd = Math.min(Math.max(1, sd), daysInMonth(sm || 1));
             if (ed) ed = Math.min(Math.max(1, ed), daysInMonth(em || 1));
+            if (!dm && em) {
+                var auto = eomNextMonth(em);
+                dm = auto.m; dd = auto.d;
+            }
+            if (dd) dd = Math.min(Math.max(1, dd), daysInMonth(dm || 1));
             rows.push(normalizePeriod({
                 label: label.trim(),
                 startMonth: sm, startDay: sd || 1,
-                endMonth: em, endDay: ed || 1
+                endMonth: em, endDay: ed || 1,
+                dueMonth: dm || null, dueDay: dd || null
             }));
         });
         return rows;
@@ -216,12 +253,13 @@
         var html = '<div class="period-template-box period-template-pro">'
             + '<div class="pt-head">'
             + '<div><span>Modele de periodes</span><strong>' + tplTitle(freq) + '</strong></div>'
-            + '<div class="pt-head-hint">JJ / Mois / <strong>YYYY</strong> (annee a l\'execution)</div>'
+            + '<div class="pt-head-hint">D\u00e9but / Fin / \u00c9ch\u00e9ance \u2014 JJ / Mois / <strong>YYYY</strong></div>'
             + '</div>'
             + '<div class="pt-scroll pt-cards">';
         rows.forEach(function (r, i) {
             var s = parseMd(r.start) || { m: 1, d: 1 };
             var e = parseMd(r.end) || { m: 1, d: 1 };
+            var du = parseMd(r.due) || eomNextMonth(e.m);
             var safeLabel = String(r.label || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             html += '<div class="pt-card" data-idx="' + i + '">'
                 + '<div class="pt-card-top">'
@@ -230,17 +268,22 @@
                 + '<button type="button" class="pt-del" title="Supprimer" onclick="WfCron.removePeriodRow(this)"><i class="bi bi-trash"></i></button>'
                 + '</div>'
                 + '<div class="pt-card-grid">'
-                + mdEditorHtml('start', s.m, s.d, 'Debut')
-                + mdEditorHtml('end', e.m, e.d, 'Fin de periode')
+                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but')
+                + mdEditorHtml('end', e.m, e.d, 'Fin de p\u00e9riode')
+                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance')
                 + '</div></div>';
         });
         html += '</div>'
             + '<div class="pt-foot">'
             + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter une periode</button>'
-            + '<span class="small text-muted">Modifiez jour + mois \u2014 l\'annee suit l\'exercice en cours.</span>'
+            + '<span class="small text-muted">Chaque ligne a sa propre \u00e9ch\u00e9ance (fin du mois suivant par d\u00e9faut).</span>'
             + '</div></div>';
         box.innerHTML = html;
-        box.querySelectorAll('.pt-label, .pt-start-d, .pt-start-m, .pt-end-d, .pt-end-m').forEach(function (inp) {
+        box.querySelectorAll('.pt-due-d, .pt-due-m').forEach(function (el) {
+            var field = el.closest('.pt-field');
+            if (field) field.classList.add('pt-due');
+        });
+        box.querySelectorAll('.pt-label, .pt-start-d, .pt-start-m, .pt-end-d, .pt-end-m, .pt-due-d, .pt-due-m').forEach(function (inp) {
             inp.addEventListener('change', function () { syncPeriodTable(card); });
             inp.addEventListener('input', function () {
                 if (inp.classList.contains('pt-label')) return;
@@ -250,6 +293,13 @@
         card.querySelectorAll('.period-tpl-btn').forEach(function (b) {
             b.classList.toggle('active', b.getAttribute('data-tpl') === freq);
         });
+        toggleGlobalWindowFields(card, true);
+    }
+
+    function toggleGlobalWindowFields(card, hideWhenPerRowDue) {
+        var wrap = card && card.querySelector('.init-global-window-fields');
+        if (!wrap) return;
+        wrap.classList.toggle('d-none', !!hideWhenPerRowDue);
     }
 
     function syncPeriodTable(card) {
@@ -262,43 +312,51 @@
         var builder = card.querySelector('.cron-builder');
         var freq = (builder && builder.dataset.periodTpl) || freqFromPeriodTemplate(cfg.periodTemplate || cfg.periodFrequency) || 'monthly';
 
-        // Persist year-agnostic patterns only (MM-DD + month/day fields)
+        // Persist year-agnostic patterns (start/end/due per row)
         cfg.periods = periods.map(function (p) {
             return {
                 label: p.label,
                 start: p.start,
                 end: p.end,
+                due: p.due,
                 startMonth: p.startMonth,
                 startDay: p.startDay,
                 endMonth: p.endMonth,
-                endDay: p.endDay
+                endDay: p.endDay,
+                dueMonth: p.dueMonth,
+                dueDay: p.dueDay
             };
         });
         cfg.periodTemplate = periodFrequencyValue(freq) || 'Mensuelle';
         cfg.periodFrequency = cfg.periodTemplate;
 
-        var startEl = card.querySelector('.window-start-day');
-        var endEl = card.querySelector('.window-end-day');
-        var offEl = card.querySelector('.window-month-offset');
-        var yearEl = card.querySelector('.deadline-year-offset');
-
-        // Prefer visible UI values; default TVA working deadline = 26 / +1 month
-        var startDay = parseInt(startEl && startEl.value, 10);
-        var endDay = parseInt(endEl && endEl.value, 10);
-        var monthOff = parseInt(offEl && offEl.value, 10);
-        if (!(startDay >= 1 && startDay <= 31)) startDay = cfg.windowStartDay || 1;
-        if (!(endDay >= 1 && endDay <= 31)) endDay = cfg.windowEndDay || ((freq === 'monthly' || freq === 'quarterly') ? 26 : 1);
-        if (!(monthOff >= 0)) monthOff = cfg.windowMonthOffset != null ? cfg.windowMonthOffset : 1;
-
-        cfg.windowStartDay = startDay;
-        cfg.windowEndDay = endDay;
-        cfg.windowMonthOffset = monthOff;
-        cfg.deadlineYearOffset = parseInt(yearEl && yearEl.value, 10) || cfg.deadlineYearOffset || 0;
+        // Legacy window* kept as weak fallback only when no per-row due
+        var hasPerRowDue = periods.some(function (p) { return p.dueMonth && p.dueDay; });
+        toggleGlobalWindowFields(card, hasPerRowDue);
+        if (!hasPerRowDue) {
+            var startEl = card.querySelector('.window-start-day');
+            var endEl = card.querySelector('.window-end-day');
+            var offEl = card.querySelector('.window-month-offset');
+            var yearEl = card.querySelector('.deadline-year-offset');
+            var startDay = parseInt(startEl && startEl.value, 10);
+            var endDay = parseInt(endEl && endEl.value, 10);
+            var monthOff = parseInt(offEl && offEl.value, 10);
+            if (!(startDay >= 1 && startDay <= 31)) startDay = cfg.windowStartDay || 1;
+            if (!(endDay >= 1 && endDay <= 31)) endDay = cfg.windowEndDay || 31;
+            if (!(monthOff >= 0)) monthOff = cfg.windowMonthOffset != null ? cfg.windowMonthOffset : 1;
+            cfg.windowStartDay = startDay;
+            cfg.windowEndDay = endDay;
+            cfg.windowMonthOffset = monthOff;
+            cfg.deadlineYearOffset = parseInt(yearEl && yearEl.value, 10) || cfg.deadlineYearOffset || 0;
+            if (startEl) startEl.value = String(cfg.windowStartDay);
+            if (endEl) endEl.value = String(cfg.windowEndDay);
+            if (offEl) offEl.value = String(cfg.windowMonthOffset);
+        } else {
+            delete cfg.windowEndDay;
+            delete cfg.windowMonthOffset;
+            delete cfg.windowStartDay;
+        }
         delete cfg.deadlineMonth;
-
-        if (startEl) startEl.value = String(cfg.windowStartDay);
-        if (endEl) endEl.value = String(cfg.windowEndDay);
-        if (offEl) offEl.value = String(cfg.windowMonthOffset);
 
         writeCfg(card, cfg);
         updateEcheanceWorkPreview(card, periods, cfg);
@@ -309,25 +367,24 @@
         }
     }
 
-    /** Visible summary: Fin periode → echeance de travail (day + month offset). */
+    /** Visible summary from per-row due dates. */
     function updateEcheanceWorkPreview(card, periods, cfg) {
         var el = card && card.querySelector('.echeance-work-preview');
         if (!el) return;
-        var day = cfg.windowEndDay || 26;
-        var off = cfg.windowMonthOffset != null ? cfg.windowMonthOffset : 1;
         var year = new Date().getFullYear();
-        var samples = (periods || []).slice(0, 3).map(function (p) {
+        var samples = (periods || []).slice(0, 4).map(function (p) {
             var e = parseMd(p.end);
-            if (!e) return null;
-            var pe = new Date(year, e.m - 1, Math.min(e.d, daysInMonth(e.m)));
-            var lim = new Date(pe.getFullYear(), pe.getMonth() + off, 1);
-            var dim = new Date(lim.getFullYear(), lim.getMonth() + 1, 0).getDate();
-            lim.setDate(Math.min(day, dim));
-            var dd = pad2(lim.getDate()) + '/' + pad2(lim.getMonth() + 1) + '/' + lim.getFullYear();
+            var du = parseMd(p.due);
+            if (!du && e) du = eomNextMonth(e.m);
+            if (!du) return null;
+            var dueYear = year;
+            if (e && du.m < e.m) dueYear = year + 1;
+            var dim = new Date(dueYear, du.m, 0).getDate();
+            var dd = pad2(Math.min(du.d, dim)) + '/' + pad2(du.m) + '/' + dueYear;
             return (p.label || 'Periode') + ' \u2192 ' + dd;
         }).filter(Boolean);
-        var rule = '\u00c9ch\u00e9ance de travail : le ' + day + (off === 1 ? ' du mois suivant' : ' (+' + off + ' mois)');
-        el.textContent = samples.length ? (rule + ' \u2014 ex. ' + samples.join(' \u00b7 ')) : rule;
+        var rule = '\u00c9ch\u00e9ance par p\u00e9riode (fin du mois suivant)';
+        el.textContent = samples.length ? (rule + ' \u2014 ' + samples.join(' \u00b7 ')) : rule;
     }
 
     function loadPeriodTemplate(card, freq) {
@@ -343,7 +400,10 @@
     function addPeriodRow(card) {
         if (!card) return;
         var periods = readPeriodsFromDom(card);
-        periods.push(normalizePeriod({ label: 'Periode ' + (periods.length + 1), start: md(1, 1), end: md(1, 31) }));
+        periods.push(normalizePeriod({
+            label: 'Periode ' + (periods.length + 1),
+            start: md(1, 1), end: md(1, 31), due: md(2, 28)
+        }));
         var builder = card.querySelector('.cron-builder');
         if (builder) builder.dataset.periodTpl = 'periodic';
         renderPeriodEditor(card, periods, 'periodic');
@@ -372,7 +432,6 @@
         var offEl = card.querySelector('.window-month-offset');
         if (startEl && cfg.windowStartDay) startEl.value = String(cfg.windowStartDay);
         if (endEl && cfg.windowEndDay) endEl.value = String(cfg.windowEndDay);
-        else if (endEl && (freq === 'monthly' || freq === 'quarterly') && !endEl.value) endEl.value = '26';
         if (offEl && cfg.windowMonthOffset != null) offEl.value = String(cfg.windowMonthOffset);
 
         var rows = Array.isArray(cfg.periods) && cfg.periods.length
@@ -443,7 +502,7 @@
             preview.classList.add('d-none');
         }
 
-        // \u00c9ch\u00e9ance de travail = windowEndDay of month after period end (not period-end day)
+        // \u00c9ch\u00e9ance de travail = per-row due (fallback: legacy window* / EOM next month)
         var endPreview = builder.querySelector('.cron-preview-end');
         var card = closest(builder, '.step-card');
         var actionSel = card && card.querySelector('select[name*="ActionOnLifecycleEnd"]');
@@ -454,23 +513,46 @@
             : 'Cl\u00f4turer';
 
         var cfg = readCfg(card);
-        var dueDay = parseInt(cfg.windowEndDay, 10);
-        if (!(dueDay >= 1 && dueDay <= 31)) dueDay = 26;
-        var monthOff = parseInt(cfg.windowMonthOffset, 10);
-        if (!(monthOff >= 0)) monthOff = 1;
+        var dues = periods.map(function (p) {
+            var du = parseMd(p.due);
+            if (du) return du;
+            var e = parseMd(p.end);
+            return e ? eomNextMonth(e.m) : null;
+        }).filter(Boolean);
 
-        if (ends.length && endPreview) {
-            // Cron months for deadline = period-end months shifted by offset
-            var dueMonths = uniqueSorted(ends.map(function (x) {
-                var m = x.m + monthOff;
-                while (m > 12) m -= 12;
-                while (m < 1) m += 12;
-                return m;
-            }));
-            var endCron = mi + ' ' + h + ' ' + dueDay + ' ' + (dueMonths.length && dueMonths.length < 12 ? dueMonths.join(',') : '*') + ' *';
-            var endDesc = '\u00c9ch\u00e9ance de travail le ' + dueDay
-                + (monthOff === 1 ? ' du mois suivant' : ' (+' + monthOff + ' mois)')
-                + ' \u00e0 ' + timeStr + ' \u00b7 ' + actionLabel;
+        if ((dues.length || ends.length) && endPreview) {
+            var dueDays = uniqueSorted(dues.map(function (x) { return x.d; }));
+            var dueMonths = uniqueSorted(dues.map(function (x) { return x.m; }));
+            var endCron, endDesc;
+            if (dues.length) {
+                endCron = mi + ' ' + h + ' '
+                    + (dueDays.length === 1 ? dueDays[0] : dueDays.join(','))
+                    + ' '
+                    + (dueMonths.length && dueMonths.length < 12 ? dueMonths.join(',') : '*')
+                    + ' *';
+                var sample = dues.slice(0, 3).map(function (x) {
+                    return pad2(x.d) + '/' + pad2(x.m);
+                }).join(', ');
+                endDesc = '\u00c9ch\u00e9ance par p\u00e9riode (' + sample
+                    + (dues.length > 3 ? '\u2026' : '')
+                    + ') \u00e0 ' + timeStr + ' \u00b7 ' + actionLabel;
+            } else {
+                // Legacy fallback when rows have no due
+                var dueDay = parseInt(cfg.windowEndDay, 10);
+                if (!(dueDay >= 1 && dueDay <= 31)) dueDay = 31;
+                var monthOff = parseInt(cfg.windowMonthOffset, 10);
+                if (!(monthOff >= 0)) monthOff = 1;
+                dueMonths = uniqueSorted(ends.map(function (x) {
+                    var m = x.m + monthOff;
+                    while (m > 12) m -= 12;
+                    while (m < 1) m += 12;
+                    return m;
+                }));
+                endCron = mi + ' ' + h + ' ' + dueDay + ' ' + (dueMonths.length && dueMonths.length < 12 ? dueMonths.join(',') : '*') + ' *';
+                endDesc = '\u00c9ch\u00e9ance de travail le ' + dueDay
+                    + (monthOff === 1 ? ' du mois suivant' : ' (+' + monthOff + ' mois)')
+                    + ' \u00e0 ' + timeStr + ' \u00b7 ' + actionLabel;
+            }
             endPreview.classList.remove('d-none');
             var et = endPreview.querySelector('.cron-preview-text');
             var ec = endPreview.querySelector('.cron-preview-cron');
@@ -817,7 +899,7 @@
             + '</div>'
             + '<label class="chk-item mb-2" style="display:inline-flex;max-width:100%;"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser d\u00e9marrage manuel</span></label>'
             + '<input type="hidden" name="' + prefix + '.TriggerSource" class="init-trigger-source" value="Schedule" />'
-            + '<textarea name="' + prefix + '.ActionConfigJson" class="action-config-input d-none" rows="1">{"initTrigger":"both","allowManualInit":true,"periodTemplate":"Mensuelle","windowStartDay":1,"windowEndDay":26,"windowMonthOffset":1,"periods":[]}</textarea>'
+            + '<textarea name="' + prefix + '.ActionConfigJson" class="action-config-input d-none" rows="1">{"initTrigger":"both","allowManualInit":true,"periodTemplate":"Mensuelle","periodFrequency":"Mensuelle","periods":[]}</textarea>'
             + '</div>'
             + '<div class="cron-builder cron-freq-panel" data-cron="' + String(cronExpr).replace(/"/g, '&quot;') + '">'
             + '<div class="init-freq-echeance mb-2"><div class="life-panel">'
@@ -830,11 +912,11 @@
             + '</div>'
             + '<div class="period-template-editor mb-2"></div>'
             + '<div class="row g-2 align-items-end mb-2">'
-            + '<div class="col-md-3"><span class="life-label">Jour d\'\u00e9ch\u00e9ance</span>'
-            + '<input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="26" onchange="WfCron.syncPeriodTable(this.closest(\'.step-card\'))" /></div>'
-            + '<div class="col-md-3"><span class="life-label">Mois apr\u00e8s fin p\u00e9riode</span>'
+            + '<div class="col-md-3 init-global-window-fields d-none"><span class="life-label">Jour d\'\u00e9ch\u00e9ance (legacy)</span>'
+            + '<input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="31" onchange="WfCron.syncPeriodTable(this.closest(\'.step-card\'))" /></div>'
+            + '<div class="col-md-3 init-global-window-fields d-none"><span class="life-label">Mois apr\u00e8s fin (legacy)</span>'
             + '<input type="number" class="form-control form-control-sm window-month-offset" min="0" max="24" value="1" onchange="WfCron.syncPeriodTable(this.closest(\'.step-card\'))" /></div>'
-            + '<div class="col-md-3"><span class="life-label">Jour ouverture fen\u00eatre</span>'
+            + '<div class="col-md-3 init-global-window-fields d-none"><span class="life-label">Jour ouverture (legacy)</span>'
             + '<input type="number" class="form-control form-control-sm window-start-day" min="1" max="31" value="1" onchange="WfCron.syncPeriodTable(this.closest(\'.step-card\'))" /></div>'
             + '<div class="col-md-3"><span class="life-label">Action \u00e0 la fin</span>'
             + '<select name="' + prefix + '.ActionOnLifecycleEnd" class="form-select form-select-sm" onchange="WfCron.syncPeriodTable(this.closest(\'.step-card\'))">'

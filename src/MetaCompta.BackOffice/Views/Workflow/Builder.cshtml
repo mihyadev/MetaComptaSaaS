@@ -136,8 +136,11 @@
     .period-template-box .pt-card-title { display: flex; align-items: center; gap: 0.45rem; flex: 1; min-width: 0; }
     .period-template-box .pt-badge { width: 1.45rem; height: 1.45rem; border-radius: 999px; background: color-mix(in srgb, var(--monday-blue) 14%, #fff); color: var(--monday-blue); font-size: 0.7rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .period-template-box .pt-label { font-weight: 600; }
-    .period-template-box .pt-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+    .period-template-box .pt-card-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.65rem; }
+    @@media (max-width: 960px) { .period-template-box .pt-card-grid { grid-template-columns: 1fr 1fr; } }
     @@media (max-width: 720px) { .period-template-box .pt-card-grid { grid-template-columns: 1fr; } }
+    .period-template-box .pt-field.pt-due .pt-field-label { color: #c2410c; }
+    .init-global-window-fields.d-none { display: none !important; }
     .period-template-box .pt-field-label { display:block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--monday-muted); margin-bottom: 0.25rem; }
     .period-template-box .pt-md-row { display: flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap; }
     .period-template-box .pt-md-row input[type="number"] { width: 3.6rem; text-align: center; font-weight: 700; }
@@ -488,7 +491,7 @@
                                             </div>
                                             <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
                                             @* textarea keeps JSON quotes intact (attribute value="" would truncate at first ") *@
-                                            <textarea name="Steps[@i].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"windowStartDay\":1,\"windowEndDay\":26,\"windowMonthOffset\":1,\"periods\":[]}" : step.ActionConfigJson)</textarea>
+                                            <textarea name="Steps[@i].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">@(string.IsNullOrWhiteSpace(step.ActionConfigJson) ? "{\"initTrigger\":\"both\",\"allowManualInit\":true,\"periodFrequency\":\"Mensuelle\",\"periodTemplate\":\"Mensuelle\",\"periods\":[]}" : step.ActionConfigJson)</textarea>
                                         </div>
                                         <div class="cron-builder cron-freq-panel" data-cron="@step.CronExpression">
                                             <div class="init-freq-echeance mb-2 @(isInitStep ? "" : "d-none")">
@@ -502,16 +505,16 @@
                                                     </div>
                                                     <div class="period-template-editor mb-2"></div>
                                                     <div class="row g-2 align-items-end mb-2">
-                                                        <div class="col-md-3">
-                                                            <span class="life-label">Jour d'échéance</span>
+                                                        <div class="col-md-3 init-global-window-fields d-none">
+                                                            <span class="life-label">Jour d'échéance (legacy)</span>
                                                             <input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="@winEnd" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                                         </div>
-                                                        <div class="col-md-3">
-                                                            <span class="life-label">Mois après fin période</span>
+                                                        <div class="col-md-3 init-global-window-fields d-none">
+                                                            <span class="life-label">Mois après fin (legacy)</span>
                                                             <input type="number" class="form-control form-control-sm window-month-offset" min="0" max="24" value="@winMonths" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                                         </div>
-                                                        <div class="col-md-3">
-                                                            <span class="life-label">Jour ouverture fenêtre</span>
+                                                        <div class="col-md-3 init-global-window-fields d-none">
+                                                            <span class="life-label">Jour ouverture (legacy)</span>
                                                             <input type="number" class="form-control form-control-sm window-start-day" min="1" max="31" value="@winStart" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                                         </div>
                                                         <div class="col-md-3">
@@ -926,7 +929,7 @@
                         <button type="button" class="cron-freq-btn init-trigger-btn active" data-mode="both" onclick="WfCron.setTriggerMode(this.closest('.step-card'),'both')"><i class="bi bi-shuffle"></i> Planifié + Manuel</button>
                     </div>
                     <label class="chk-item mb-2"><input type="checkbox" class="form-check-input init-allow-manual" checked /><span>Autoriser Démarrer manuellement</span></label>
-                    <textarea name="Steps[__IDX__].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">{"initTrigger":"both","allowManualInit":true,"periodFrequency":"Mensuelle","windowStartDay":1,"windowEndDay":26,"windowMonthOffset":1,"periods":[]}</textarea>
+                    <textarea name="Steps[__IDX__].ActionConfigJson" class="action-config-input d-none" rows="1" autocomplete="off">{"initTrigger":"both","allowManualInit":true,"periodFrequency":"Mensuelle","periodTemplate":"Mensuelle","periods":[]}</textarea>
                 </div>
                 <div class="cron-builder cron-freq-panel" data-cron="">
                     <div class="init-freq-echeance mb-2 d-none">
@@ -940,16 +943,16 @@
                             </div>
                             <div class="period-template-editor mb-2"></div>
                             <div class="row g-2 align-items-end mb-2">
-                                <div class="col-md-3">
-                                    <span class="life-label">Jour d'échéance</span>
-                                    <input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="26" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
+                                <div class="col-md-3 init-global-window-fields d-none">
+                                    <span class="life-label">Jour d'échéance (legacy)</span>
+                                    <input type="number" class="form-control form-control-sm window-end-day" min="1" max="31" value="31" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                 </div>
-                                <div class="col-md-3">
-                                    <span class="life-label">Mois après fin période</span>
+                                <div class="col-md-3 init-global-window-fields d-none">
+                                    <span class="life-label">Mois après fin (legacy)</span>
                                     <input type="number" class="form-control form-control-sm window-month-offset" min="0" max="24" value="1" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                 </div>
-                                <div class="col-md-3">
-                                    <span class="life-label">Jour ouverture fenêtre</span>
+                                <div class="col-md-3 init-global-window-fields d-none">
+                                    <span class="life-label">Jour ouverture (legacy)</span>
                                     <input type="number" class="form-control form-control-sm window-start-day" min="1" max="31" value="1" onchange="WfCron.syncPeriodTable(this.closest('.step-card'))" />
                                 </div>
                                 <div class="col-md-3">

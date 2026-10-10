@@ -263,7 +263,7 @@ public class DeclarationService : IDeclarationService
     }
 
     /// <summary>
-    /// DateLimite from Init window (windowEndDay / +offset after period end).
+    /// DateLimite: per-row due (DueMonth/DueDay or DateLimite) → legacy window* → calendar.
     /// PeriodEnd is the taxable slice end — never the filing deadline.
     /// </summary>
     private static DateTime ResolveInitDateLimite(
@@ -275,6 +275,12 @@ public class DeclarationService : IDeclarationService
     {
         if (periodCfg == null) return calendarFilingDeadline;
 
+        if (periodCfg.DateLimite is DateTime explicitDue)
+            return explicitDue.Date;
+
+        if (periodCfg.DueMonth is >= 1 and <= 12 && periodCfg.DueDay is >= 1 and <= 31)
+            return DeclarationPeriodTemplate.MaterializeDue(periodCfg.DueMonth.Value, periodCfg.DueDay.Value, periodEnd);
+
         var hasWindow = periodCfg.WindowEndDay is >= 1 and <= 31
             || periodCfg.DeadlineMonth is >= 1 and <= 12
             || periodCfg.WindowMonthOffset.HasValue
@@ -282,7 +288,6 @@ public class DeclarationService : IDeclarationService
 
         if (hasWindow)
         {
-            // Default day from calendar type when only offset is provided
             var day = periodCfg.WindowEndDay
                 ?? MoroccoDeclarationCalendar.GetDefaultFilingWindow(type).EndDay;
             return MoroccoDeclarationCalendar.ApplyInitDeadline(
@@ -295,10 +300,14 @@ public class DeclarationService : IDeclarationService
                 type);
         }
 
+        // TVA default without Init due: end of next month
+        if (string.Equals(type, "TVA", StringComparison.OrdinalIgnoreCase))
+            return DeclarationPeriodTemplate.EndOfMonthAfter(periodEnd);
+
         return calendarFilingDeadline;
     }
 
-    /// <summary>Init period template: periods[] = taxable slice; window* = DateLimite.</summary>
+    /// <summary>Init period template: periods[] = taxable slice + per-row due; window* = legacy fallback.</summary>
     private static (DateTime Start, DateTime End, DateTime Limite, string Periode) ApplyPeriodTemplate(
         CreateDeclarationDto? dto, MoroccoDeclarationCalendar.Window window, string type)
     {

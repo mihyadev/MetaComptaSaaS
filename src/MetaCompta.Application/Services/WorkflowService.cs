@@ -632,13 +632,20 @@ public class WorkflowService : IWorkflowService
                     if (wantTrim && !freq.StartsWith("Trim", StringComparison.OrdinalIgnoreCase)) return true;
                     if (!wantTrim && freq.StartsWith("Trim", StringComparison.OrdinalIgnoreCase)) return true;
                 }
-                if (!root.TryGetProperty("windowEndDay", out var wed) || !wed.TryGetInt32(out var day) || day != 26)
-                    return true; // missing or stale deadline → refresh to working day 26
                 if (root.TryGetProperty("periods", out var periods) && periods.ValueKind == System.Text.Json.JsonValueKind.Array)
                 {
                     var n = periods.GetArrayLength();
                     if (wantTrim && n != 4) return true;
                     if (!wantTrim && n != 12) return true;
+                    // Each period must carry its own due (Début/Fin/Échéance)
+                    foreach (var el in periods.EnumerateArray())
+                    {
+                        var hasDue = (el.TryGetProperty("dueMonth", out var dm) && dm.TryGetInt32(out _))
+                            || (el.TryGetProperty("dueDay", out var dd) && dd.TryGetInt32(out _))
+                            || (el.TryGetProperty("due", out var dueEl) && dueEl.ValueKind == System.Text.Json.JsonValueKind.String
+                                && !string.IsNullOrWhiteSpace(dueEl.GetString()));
+                        if (!hasDue) return true;
+                    }
                 }
                 else return true;
             }
@@ -718,54 +725,68 @@ public class WorkflowService : IWorkflowService
     }
 
     /// <summary>
-    /// Morocco TVA Init periods: taxable slice + filing window end-of-month / +1 month (CGI 110-111 teledeclaration).
+    /// Morocco TVA Init periods: each row = Début / Fin / Échéance (EOM of month after period end).
     /// </summary>
     private static string BuildTvaInitActionConfigJson(bool mensuelle)
     {
+        // Non-leap pattern (Feb end/due use 28); leap days clamped at materialization.
+        var dim = new[] { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+        static (int M, int D) EomNext(int endMonth, int[] dimArr)
+        {
+            var nm = endMonth >= 12 ? 1 : endMonth + 1;
+            return (nm, dimArr[nm]);
+        }
+
         var periods = new List<object>();
         if (mensuelle)
         {
-            // ASCII-safe labels (accents via \u) — avoids mojibake if source encoding drifts
             var labels = new[]
             {
                 "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
                 "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
             };
-            var dim = new[] { 0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
             for (var m = 1; m <= 12; m++)
             {
+                var (dm, dd) = EomNext(m, dim);
                 periods.Add(new
                 {
                     label = labels[m - 1],
                     start = $"{m:D2}-01",
                     end = $"{m:D2}-{dim[m]:D2}",
+                    due = $"{dm:D2}-{dd:D2}",
                     startMonth = m,
                     startDay = 1,
                     endMonth = m,
-                    endDay = dim[m]
+                    endDay = dim[m],
+                    dueMonth = dm,
+                    dueDay = dd
                 });
             }
         }
         else
         {
-            var q = new (string Label, int Sm, int Em, int Ed)[]
+            // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
+            var q = new (string Label, int Sm, int Em, int Ed, int Dm, int Dd)[]
             {
-                ("T1 (Jan-Mar)", 1, 3, 31),
-                ("T2 (Avr-Juin)", 4, 6, 30),
-                ("T3 (Juil-Sep)", 7, 9, 30),
-                ("T4 (Oct-D\u00e9c)", 10, 12, 31)
+                ("T1 (Jan-Mar)", 1, 3, 31, 4, 30),
+                ("T2 (Avr-Juin)", 4, 6, 30, 7, 31),
+                ("T3 (Juil-Sep)", 7, 9, 30, 10, 31),
+                ("T4 (Oct-D\u00e9c)", 10, 12, 31, 1, 31)
             };
-            foreach (var (label, sm, em, ed) in q)
+            foreach (var (label, sm, em, ed, dm, dd) in q)
             {
                 periods.Add(new
                 {
                     label,
                     start = $"{sm:D2}-01",
                     end = $"{em:D2}-{ed:D2}",
+                    due = $"{dm:D2}-{dd:D2}",
                     startMonth = sm,
                     startDay = 1,
                     endMonth = em,
-                    endDay = ed
+                    endDay = ed,
+                    dueMonth = dm,
+                    dueDay = dd
                 });
             }
         }
@@ -776,9 +797,6 @@ public class WorkflowService : IWorkflowService
             allowManualInit = true,
             periodFrequency = mensuelle ? "Mensuelle" : "Trimestrielle",
             periodTemplate = mensuelle ? "Mensuelle" : "Trimestrielle",
-            windowStartDay = 1,
-            windowEndDay = 26, // échéance de travail fiduciaire: 26 du mois suivant
-            windowMonthOffset = 1,
             periods
         };
         return System.Text.Json.JsonSerializer.Serialize(payload);
@@ -790,15 +808,15 @@ public class WorkflowService : IWorkflowService
         var initJson = BuildTvaInitActionConfigJson(mensuelle);
         var cron = mensuelle ? "0 8 1 * *" : "0 8 1 1,4,7,10 *";
         var cronDesc = mensuelle
-            ? "Le 1er de chaque mois \u00e0 08:00 \u2014 ouvre la TVA du mois pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance de travail le 26)"
-            : "Le 1er jan/avr/juil/oct \u00e0 08:00 \u2014 ouvre la TVA du trimestre pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance de travail le 26)";
+            ? "Le 1er de chaque mois \u00e0 08:00 \u2014 ouvre la TVA du mois pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance = fin du mois suivant)"
+            : "Le 1er jan/avr/juil/oct \u00e0 08:00 \u2014 ouvre la TVA du trimestre pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance = fin du mois suivant)";
 
         return new WorkflowTemplateCreateDto
         {
             Name = mensuelle ? "TVA Mensuelle" : "TVA Trimestrielle",
             Description = mensuelle
-                ? "Workflow TVA mensuelle (Maroc) : p\u00e9riode = mois, \u00e9ch\u00e9ance de travail = 26 du mois suivant. Cr\u00e9ation, documents, contr\u00f4le, calcul, SIMPL-TVA, paiement, cl\u00f4ture."
-                : "Workflow TVA trimestrielle (Maroc) : p\u00e9riodes T1\u2013T4, \u00e9ch\u00e9ance de travail = 26 du 1er mois du trimestre suivant. Cr\u00e9ation, documents, contr\u00f4le, calcul, SIMPL-TVA, paiement, cl\u00f4ture.",
+                ? "Workflow TVA mensuelle (Maroc) : 12 p\u00e9riodes avec \u00e9ch\u00e9ance = fin du mois suivant (ex. Jan\u219228/02, D\u00e9c\u219231/01/N+1)."
+                : "Workflow TVA trimestrielle (Maroc) : T1\u2013T4 avec \u00e9ch\u00e9ance = fin du mois suivant (T1\u219230/04, T4\u219231/01/N+1).",
             DeclarationType = "TVA",
             IsDefault = mensuelle, // Mensuelle = default; Trimestrielle also active for clients TypeTVA=Trimestrielle
             Steps = new()
@@ -3828,6 +3846,9 @@ public class WorkflowService : IWorkflowService
             Periode = initCfg.Periode,
             PeriodStart = initCfg.PeriodStart,
             PeriodEnd = initCfg.PeriodEnd,
+            DueMonth = initCfg.DueMonth,
+            DueDay = initCfg.DueDay,
+            DateLimite = initCfg.DateLimite,
             WindowStartDay = initCfg.WindowStartDay,
             WindowEndDay = initCfg.WindowEndDay,
             WindowMonthOffset = initCfg.WindowMonthOffset,
@@ -3847,11 +3868,14 @@ public class WorkflowService : IWorkflowService
         }
     }
 
-        private sealed record InitPeriodConfig(
+    private sealed record InitPeriodConfig(
         string? Frequency,
         string? Periode,
         DateTime? PeriodStart,
         DateTime? PeriodEnd,
+        int? DueMonth,
+        int? DueDay,
+        DateTime? DateLimite,
         int? WindowStartDay,
         int? WindowEndDay,
         int? WindowMonthOffset,
@@ -3859,15 +3883,16 @@ public class WorkflowService : IWorkflowService
         int? DeadlineYearOffset);
 
     /// <summary>
-    /// Reads Init periods[] (DateDebut/DateFin) + windowEndDay (DateLimite).
+    /// Reads Init periods[] (DateDebut/DateFin/Échéance per row) — due preferred over legacy window*.
     /// </summary>
     private async Task<InitPeriodConfig> ResolveInitPeriodConfigAsync(int workflowTemplateId, string declarationType)
     {
         string? frequency = null;
         string? periode = null;
-        DateTime? periodStart = null, periodEnd = null;
+        DateTime? periodStart = null, periodEnd = null, dateLimite = null;
+        int? dueMonth = null, dueDay = null;
         int? startDay = null, endDay = null, monthOffset = null, deadlineMonth = null, deadlineYearOffset = null;
-        var patternPeriods = new List<(int StartMonth, int StartDay, int EndMonth, int EndDay, string? Label)>();
+        var patternPeriods = new List<(int StartMonth, int StartDay, int EndMonth, int EndDay, string? Label, int? DueMonth, int? DueDay)>();
 
         var init = await _db.WorkflowStepTemplates
             .Where(s => s.WorkflowTemplateId == workflowTemplateId
@@ -3902,13 +3927,24 @@ public class WorkflowService : IWorkflowService
                             label = lb.GetString();
 
                         int sm, sd, em, ed;
-                        // Prefer explicit month/day fields
+                        int? rowDueM = null, rowDueD = null;
+                        if (el.TryGetProperty("dueMonth", out var dueMEl) && dueMEl.TryGetInt32(out var dmi))
+                            rowDueM = dmi;
+                        if (el.TryGetProperty("dueDay", out var dueDEl) && dueDEl.TryGetInt32(out var ddi))
+                            rowDueD = ddi;
+                        if ((rowDueM == null || rowDueD == null)
+                            && el.TryGetProperty("due", out var dueEl) && dueEl.ValueKind == System.Text.Json.JsonValueKind.String
+                            && DeclarationPeriodTemplate.TryParseMonthDay(dueEl.GetString(), out var pdm, out var pdd))
+                        {
+                            rowDueM = pdm; rowDueD = pdd;
+                        }
+
                         if (el.TryGetProperty("startMonth", out var smEl) && smEl.TryGetInt32(out sm)
                             && el.TryGetProperty("startDay", out var sdEl) && sdEl.TryGetInt32(out sd)
                             && el.TryGetProperty("endMonth", out var emEl) && emEl.TryGetInt32(out em)
                             && el.TryGetProperty("endDay", out var edEl) && edEl.TryGetInt32(out ed))
                         {
-                            patternPeriods.Add((sm, sd, em, ed, label));
+                            patternPeriods.Add((sm, sd, em, ed, label, rowDueM, rowDueD));
                             continue;
                         }
 
@@ -3918,10 +3954,10 @@ public class WorkflowService : IWorkflowService
                             continue;
                         if (!DeclarationPeriodTemplate.TryParseMonthDay(eEl.GetString(), out em, out ed))
                             continue;
-                        patternPeriods.Add((sm, sd, em, ed, label));
+                        patternPeriods.Add((sm, sd, em, ed, label, rowDueM, rowDueD));
                     }
                 }
-                // legacy offsets (ignored when periods table present)
+                // legacy offsets (fallback when no per-row due)
                 if (root.TryGetProperty("windowStartDay", out var ws) && ws.TryGetInt32(out var wsd)) startDay = wsd;
                 if (root.TryGetProperty("windowEndDay", out var we) && we.TryGetInt32(out var wed)) endDay = wed;
                 if (root.TryGetProperty("windowMonthOffset", out var wo) && wo.TryGetInt32(out var mo)) monthOffset = mo;
@@ -3949,7 +3985,6 @@ public class WorkflowService : IWorkflowService
 
         frequency ??= "Mensuelle";
 
-        // Period template table is year-agnostic (JJ/MM/YYYY) — YYYY filled at runtime like cron
         if (patternPeriods.Count > 0)
         {
             var slice = DeclarationPeriodTemplate.ResolvePatternTableAsOf(DateTime.UtcNow, patternPeriods, previousClosed: true);
@@ -3958,6 +3993,12 @@ public class WorkflowService : IWorkflowService
                 periodStart = slice.Start;
                 periodEnd = slice.End;
                 periode = slice.Label;
+                dateLimite = slice.Due;
+                if (slice.Due.HasValue)
+                {
+                    dueMonth = slice.Due.Value.Month;
+                    dueDay = slice.Due.Value.Day;
+                }
             }
         }
         else
@@ -3968,20 +4009,30 @@ public class WorkflowService : IWorkflowService
                 periodStart = resolved.Start;
                 periodEnd = resolved.End;
                 periode = resolved.Code;
+                dateLimite = DeclarationPeriodTemplate.EndOfMonthAfter(resolved.End);
+                dueMonth = dateLimite.Value.Month;
+                dueDay = dateLimite.Value.Day;
             }
         }
 
-        var life = MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(frequency);
-        startDay ??= life.StartDay;
-        endDay ??= life.EndDay;
-        monthOffset ??= life.Months;
-        deadlineYearOffset ??= life.Years;
+        // Legacy window defaults only when no per-row due
+        if (dueMonth == null)
+        {
+            var life = MoroccoDeclarationCalendar.GetFrequencyLifecycleDefaults(frequency);
+            startDay ??= life.StartDay;
+            endDay ??= life.EndDay;
+            monthOffset ??= life.Months;
+            deadlineYearOffset ??= life.Years;
+        }
 
         return new InitPeriodConfig(
             frequency,
             periode,
             periodStart,
             periodEnd,
+            dueMonth,
+            dueDay,
+            dateLimite,
             startDay,
             endDay,
             monthOffset,

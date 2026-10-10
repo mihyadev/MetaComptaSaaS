@@ -1324,8 +1324,14 @@ public class CreateDeclarationDto
     public int? DeadlineYearOffset { get; set; }
     /// <summary>Explicit period start from Init period template table.</summary>
     public DateTime? PeriodStart { get; set; }
-    /// <summary>Explicit period end / échéance from Init period template table.</summary>
+    /// <summary>Explicit taxable period end from Init period template table (not the filing deadline).</summary>
     public DateTime? PeriodEnd { get; set; }
+    /// <summary>Per-period échéance month (1–12), year-agnostic — preferred over WindowEndDay.</summary>
+    public int? DueMonth { get; set; }
+    /// <summary>Per-period échéance day (1–31).</summary>
+    public int? DueDay { get; set; }
+    /// <summary>Explicit DateLimite override (materialized due from Init row).</summary>
+    public DateTime? DateLimite { get; set; }
 }
 
 public class DeclarationShellSaveDto
