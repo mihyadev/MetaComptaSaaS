@@ -156,22 +156,27 @@
     }
 
     function tplTitle(freq) {
-        if (freq === 'quarterly') return 'TVA trimestrielle \u2014 4 periodes (\u00e9ch\u00e9ance = fin du mois suivant)';
+        if (freq === 'quarterly') return 'TVA trimestrielle Maroc \u2014 d\u00e9clare le trimestre N-1 (CGI art. 111)';
         if (freq === 'annually') return 'Annuel \u2014 1 periode';
         if (freq === 'periodic') return 'Periodique \u2014 periodes manuelles';
-        return 'TVA mensuelle \u2014 12 periodes (\u00e9ch\u00e9ance = fin du mois suivant)';
+        return 'TVA mensuelle Maroc \u2014 d\u00e9clare le mois N-1 (CGI art. 108/111)';
     }
 
-    /** Seed rows: taxable start/end + per-row due (EOM of month after period end). */
+    function monthNameLower(m) {
+        var n = monthNames[m] || '';
+        return n ? (n.charAt(0).toLowerCase() + n.slice(1)) : '';
+    }
+
+    /** Morocco N+1: activity period closes, declared next month, due = EOM declaration month. */
     function generatePeriodRows(freq) {
         var rows = [];
         if (freq === 'quarterly') {
-            // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
+            // Declaration order: T4\to Jan, T1\to Apr, T2\to Jul, T3\to Oct
             var qDefs = [
-                { label: '1er trimestre (janvier\u2013mars)', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
-                { label: '2e trimestre (avril\u2013juin)', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
-                { label: '3e trimestre (juillet\u2013septembre)', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 },
-                { label: '4e trimestre (octobre\u2013d\u00e9cembre)', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 }
+                { label: 'Octobre\u2013d\u00e9cembre (d\u00e9cl. janvier)', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 },
+                { label: 'Janvier\u2013mars (d\u00e9cl. avril)', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
+                { label: 'Avril\u2013juin (d\u00e9cl. juillet)', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
+                { label: 'Juillet\u2013septembre (d\u00e9cl. octobre)', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 }
             ];
             qDefs.forEach(function (q) {
                 rows.push(normalizePeriod({
@@ -191,17 +196,18 @@
             rows.push(normalizePeriod({ label: 'Periode 1', start: md(1, 1), end: md(6, 30), due: md(7, 31) }));
             return rows;
         }
-        // Monthly: Jan→28/02 … Dec→31/01/N+1
-        for (var m = 1; m <= 12; m++) {
-            var due = eomNextMonth(m);
+        // Monthly declaration cycle: Jan declares Dec, Feb declares Jan, \u2026 Dec declares Nov
+        for (var declMonth = 1; declMonth <= 12; declMonth++) {
+            var activityMonth = declMonth === 1 ? 12 : (declMonth - 1);
+            var dueDay = daysInMonthPattern(declMonth);
             rows.push(normalizePeriod({
-                label: monthNames[m],
-                start: md(m, 1),
-                end: md(m, daysInMonthPattern(m)),
-                due: md(due.m, due.d),
-                startMonth: m, startDay: 1,
-                endMonth: m, endDay: daysInMonthPattern(m),
-                dueMonth: due.m, dueDay: due.d
+                label: monthNames[activityMonth] + ' (d\u00e9cl. ' + monthNameLower(declMonth) + ')',
+                start: md(activityMonth, 1),
+                end: md(activityMonth, daysInMonthPattern(activityMonth)),
+                due: md(declMonth, dueDay),
+                startMonth: activityMonth, startDay: 1,
+                endMonth: activityMonth, endDay: daysInMonthPattern(activityMonth),
+                dueMonth: declMonth, dueDay: dueDay
             }));
         }
         return rows;
@@ -258,7 +264,7 @@
         var html = '<div class="period-template-box period-template-pro">'
             + '<div class="pt-head">'
             + '<div><span>Modele de periodes</span><strong>' + tplTitle(freq) + '</strong></div>'
-            + '<div class="pt-head-hint">D\u00e9but / Cl\u00f4ture / \u00c9ch\u00e9ance en ligne \u2014 une \u00e9ch\u00e9ance <strong>par</strong> p\u00e9riode</div>'
+            + '<div class="pt-head-hint">Activit\u00e9 N \u2192 d\u00e9claration mois N+1 \u2014 D\u00e9but / Cl\u00f4ture / \u00c9ch\u00e9ance</div>'
             + '</div>'
             + '<div class="pt-scroll pt-cards">';
         rows.forEach(function (r, i) {
@@ -270,19 +276,19 @@
             html += '<div class="pt-card" data-idx="' + i + '">'
                 + '<div class="pt-card-top">'
                 + '<div class="pt-card-title"><span class="pt-badge">' + (i + 1) + '</span>'
-                + '<input type="text" class="pt-label form-control form-control-sm" value="' + safeLabel + '" placeholder="Libelle periode" /></div>'
+                + '<input type="text" class="pt-label form-control form-control-sm" value="' + safeLabel + '" placeholder="Periode d\'activite (d\u00e9cl. mois suivant)" /></div>'
                 + '<button type="button" class="pt-del" title="Supprimer" onclick="WfCron.removePeriodRow(this)"><i class="bi bi-trash"></i></button>'
                 + '</div>'
                 + '<div class="pt-card-grid">'
-                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but', 'N')
-                + mdEditorHtml('end', e.m, e.d, 'Cl\u00f4ture de la p\u00e9riode', 'N')
-                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance d\u00e9claration en ligne', dueNextYear ? 'N+1' : 'N')
+                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but activit\u00e9', 'N')
+                + mdEditorHtml('end', e.m, e.d, 'Cl\u00f4ture activit\u00e9', 'N')
+                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance d\u00e9claration (mois N+1)', dueNextYear ? 'N+1' : 'N')
                 + '</div></div>';
         });
         html += '</div>'
             + '<div class="pt-foot">'
             + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter une periode</button>'
-            + '<span class="small text-muted">Chaque ligne a sa propre \u00e9ch\u00e9ance (fin du mois suivant ; d\u00e9c./T4 \u2192 janvier N+1).</span>'
+            + '<span class="small text-muted">Ex. janvier d\u00e9clare d\u00e9cembre (01/12\u201331/12) \u2014 \u00e9ch\u00e9ance 31/01.</span>'
             + '</div></div>';
         box.innerHTML = html;
         box.querySelectorAll('.pt-label, .pt-start-d, .pt-start-m, .pt-end-d, .pt-end-m, .pt-due-d, .pt-due-m').forEach(function (inp) {
@@ -374,7 +380,7 @@
         return pad2(Math.min(Math.max(day, 1), dim)) + '/' + pad2(month) + '/' + year;
     }
 
-    /** Full-year calendar: D\u00e9but | Cl\u00f4ture | \u00c9ch\u00e9ance (ex. D\u00e9c 31/12/N \u2192 31/01/N+1). */
+    /** Morocco calendar preview: activity year may be Y-1 when due is January (N+1 rule). */
     function updateEcheanceWorkPreview(card, periods, cfg) {
         var el = card && card.querySelector('.echeance-work-preview');
         if (!el) return;
@@ -390,26 +396,68 @@
             var du = parseMd(p.due);
             if (!du && e) du = eomNextMonth(e.m);
             if (!e || !du) return '';
-            var dueY = (du.m < e.m) ? (year + 1) : year;
-            var startStr = s ? fmtDmY(s.d, s.m, year) : '\u2014';
-            var closeStr = fmtDmY(e.d, e.m, year);
-            var dueStr = fmtDmY(du.d, du.m, dueY);
-            var label = (p.label || ('Periode ' + (idx + 1)));
+            // Dec activity + Jan due \u2192 activity in Y-1, deadline in Y (for this declaration cycle row)
+            var crossesYear = du.m < e.m;
+            var activityYear = crossesYear ? (year - 1) : year;
+            var dueYear = year;
+            // If due is January and we are showing the Dec\to Jan N+1 row of *same* activity year:
+            // when end is Dec and due Jan, for filings in `year` activity is year-1.
+            // When previewing Dec activity of `year` (due Jan year+1), dueYear = year+1.
+            // Seed order starts with Dec\to Jan: first row uses activityYear=year-1, dueYear=year.
+            // Later Dec is not in the 12-row seed (Nov\to Dec is last). Add note in title.
+            if (crossesYear && idx === 0) {
+                activityYear = year - 1;
+                dueYear = year;
+            } else if (crossesYear) {
+                activityYear = year;
+                dueYear = year + 1;
+            } else {
+                activityYear = year;
+                dueYear = year;
+            }
+            var startStr = s ? fmtDmY(s.d, s.m, activityYear) : '\u2014';
+            var closeStr = fmtDmY(e.d, e.m, activityYear);
+            var dueStr = fmtDmY(du.d, du.m, dueYear);
+            var declLabel = monthNames[du.m] + ' ' + dueYear;
+            var actLabel = (p.label || ('Periode ' + (idx + 1))).replace(/\s*\(d[\u00e9e]cl\.[^)]*\)/i, '').trim();
             return '<tr>'
                 + '<td class="pt-cal-n">' + (idx + 1) + '</td>'
-                + '<td class="pt-cal-label">' + label.replace(/</g, '&lt;') + ' ' + year + '</td>'
+                + '<td class="pt-cal-label">' + actLabel.replace(/</g, '&lt;') + ' ' + activityYear + '</td>'
                 + '<td class="pt-cal-start">' + startStr + '</td>'
                 + '<td class="pt-cal-close">' + closeStr + '</td>'
+                + '<td class="pt-cal-decl">' + declLabel + '</td>'
                 + '<td class="pt-cal-due">' + dueStr + '</td>'
                 + '</tr>';
         }).join('');
+        // Append Dec Y \to Jan Y+1 (13th monthly / 5th quarterly row) for full Morocco year view
+        var freq = (cfg && (cfg.periodTemplate || cfg.periodFrequency)) || '';
+        var extra = '';
+        if (/mens/i.test(freq) || list.length === 12) {
+            extra = '<tr class="pt-cal-extra">'
+                + '<td class="pt-cal-n">13</td>'
+                + '<td class="pt-cal-label">D\u00e9cembre ' + year + '</td>'
+                + '<td class="pt-cal-start">' + fmtDmY(1, 12, year) + '</td>'
+                + '<td class="pt-cal-close">' + fmtDmY(31, 12, year) + '</td>'
+                + '<td class="pt-cal-decl">' + monthNames[1] + ' ' + (year + 1) + '</td>'
+                + '<td class="pt-cal-due">' + fmtDmY(31, 1, year + 1) + '</td>'
+                + '</tr>';
+        } else if (/trim/i.test(freq) || list.length === 4) {
+            extra = '<tr class="pt-cal-extra">'
+                + '<td class="pt-cal-n">5</td>'
+                + '<td class="pt-cal-label">Octobre\u2013d\u00e9cembre ' + year + '</td>'
+                + '<td class="pt-cal-start">' + fmtDmY(1, 10, year) + '</td>'
+                + '<td class="pt-cal-close">' + fmtDmY(31, 12, year) + '</td>'
+                + '<td class="pt-cal-decl">' + monthNames[1] + ' ' + (year + 1) + '</td>'
+                + '<td class="pt-cal-due">' + fmtDmY(31, 1, year + 1) + '</td>'
+                + '</tr>';
+        }
         el.innerHTML = '<div class="pt-cal-wrap">'
-            + '<div class="pt-cal-title">Calendrier ' + year
-            + ' \u2014 une \u00e9ch\u00e9ance par p\u00e9riode (fin du mois suivant ; d\u00e9c./T4 \u2192 31/01/'
-            + (year + 1) + ')</div>'
+            + '<div class="pt-cal-title">Calendrier Maroc ' + year
+            + ' \u2014 p\u00e9riode d\'activit\u00e9 N, d\u00e9claration mois N+1 (CGI art. 108/111)</div>'
             + '<table class="pt-cal-table"><thead><tr>'
-            + '<th>#</th><th>Mois / p\u00e9riode TVA</th><th>D\u00e9but</th><th>Cl\u00f4ture</th><th>\u00c9ch\u00e9ance en ligne</th>'
-            + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+            + '<th>#</th><th>P\u00e9riode d\'activit\u00e9</th><th>D\u00e9but</th><th>Cl\u00f4ture</th>'
+            + '<th>Mois de d\u00e9claration</th><th>\u00c9ch\u00e9ance en ligne</th>'
+            + '</tr></thead><tbody>' + rowsHtml + extra + '</tbody></table></div>';
     }
 
     function loadPeriodTemplate(card, freq) {
@@ -462,9 +510,11 @@
         var rows;
         if (Array.isArray(cfg.periods) && cfg.periods.length) {
             rows = cfg.periods.map(normalizePeriod);
-            // Legacy templates without per-row due: rebuild exact monthly/quarterly calendar
             var missingDue = rows.some(function (p) { return !p.dueMonth || !p.dueDay; });
-            if (missingDue && (freq === 'monthly' || freq === 'quarterly')) {
+            // Legacy Jan-first monthly / T1-first quarterly \u2192 rebuild Morocco N+1 order
+            var wrongOrder = (freq === 'monthly' && rows[0] && rows[0].startMonth !== 12)
+                || (freq === 'quarterly' && rows[0] && rows[0].startMonth !== 10);
+            if ((missingDue || wrongOrder) && (freq === 'monthly' || freq === 'quarterly')) {
                 rows = generatePeriodRows(freq);
             }
         } else {

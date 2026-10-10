@@ -646,18 +646,20 @@ public class WorkflowService : IWorkflowService
                                 && !string.IsNullOrWhiteSpace(dueEl.GetString()));
                         if (!hasDue) return true;
                     }
-                    // Quarterly labels: expect "… trimestre …" (not legacy "T1 (Jan-Mar)")
-                    if (wantTrim)
+                    // Morocco N+1: first monthly row must be December activity (decl. January)
+                    var firstPeriod = periods.EnumerateArray().FirstOrDefault();
+                    if (firstPeriod.ValueKind == System.Text.Json.JsonValueKind.Object)
                     {
-                        var first = periods.EnumerateArray().FirstOrDefault();
-                        if (first.ValueKind == System.Text.Json.JsonValueKind.Object
-                            && first.TryGetProperty("label", out var lb)
-                            && lb.ValueKind == System.Text.Json.JsonValueKind.String)
-                        {
-                            var label = lb.GetString() ?? "";
-                            if (label.IndexOf("trimestre", StringComparison.OrdinalIgnoreCase) < 0)
-                                return true;
-                        }
+                        if (!wantTrim
+                            && firstPeriod.TryGetProperty("startMonth", out var fsm)
+                            && fsm.TryGetInt32(out var firstStart)
+                            && firstStart != 12)
+                            return true;
+                        if (wantTrim
+                            && firstPeriod.TryGetProperty("startMonth", out var qsm)
+                            && qsm.TryGetInt32(out var qStart)
+                            && qStart != 10)
+                            return true;
                     }
                 }
                 else return true;
@@ -738,53 +740,57 @@ public class WorkflowService : IWorkflowService
     }
 
     /// <summary>
-    /// Morocco TVA Init periods: each row = Début / Fin / Échéance (EOM of month after period end).
+    /// Morocco TVA Init (CGI art. 108/111): declare previous period in month N+1.
+    /// Monthly order = declaration cycle: Dec\to Jan, Jan\to Feb, \u2026 Nov\to Dec.
+    /// Quarterly: T4\to Jan, T1\to Apr, T2\to Jul, T3\to Oct.
     /// </summary>
     private static string BuildTvaInitActionConfigJson(bool mensuelle)
     {
         // Non-leap pattern (Feb end/due use 28); leap days clamped at materialization.
         var dim = new[] { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-        static (int M, int D) EomNext(int endMonth, int[] dimArr)
+        var monthFr = new[]
         {
-            var nm = endMonth >= 12 ? 1 : endMonth + 1;
-            return (nm, dimArr[nm]);
-        }
+            "", "janvier", "f\u00e9vrier", "mars", "avril", "mai", "juin",
+            "juillet", "ao\u00fbt", "septembre", "octobre", "novembre", "d\u00e9cembre"
+        };
+        var monthFrCap = new[]
+        {
+            "", "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
+            "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
+        };
 
         var periods = new List<object>();
         if (mensuelle)
         {
-            var labels = new[]
+            // Declaration month 1..12: activity = previous month (Jan declares Dec)
+            for (var declMonth = 1; declMonth <= 12; declMonth++)
             {
-                "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
-                "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
-            };
-            for (var m = 1; m <= 12; m++)
-            {
-                var (dm, dd) = EomNext(m, dim);
+                var activityMonth = declMonth == 1 ? 12 : declMonth - 1;
+                var dueDay = dim[declMonth];
                 periods.Add(new
                 {
-                    label = labels[m - 1],
-                    start = $"{m:D2}-01",
-                    end = $"{m:D2}-{dim[m]:D2}",
-                    due = $"{dm:D2}-{dd:D2}",
-                    startMonth = m,
+                    label = $"{monthFrCap[activityMonth]} (d\u00e9cl. {monthFr[declMonth]})",
+                    start = $"{activityMonth:D2}-01",
+                    end = $"{activityMonth:D2}-{dim[activityMonth]:D2}",
+                    due = $"{declMonth:D2}-{dueDay:D2}",
+                    startMonth = activityMonth,
                     startDay = 1,
-                    endMonth = m,
-                    endDay = dim[m],
-                    dueMonth = dm,
-                    dueDay = dd
+                    endMonth = activityMonth,
+                    endDay = dim[activityMonth],
+                    dueMonth = declMonth,
+                    dueDay
                 });
             }
         }
         else
         {
-            // T1→30/04, T2→31/07, T3→31/10, T4→31/01/N+1
+            // Declaration order: T4\to janvier, T1\to avril, T2\to juillet, T3\to octobre
             var q = new (string Label, int Sm, int Em, int Ed, int Dm, int Dd)[]
             {
-                ("1er trimestre (janvier\u2013mars)", 1, 3, 31, 4, 30),
-                ("2e trimestre (avril\u2013juin)", 4, 6, 30, 7, 31),
-                ("3e trimestre (juillet\u2013septembre)", 7, 9, 30, 10, 31),
-                ("4e trimestre (octobre\u2013d\u00e9cembre)", 10, 12, 31, 1, 31)
+                ("Octobre\u2013d\u00e9cembre (d\u00e9cl. janvier)", 10, 12, 31, 1, 31),
+                ("Janvier\u2013mars (d\u00e9cl. avril)", 1, 3, 31, 4, 30),
+                ("Avril\u2013juin (d\u00e9cl. juillet)", 4, 6, 30, 7, 31),
+                ("Juillet\u2013septembre (d\u00e9cl. octobre)", 7, 9, 30, 10, 31)
             };
             foreach (var (label, sm, em, ed, dm, dd) in q)
             {
@@ -821,15 +827,15 @@ public class WorkflowService : IWorkflowService
         var initJson = BuildTvaInitActionConfigJson(mensuelle);
         var cron = mensuelle ? "0 8 1 * *" : "0 8 1 1,4,7,10 *";
         var cronDesc = mensuelle
-            ? "Le 1er de chaque mois \u00e0 08:00 \u2014 ouvre la TVA du mois pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance = fin du mois suivant)"
-            : "Le 1er jan/avr/juil/oct \u00e0 08:00 \u2014 ouvre la TVA du trimestre pr\u00e9c\u00e9dent (\u00e9ch\u00e9ance = fin du mois suivant)";
+            ? "Le 1er de chaque mois \u00e0 08:00 \u2014 ouvre la TVA du mois N-1 (d\u00e9cl. mois N, \u00e9ch\u00e9ance fin de mois N)"
+            : "Le 1er jan/avr/juil/oct \u00e0 08:00 \u2014 ouvre le trimestre N-1 (ex. janvier = oct\u2013d\u00e9c.)";
 
         return new WorkflowTemplateCreateDto
         {
             Name = mensuelle ? "TVA Mensuelle" : "TVA Trimestrielle",
             Description = mensuelle
-                ? "Workflow TVA mensuelle (Maroc) : 12 p\u00e9riodes avec \u00e9ch\u00e9ance = fin du mois suivant (ex. Jan\u219228/02, D\u00e9c\u219231/01/N+1)."
-                : "Workflow TVA trimestrielle (Maroc) : T1\u2013T4 avec \u00e9ch\u00e9ance = fin du mois suivant (T1\u219230/04, T4\u219231/01/N+1).",
+                ? "Workflow TVA mensuelle (Maroc CGI 108/111) : d\u00e9clare le mois N-1 (ex. janvier = d\u00e9cembre, \u00e9ch\u00e9ance 31/01)."
+                : "Workflow TVA trimestrielle (Maroc CGI 111) : d\u00e9clare le trimestre N-1 (ex. janvier = oct\u2013d\u00e9c., \u00e9ch\u00e9ance 31/01).",
             DeclarationType = "TVA",
             IsDefault = mensuelle, // Mensuelle = default; Trimestrielle also active for clients TypeTVA=Trimestrielle
             Steps = new()
