@@ -4,84 +4,208 @@
     var statut = ViewBag.Statut as string ?? "";
     var canCommercialCreate = ViewBag.CanCommercialCreate as bool? ?? false;
     var canCommercialEdit = ViewBag.CanCommercialEdit as bool? ?? false;
+    var clientsSans = ViewBag.ClientsSansContratActif as List<ClientContratPickerItemDto> ?? new();
+    var clientsAvec = ViewBag.ClientsAvecContratActif as List<ClientContratPickerItemDto> ?? new();
     var items = Model.Items?.ToList() ?? new List<ContratCommercialDto>();
-    var groups = new (string Key, string Label, string Border, string Soft, string Text)[] {
-        ("Brouillon", "Brouillon", "border-secondary", "bg-secondary-subtle", "text-secondary-emphasis"),
-        ("EnCours", "En cours", "border-info", "bg-info-subtle", "text-info-emphasis"),
-        ("Signe", "Signé", "border-primary", "bg-primary-subtle", "text-primary-emphasis"),
-        ("Valide", "Validé", "border-success", "bg-success-subtle", "text-success-emphasis"),
-        ("Actif", "Actif", "border-success", "bg-success-subtle", "text-success-emphasis"),
-        ("Suspendu", "Suspendu", "border-warning", "bg-warning-subtle", "text-warning-emphasis"),
-        ("Termine", "Terminé", "border-dark", "bg-dark-subtle", "text-dark-emphasis"),
-        ("Resilie", "Résilié", "border-danger", "bg-danger-subtle", "text-danger-emphasis"),
-        ("Expire", "Expiré", "border-dark", "bg-dark-subtle", "text-dark-emphasis"),
+    var totalClients = clientsSans.Count + clientsAvec.Count;
+    var coveragePct = totalClients > 0 ? (int)Math.Round(100.0 * clientsAvec.Count / totalClients) : 0;
+    var actifsBoard = items.Count(c => string.Equals(c.Statut, "Actif", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(c.Statut, "Valide", StringComparison.OrdinalIgnoreCase));
+    var createUrlBase = Url.Action("ContratCreate", "Commercial") ?? "/Commercial/ContratCreate";
+    var groups = new (string Key, string Label, string Soft)[] {
+        ("Brouillon", "Brouillon", "text-bg-secondary"),
+        ("EnCours", "En cours", "text-bg-info"),
+        ("Signe", "Signé", "text-bg-primary"),
+        ("Valide", "Validé", "text-bg-success"),
+        ("Actif", "Actif", "text-bg-success"),
+        ("Suspendu", "Suspendu", "text-bg-warning"),
+        ("Termine", "Terminé", "text-bg-dark"),
+        ("Resilie", "Résilié", "text-bg-danger"),
+        ("Expire", "Expiré", "text-bg-dark"),
     };
     string SoftBadge(string s) => s switch {
-        RefCodes.StatutContrat.Brouillon => "bg-secondary-subtle text-secondary-emphasis",
-        RefCodes.StatutContrat.EnCours => "bg-info-subtle text-info-emphasis",
-        RefCodes.StatutContrat.Signe => "bg-primary-subtle text-primary-emphasis",
-        RefCodes.StatutContrat.Valide => "bg-success-subtle text-success-emphasis",
-        RefCodes.StatutContrat.Actif => "bg-success-subtle text-success-emphasis",
-        RefCodes.StatutContrat.Suspendu => "bg-warning-subtle text-warning-emphasis",
-        "Termine" => "bg-dark-subtle text-dark-emphasis",
-        RefCodes.StatutContrat.Resilie => "bg-danger-subtle text-danger-emphasis",
-        _ => "bg-secondary-subtle text-secondary-emphasis"
+        RefCodes.StatutContrat.Brouillon => "text-bg-secondary",
+        RefCodes.StatutContrat.EnCours => "text-bg-info",
+        RefCodes.StatutContrat.Signe => "text-bg-primary",
+        RefCodes.StatutContrat.Valide => "text-bg-success",
+        RefCodes.StatutContrat.Actif => "text-bg-success",
+        RefCodes.StatutContrat.Suspendu => "text-bg-warning",
+        "Termine" => "text-bg-dark",
+        RefCodes.StatutContrat.Resilie => "text-bg-danger",
+        _ => "text-bg-secondary"
     };
 }
 
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <div class="d-flex align-items-center gap-3">
-        <span class="bg-primary text-white rounded-3 p-3 lh-1">
-            <i class="bi bi-kanban fs-4"></i>
-        </span>
-        <div>
-            <h1 class="h3 fw-bold mb-0">Contrats</h1>
-            <div class="text-body-secondary small">Board CRM · @Model.TotalCount item(s)</div>
+<style>
+    .ctr-dt .dataTables_wrapper { font-size: .8125rem; }
+    .ctr-dt .dataTables_wrapper .dataTables_length,
+    .ctr-dt .dataTables_wrapper .dataTables_filter,
+    .ctr-dt .dataTables_wrapper .dataTables_info,
+    .ctr-dt .dataTables_wrapper .dataTables_paginate { padding: 4px !important; margin: 0 !important; }
+    .ctr-dt .dataTables_wrapper .dataTables_filter input { height: 28px; padding: 2px 8px; font-size: .8rem; }
+    .ctr-dt .dataTables_wrapper .dataTables_length select { height: 28px; padding: 0 4px; font-size: .8rem; }
+    .ctr-dt table.dataTable { margin: 0 !important; }
+    .ctr-dt table.dataTable thead th,
+    .ctr-dt table.dataTable tbody td { padding: 4px 8px !important; vertical-align: middle !important; }
+    .ctr-dt table.dataTable tbody tr { cursor: pointer; }
+    .ctr-dt table.dataTable tbody tr.selected { background-color: var(--bs-primary-bg-subtle) !important; }
+    .ctr-board table thead th,
+    .ctr-board table tbody td { padding: 4px 8px !important; vertical-align: middle !important; font-size: .8125rem; }
+</style>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="h4 fw-semibold mb-1">Contrats</h1>
+        <div class="d-flex flex-wrap gap-2 small text-body-secondary">
+            <span>Sans contrat <strong class="text-success">@clientsSans.Count</strong></span>
+            <span>·</span>
+            <span>Avec actif <strong>@clientsAvec.Count</strong></span>
+            <span>·</span>
+            <span>Couverture <strong>@coveragePct%</strong></span>
+            <span>·</span>
+            <span>Board <strong>@Model.TotalCount</strong> (@actifsBoard actifs)</span>
         </div>
     </div>
     <div class="d-flex flex-wrap gap-2">
-        <a asp-action="Index" class="btn btn-light border rounded-pill px-3">
-            <i class="bi bi-speedometer2 me-1"></i>Dashboard
-        </a>
+        <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Dashboard</a>
         @if (canCommercialCreate)
         {
-            <a asp-action="ContratCreate" class="btn btn-primary rounded-pill px-3">
-                <i class="bi bi-plus-lg me-1"></i>Nouveau contrat
-            </a>
+            <a asp-action="ContratCreate" class="btn btn-sm btn-primary" id="btnNouveauLibre">Nouveau contrat</a>
         }
     </div>
 </div>
 
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-body py-3">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <span class="text-body-secondary small fw-semibold text-uppercase me-1">Filtrer</span>
-            <a asp-action="Contrats" class="btn btn-sm rounded-pill @(string.IsNullOrEmpty(statut) ? "btn-dark" : "btn-outline-secondary")">Tous</a>
-            @foreach (var g in groups)
-            {
-                <a asp-action="Contrats" asp-route-statut="@g.Key"
-                   class="btn btn-sm rounded-pill @(statut == g.Key ? "btn-dark" : "btn-outline-secondary")">@g.Label</a>
-            }
+@* Bootstrap 5 accordion — tables only inside *@
+<div class="accordion mb-3" id="ctrClientAccordion">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseSans" aria-expanded="true" aria-controls="collapseSans">
+                Clients sans contrat actif
+                <span class="badge text-bg-success ms-2">@clientsSans.Count</span>
+            </button>
+        </h2>
+        <div id="collapseSans" class="accordion-collapse collapse show" data-bs-parent="#ctrClientAccordion">
+            <div class="accordion-body p-2 ctr-dt">
+                @if (!clientsSans.Any())
+                {
+                    <p class="small text-body-secondary mb-0 px-1">Tous les clients ont déjà un contrat Valide / Actif.</p>
+                }
+                else
+                {
+                    <table id="tblClientsSans" class="table table-sm table-hover table-striped align-middle mb-0 w-100">
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>ICE</th>
+                                <th>Ville</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in clientsSans)
+                            {
+                                <tr data-client-id="@c.Id" data-client-name="@c.RaisonSociale">
+                                    <td>@c.RaisonSociale</td>
+                                    <td>@(c.ICE ?? "—")</td>
+                                    <td>@(c.VilleSiegeSocial ?? "—")</td>
+                                    <td class="text-end">
+                                        @if (canCommercialCreate)
+                                        {
+                                            <a asp-action="ContratCreate" asp-route-clientId="@c.Id"
+                                               class="btn btn-sm btn-success py-0 px-2"
+                                               onclick="event.stopPropagation();">Créer</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseAvec" aria-expanded="false" aria-controls="collapseAvec">
+                Clients avec contrat actif
+                <span class="badge text-bg-secondary ms-2">@clientsAvec.Count</span>
+            </button>
+        </h2>
+        <div id="collapseAvec" class="accordion-collapse collapse" data-bs-parent="#ctrClientAccordion">
+            <div class="accordion-body p-2 ctr-dt">
+                @if (!clientsAvec.Any())
+                {
+                    <p class="small text-body-secondary mb-0 px-1">Aucun client avec contrat actif.</p>
+                }
+                else
+                {
+                    <table id="tblClientsAvec" class="table table-sm table-hover table-striped align-middle mb-0 w-100">
+                        <thead>
+                            <tr>
+                                <th>Client</th>
+                                <th>Contrat</th>
+                                <th>Statut</th>
+                                <th>Ville</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in clientsAvec)
+                            {
+                                <tr data-client-id="@c.Id" data-client-name="@c.RaisonSociale">
+                                    <td>@c.RaisonSociale</td>
+                                    <td>@(c.ActiveContractReference ?? "—")</td>
+                                    <td>@(c.ActiveContractStatut ?? "Actif")</td>
+                                    <td>@(c.VilleSiegeSocial ?? "—")</td>
+                                    <td class="text-end">
+                                        @if (canCommercialCreate)
+                                        {
+                                            <a asp-action="ContratCreate" asp-route-clientId="@c.Id"
+                                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                               onclick="event.stopPropagation();">Nouveau</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
         </div>
     </div>
 </div>
 
+@if (canCommercialCreate)
+{
+    <div class="alert alert-light border d-none py-2 px-3 mb-3" id="ctrSelectBar" role="status">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="small">
+                Client sélectionné : <strong id="ctrSelectName">—</strong>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="ctrSelectClear">Annuler</button>
+                <a href="#" class="btn btn-sm btn-success" id="ctrSelectCreate">Créer le contrat</a>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <span class="small text-body-secondary fw-semibold">Board</span>
+    <a asp-action="Contrats" class="btn btn-sm @(string.IsNullOrEmpty(statut) ? "btn-primary" : "btn-outline-secondary")">Tous</a>
+    @foreach (var g in groups)
+    {
+        <a asp-action="Contrats" asp-route-statut="@g.Key"
+           class="btn btn-sm @(statut == g.Key ? "btn-primary" : "btn-outline-secondary")">@g.Label</a>
+    }
+</div>
+
 @if (!items.Any())
 {
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body text-center py-5">
-            <span class="bg-primary-subtle text-primary rounded-circle d-inline-flex p-3 mb-3 fs-3">
-                <i class="bi bi-inbox"></i>
-            </span>
-            <h2 class="h5 fw-semibold">Aucun contrat</h2>
-            <p class="text-body-secondary mb-3">Créez votre premier item sur ce board.</p>
-            @if (canCommercialCreate)
-            {
-                <a asp-action="ContratCreate" class="btn btn-primary rounded-pill px-4">
-                    <i class="bi bi-plus-lg me-1"></i>Nouveau contrat
-                </a>
-            }
-        </div>
+    <div class="alert alert-secondary mb-0">
+        Aucun contrat sur le board. Ouvrez « Clients sans contrat actif », sélectionnez un client, puis créez.
     </div>
 }
 else
@@ -92,25 +216,23 @@ else
         if (!string.IsNullOrEmpty(statut) && !string.Equals(statut, g.Key, StringComparison.OrdinalIgnoreCase)) { continue; }
         if (!rows.Any()) { continue; }
 
-        <div class="card border-0 shadow-sm rounded-4 mb-3 border-start border-4 @g.Border">
-            <div class="card-header bg-white border-0 py-3 rounded-top-4">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge rounded-pill @g.Soft @g.Text px-3 py-2">@g.Label</span>
-                    <span class="text-body-secondary small">@rows.Count item(s)</span>
-                </div>
+        <div class="card mb-3 ctr-board">
+            <div class="card-header py-2 px-3 d-flex align-items-center gap-2">
+                <span class="badge @g.Soft">@g.Label</span>
+                <span class="small text-body-secondary">@rows.Count</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-sm table-hover align-middle mb-0">
                     <thead class="table-light">
-                        <tr class="small text-body-secondary text-uppercase">
-                            <th class="ps-4 fw-semibold border-0">Item</th>
-                            <th class="fw-semibold border-0">Client</th>
-                            <th class="fw-semibold border-0">Statut</th>
-                            <th class="fw-semibold border-0">Modèle</th>
-                            <th class="fw-semibold border-0 text-end">TTC</th>
-                            <th class="fw-semibold border-0">Dates</th>
-                            <th class="fw-semibold border-0 text-center">Signé</th>
-                            <th class="fw-semibold border-0 text-end pe-4">Actions</th>
+                        <tr>
+                            <th>Réf.</th>
+                            <th>Client</th>
+                            <th>Statut</th>
+                            <th>Modèle</th>
+                            <th class="text-end">TTC</th>
+                            <th>Dates</th>
+                            <th class="text-center">Signé</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -120,45 +242,23 @@ else
                                 ? $"BC {c.BonCommandeReference}"
                                 : c.DevisReference != null ? $"DEV {c.DevisReference}" : "Direct";
                             <tr>
-                                <td class="ps-4">
-                                    <a asp-action="ContratDetails" asp-route-id="@c.Id" class="fw-semibold text-decoration-none text-body">
-                                        @c.Reference
-                                    </a>
+                                <td>
+                                    <a asp-action="ContratDetails" asp-route-id="@c.Id" class="fw-semibold text-decoration-none">@c.Reference</a>
                                     <div class="small text-body-secondary">@source</div>
                                 </td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge rounded-circle bg-primary-subtle text-primary">
-                                            @(string.IsNullOrEmpty(c.ClientName) ? "?" : c.ClientName.Trim()[0].ToString().ToUpper())
-                                        </span>
-                                        <span>@c.ClientName</span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge rounded-pill @SoftBadge(c.Statut) px-3 py-2">@c.Statut</span>
-                                </td>
-                                <td><span class="badge rounded-pill text-bg-light border">@c.ModeleFacturation</span></td>
-                                <td class="text-end fw-semibold text-nowrap">@c.MontantTTC.ToString("N2") <span class="text-body-secondary small">@c.Devise</span></td>
+                                <td>@c.ClientName</td>
+                                <td><span class="badge @SoftBadge(c.Statut)">@c.Statut</span></td>
+                                <td>@c.ModeleFacturation</td>
+                                <td class="text-end text-nowrap">@c.MontantTTC.ToString("N2") <span class="text-body-secondary">@c.Devise</span></td>
                                 <td class="small text-nowrap text-body-secondary">
-                                    @(c.DateDebutContrat?.ToString("dd/MM/yy") ?? "—")
-                                    →
-                                    @(c.DateFinContrat?.ToString("dd/MM/yy") ?? "—")
+                                    @(c.DateDebutContrat?.ToString("dd/MM/yy") ?? "—") → @(c.DateFinContrat?.ToString("dd/MM/yy") ?? "—")
                                 </td>
-                                <td class="text-center">
-                                    @if (c.EstSigne)
-                                    {
-                                        <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Oui</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-body-secondary">—</span>
-                                    }
-                                </td>
-                                <td class="text-end pe-4 text-nowrap">
-                                    <a asp-action="ContratDetails" asp-route-id="@c.Id" class="btn btn-sm btn-light border rounded-pill">Ouvrir</a>
+                                <td class="text-center">@(c.EstSigne ? "Oui" : "—")</td>
+                                <td class="text-end text-nowrap">
+                                    <a asp-action="ContratDetails" asp-route-id="@c.Id" class="btn btn-sm btn-outline-secondary py-0 px-2">Ouvrir</a>
                                     @if (canCommercialEdit && !c.EstSigne && (c.Statut == RefCodes.StatutContrat.Brouillon || c.Statut == RefCodes.StatutContrat.EnCours))
                                     {
-                                        <a asp-action="ContratEdit" asp-route-id="@c.Id" class="btn btn-sm btn-outline-primary rounded-pill">Éditer</a>
+                                        <a asp-action="ContratEdit" asp-route-id="@c.Id" class="btn btn-sm btn-outline-primary py-0 px-2">Éditer</a>
                                     }
                                 </td>
                             </tr>
@@ -172,14 +272,89 @@ else
 
 @if (Model.TotalPages > 1)
 {
-    <nav class="mt-3">
-        <ul class="pagination justify-content-center">
+    <nav class="mt-2">
+        <ul class="pagination pagination-sm justify-content-center mb-0">
             @for (int i = 1; i <= Model.TotalPages; i++)
             {
                 <li class="page-item @(i == Model.Page ? "active" : "")">
-                    <a class="page-link rounded-pill mx-1" asp-action="Contrats" asp-route-page="@i" asp-route-statut="@statut">@i</a>
+                    <a class="page-link" asp-action="Contrats" asp-route-page="@i" asp-route-statut="@statut">@i</a>
                 </li>
             }
         </ul>
     </nav>
+}
+
+@section Scripts {
+<script>
+(function () {
+    const createBase = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(createUrlBase));
+    const canCreate = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(canCommercialCreate));
+    const bar = document.getElementById('ctrSelectBar');
+    const nameEl = document.getElementById('ctrSelectName');
+    const createBtn = document.getElementById('ctrSelectCreate');
+    const clearBtn = document.getElementById('ctrSelectClear');
+    const dtOpts = {
+        language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/fr-FR.json' },
+        pageLength: 10,
+        lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'Tous']],
+        order: [[0, 'asc']],
+        autoWidth: false,
+        columnDefs: [{ orderable: false, targets: -1 }]
+    };
+
+    function createHref(id) {
+        const sep = createBase.indexOf('?') >= 0 ? '&' : '?';
+        return createBase + sep + 'clientId=' + encodeURIComponent(id);
+    }
+
+    function clearSelection() {
+        $('#tblClientsSans tbody tr, #tblClientsAvec tbody tr').removeClass('selected');
+        if (bar) bar.classList.add('d-none');
+    }
+
+    function selectRow($tr) {
+        if (!canCreate || !$tr || !$tr.length) return;
+        const id = $tr.data('client-id');
+        const name = $tr.data('client-name') || '';
+        clearSelection();
+        $tr.addClass('selected');
+        if (nameEl) nameEl.textContent = name;
+        if (createBtn) createBtn.href = createHref(id);
+        if (bar) bar.classList.remove('d-none');
+    }
+
+    function wireSelect($table) {
+        $table.on('click', 'tbody tr', function (e) {
+            if ($(e.target).closest('a,button').length) return;
+            selectRow($(this));
+        });
+        $table.on('dblclick', 'tbody tr', function () {
+            const id = $(this).data('client-id');
+            if (canCreate && id) window.location.href = createHref(id);
+        });
+    }
+
+    function initDt(selector) {
+        const $el = $(selector);
+        if (!$el.length || !$.fn.DataTable) return null;
+        if ($.fn.DataTable.isDataTable($el)) return $el.DataTable();
+        const dt = $el.DataTable(dtOpts);
+        wireSelect($el);
+        return dt;
+    }
+
+    const dtSans = initDt('#tblClientsSans');
+    let dtAvec = null;
+
+    $('#collapseAvec').on('shown.bs.collapse', function () {
+        if (!dtAvec) dtAvec = initDt('#tblClientsAvec');
+        else dtAvec.columns.adjust().draw(false);
+    });
+    $('#collapseSans').on('shown.bs.collapse', function () {
+        if (dtSans) dtSans.columns.adjust().draw(false);
+    });
+
+    if (clearBtn) clearBtn.addEventListener('click', clearSelection);
+})();
+</script>
 }

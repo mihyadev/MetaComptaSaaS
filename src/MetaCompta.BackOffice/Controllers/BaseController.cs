@@ -173,6 +173,12 @@ public abstract class BaseController : Controller
         ViewBag.CanDeclarationSubmitPerm = Can(ClaimDefinitions.DeclarationSubmit);
         ViewBag.CanDeclarationDeletePerm = Can(ClaimDefinitions.DeclarationDelete);
 
+        ViewBag.CanDomiciliationView = Can(ClaimDefinitions.DomiciliationView);
+        ViewBag.CanDomiciliationReceive = Can(ClaimDefinitions.DomiciliationReceive);
+        ViewBag.CanDomiciliationProcess = Can(ClaimDefinitions.DomiciliationProcess);
+        ViewBag.CanDomiciliationRequest = Can(ClaimDefinitions.DomiciliationRequest);
+        ViewBag.CanDomiciliationNotify = Can(ClaimDefinitions.DomiciliationNotify);
+
         // Aliases used by Cabinet/Index
         ViewBag.CanCreateEmployee = ViewBag.CanCabinetEmployeeCreate;
         ViewBag.CanEditEmployee = ViewBag.CanCabinetEmployeeEdit;
@@ -232,13 +238,82 @@ public abstract class BaseController : Controller
 
     protected void SetApiError<T>(ApiResponse<T>? result, string? fallbackMessage = null)
     {
-        var message = result?.Message ?? fallbackMessage ?? "Une erreur inattendue s'est produite.";
+        var message = SanitizeUserMessage(result?.Message) ?? fallbackMessage ?? "Une erreur inattendue s'est produite.";
         TempData["Error"] = message;
 
         if (result?.Errors?.Count > 0)
         {
-            TempData["ErrorDetails"] = string.Join("|||", result.Errors);
+            var clean = result.Errors
+                .Select(SanitizeUserMessage)
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Cast<string>()
+                .Distinct()
+                .ToList();
+            if (clean.Count > 0)
+                TempData["ErrorDetails"] = string.Join("|||", clean);
         }
+    }
+
+    /// <summary>Push API validation errors into ModelState so they appear next to fields / summary.</summary>
+    protected void ApplyApiErrorsToModelState<T>(ApiResponse<T>? result, string? fallbackMessage = null)
+    {
+        var message = SanitizeUserMessage(result?.Message) ?? fallbackMessage ?? "Veuillez corriger les erreurs du formulaire.";
+        var msgs = new List<string> { message };
+        if (result?.Errors != null)
+        {
+            foreach (var err in result.Errors)
+            {
+                var clean = SanitizeUserMessage(err);
+                if (!string.IsNullOrWhiteSpace(clean) && !msgs.Contains(clean, StringComparer.OrdinalIgnoreCase))
+                    msgs.Add(clean!);
+            }
+        }
+
+        foreach (var msg in msgs)
+        {
+            var key = GuessClientFieldKey(msg);
+            ModelState.AddModelError(key, msg);
+        }
+        SetApiError(result, fallbackMessage);
+    }
+
+    private static string GuessClientFieldKey(string message)
+    {
+        var m = message.ToLowerInvariant();
+        if (m.Contains("raison sociale")) return "RaisonSociale";
+        if (m.Contains("ice")) return "ICE";
+        if (m.Contains("identifiant fiscal") || m.Contains(" cet if") || m.Contains("l'if") || m.Contains("l’if") || (m.Contains(" if ") && m.Contains("existe"))) return "IF";
+        if (m.Contains("cnss")) return "NumeroCNSS";
+        if (m.Contains("ce rc") || m.Contains("le rc")) return "RC";
+        if (m.Contains("email du contact") || m.Contains("contact email")) return "ContactEmail";
+        if (m.Contains("email principal")) return "EmailPrincipal";
+        if (m.Contains("manager")) return "ManagerPrincipalId";
+        if (m.Contains("mois de clôture") || m.Contains("mois de cloture") || m.Contains("clôture")) return "MoisClotureExercice";
+        return string.Empty;
+    }
+
+    private static string? SanitizeUserMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        var m = message.Trim();
+        if (m.Contains("HTTP 500", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("HTTP 502", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("HTTP 503", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("DbUpdateException", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("SqlException", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("INNER EXCEPTION", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("at Microsoft.", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("at System.", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("Violation of UNIQUE KEY", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("REFERENCE constraint", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("The INSERT statement conflicted", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("The UPDATE statement conflicted", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Impossible d'enregistrer. Vérifiez les informations saisies (identifiants uniques, manager, champs obligatoires) puis réessayez.";
+        }
+        if (m.StartsWith("Erreur HTTP", StringComparison.OrdinalIgnoreCase))
+            return "Impossible d'enregistrer. Vérifiez les informations saisies puis réessayez.";
+        return m.Length > 280 ? m[..280] + "…" : m;
     }
 
     protected void SetApiResult<T>(ApiResponse<T>? result, string? successFallback = null, string? errorFallback = null)

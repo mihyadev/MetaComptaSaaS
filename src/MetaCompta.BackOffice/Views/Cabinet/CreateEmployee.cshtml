@@ -169,26 +169,14 @@
                                 </div>
                                 <span asp-validation-for="Email" class="text-danger small"></span>
                             </div>
-                            <div class="col-12">
-                                <label asp-for="Password" class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-lock text-muted"></i></span>
-                                    <input asp-for="Password" type="password" class="form-control border-start-0 border-end-0" placeholder="Min. 8 caract&egrave;res" required />
-                                    <button type="button" class="btn btn-outline-secondary border-start-0" onclick="togglePwd(this)"><i class="bi bi-eye"></i></button>
-                                </div>
-                                <span asp-validation-for="Password" class="text-danger small"></span>
-                                <div class="form-text mt-2">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Minimum 8 caract&egrave;res, 1 majuscule, 1 chiffre, 1 caract&egrave;re sp&eacute;cial
-                                </div>
-                            </div>
                         </div>
 
-                        <div class="alert alert-light border mt-4 mb-0 d-flex align-items-start gap-2 rounded-3">
-                            <i class="bi bi-info-circle-fill text-primary fs-5 mt-1"></i>
+                        <div class="alert alert-primary border-0 mt-4 mb-0 d-flex align-items-start gap-2 rounded-3">
+                            <i class="bi bi-envelope-check-fill fs-5 mt-1"></i>
                             <div class="small">
-                                L'employ&eacute; recevra ses identifiants de connexion apr&egrave;s la cr&eacute;ation du compte.
-                                Il pourra modifier son mot de passe lors de sa premi&egrave;re connexion.
+                                <strong>Activation par email</strong><br/>
+                                Un lien d'activation (valide 48&nbsp;h) sera envoyé à cet email.
+                                L'employé choisira lui-même son mot de passe pour activer le compte.
                             </div>
                         </div>
                     </div>

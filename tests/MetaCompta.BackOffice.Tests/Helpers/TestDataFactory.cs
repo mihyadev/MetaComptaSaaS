@@ -211,7 +211,6 @@ public static class TestDataFactory
     public static CabinetEmployeeCreateDto CreateCabinetEmployeeCreateDto() => new()
     {
         Email = "nouveau@cabinet.ma",
-        Password = "MotDePasse@2026!",
         FirstName = "Ahmed",
         LastName = "Benani",
         Telephone = "+212600000000",

@@ -45,6 +45,13 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<Message> Messages => Set<Message>();
 
+    // Domiciliation
+    public DbSet<CourrierDomiciliation> CourriersDomiciliation => Set<CourrierDomiciliation>();
+    public DbSet<CourrierPieceJointe> CourrierPiecesJointes => Set<CourrierPieceJointe>();
+    public DbSet<DemandeActionCourrier> DemandesActionCourrier => Set<DemandeActionCourrier>();
+    public DbSet<DemandeDocumentDomiciliation> DemandesDocumentDomiciliation => Set<DemandeDocumentDomiciliation>();
+    public DbSet<DomiciliationTimelineEvent> DomiciliationTimelineEvents => Set<DomiciliationTimelineEvent>();
+
     // Accounting (tenue comptable PCGM)
     public DbSet<ExerciceComptable> ExercicesComptables => Set<ExerciceComptable>();
     public DbSet<PeriodeComptable> PeriodesComptables => Set<PeriodeComptable>();
@@ -385,6 +392,67 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.HasOne(d => d.Client).WithMany(c => c.Documents).HasForeignKey(d => d.ClientId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        // ===== Domiciliation =====
+        builder.Entity<CourrierDomiciliation>(e =>
+        {
+            e.ToTable("CourriersDomiciliation");
+            e.HasQueryFilter(c => !c.IsDeleted);
+            e.Property(c => c.TypeCourrier).HasMaxLength(50);
+            e.Property(c => c.Confidentialite).HasMaxLength(30);
+            e.Property(c => c.Statut).HasMaxLength(40);
+            e.Property(c => c.ResponsableUserId).HasMaxLength(450);
+            e.HasOne(c => c.Client).WithMany().HasForeignKey(c => c.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(c => c.ScanDocument).WithMany().HasForeignKey(c => c.ScanDocumentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(c => c.Responsable).WithMany().HasForeignKey(c => c.ResponsableUserId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(c => c.LinkedTaskItem).WithMany().HasForeignKey(c => c.LinkedTaskItemId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(c => new { c.CabinetId, c.ClientId, c.Statut });
+        });
+        builder.Entity<CourrierPieceJointe>(e =>
+        {
+            e.ToTable("CourrierPiecesJointes");
+            e.HasQueryFilter(p => !p.IsDeleted);
+            e.Property(p => p.Label).HasMaxLength(200);
+            e.HasOne(p => p.Courrier).WithMany(c => c.Pieces).HasForeignKey(p => p.CourrierId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(p => p.Document).WithMany().HasForeignKey(p => p.DocumentId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(p => new { p.CourrierId, p.DocumentId }).IsUnique().HasFilter("[IsDeleted] = 0");
+            e.HasIndex(p => new { p.CabinetId, p.CourrierId });
+        });
+        builder.Entity<DemandeActionCourrier>(e =>
+        {
+            e.ToTable("DemandesActionCourrier");
+            e.HasQueryFilter(a => !a.IsDeleted);
+            e.Property(a => a.TypeAction).HasMaxLength(30);
+            e.Property(a => a.Statut).HasMaxLength(40);
+            e.HasOne(a => a.Courrier).WithMany(c => c.ActionsClient).HasForeignKey(a => a.CourrierId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<DemandeDocumentDomiciliation>(e =>
+        {
+            e.ToTable("DemandesDocumentDomiciliation");
+            e.HasQueryFilter(d => !d.IsDeleted);
+            e.Property(d => d.DocumentType).HasMaxLength(100);
+            e.Property(d => d.Statut).HasMaxLength(40);
+            e.Property(d => d.ResponsableUserId).HasMaxLength(450);
+            e.Property(d => d.RejectionReasonCode).HasMaxLength(50);
+            e.HasOne(d => d.Client).WithMany().HasForeignKey(d => d.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(d => d.Responsable).WithMany().HasForeignKey(d => d.ResponsableUserId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(d => d.CurrentDocument).WithMany().HasForeignKey(d => d.CurrentDocumentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(d => new { d.CabinetId, d.ClientId, d.Statut });
+        });
+        builder.Entity<DomiciliationTimelineEvent>(e =>
+        {
+            e.ToTable("DomiciliationTimelineEvents");
+            e.Property(t => t.RelatedType).HasMaxLength(40);
+            e.Property(t => t.Action).HasMaxLength(50);
+            e.HasOne(t => t.Client).WithMany().HasForeignKey(t => t.ClientId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(t => new { t.CabinetId, t.ClientId, t.At });
+        });
+        builder.Entity<TaskItem>(e =>
+        {
+            e.Property(t => t.RelatedEntityType).HasMaxLength(50);
+            e.Property(t => t.TaskType).HasMaxLength(50);
+            e.HasIndex(t => new { t.RelatedEntityType, t.RelatedEntityId });
+        });
+
         // ===== Accounting PCGM =====
         builder.Entity<ExerciceComptable>(e =>
         {
@@ -687,7 +755,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(c => c.MontantTTC).HasPrecision(18, 2);
             e.Property(c => c.MontantRemise).HasPrecision(18, 2);
             e.Property(c => c.TauxChange).HasPrecision(18, 6);
-            e.Property(c => c.ServicesActivesJson).HasMaxLength(4000);
+            e.Property(c => c.ServicesActivesJson).HasColumnType("nvarchar(max)");
             e.HasQueryFilter(c => !c.IsDeleted);
             e.HasOne(c => c.Client).WithMany(cl => cl.ContratsCommerciaux).HasForeignKey(c => c.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.BonCommande).WithOne(b => b.Contrat).HasForeignKey<ContratCommercial>(c => c.BonCommandeId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);

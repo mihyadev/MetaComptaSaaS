@@ -36,6 +36,13 @@ public class DeclarationService : IDeclarationService
     private async Task<ApiResponse<ExerciceComptableDto>> RequireExerciceAsync(int clientId, int cabinetId, int? preferredId = null)
         => await _exerciceContext.RequireOpenExerciceAsync(clientId, cabinetId, preferredId);
 
+    /// <summary>Hangfire passes "SYSTEM" which is not a Users row — AssistantId is FK.</summary>
+    private static string? ResolveAssistantUserId(string? userId)
+        => string.IsNullOrWhiteSpace(userId)
+           || string.Equals(userId, "SYSTEM", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : userId;
+
     private async Task<string?> EnsureDeclarationExerciceOpenAsync(Declaration declaration, int cabinetId)
     {
         if (declaration.ExerciceComptableId is not int exoId) return null;
@@ -262,26 +269,52 @@ public class DeclarationService : IDeclarationService
         };
     }
 
-    private static DateTime ResolveInitDateLimite(CreateDeclarationDto? periodCfg, MoroccoDeclarationCalendar.Window window, string type)
+    /// <summary>
+    /// DateLimite: per-row due (DueMonth/DueDay or DateLimite) → legacy window* → calendar.
+    /// PeriodEnd is the taxable slice end — never the filing deadline.
+    /// </summary>
+    private static DateTime ResolveInitDateLimite(
+        CreateDeclarationDto? periodCfg,
+        DateTime periodEnd,
+        string? frequency,
+        string type,
+        DateTime calendarFilingDeadline)
     {
-        if (periodCfg?.PeriodEnd is DateTime pe)
-            return pe.Date;
-        if (periodCfg == null) return window.FilingDeadline;
-        if ((periodCfg.WindowEndDay is >= 1 and <= 31) || (periodCfg.DeadlineMonth is >= 1 and <= 12))
+        if (periodCfg == null) return calendarFilingDeadline;
+
+        if (periodCfg.DateLimite is DateTime explicitDue)
+            return explicitDue.Date;
+
+        if (periodCfg.DueMonth is >= 1 and <= 12 && periodCfg.DueDay is >= 1 and <= 31)
+            return DeclarationPeriodTemplate.MaterializeDue(periodCfg.DueMonth.Value, periodCfg.DueDay.Value, periodEnd);
+
+        var hasWindow = periodCfg.WindowEndDay is >= 1 and <= 31
+            || periodCfg.DeadlineMonth is >= 1 and <= 12
+            || periodCfg.WindowMonthOffset.HasValue
+            || periodCfg.DeadlineYearOffset.HasValue;
+
+        if (hasWindow)
         {
+            var day = periodCfg.WindowEndDay
+                ?? MoroccoDeclarationCalendar.GetDefaultFilingWindow(type).EndDay;
             return MoroccoDeclarationCalendar.ApplyInitDeadline(
-                periodCfg.Frequency ?? window.Frequency,
-                window.PeriodEnd,
-                periodCfg.WindowEndDay,
+                periodCfg.Frequency ?? frequency,
+                periodEnd,
+                day,
                 periodCfg.WindowMonthOffset,
                 periodCfg.DeadlineMonth,
                 periodCfg.DeadlineYearOffset,
                 type);
         }
-        return window.FilingDeadline;
+
+        // TVA default without Init due: end of next month
+        if (string.Equals(type, "TVA", StringComparison.OrdinalIgnoreCase))
+            return DeclarationPeriodTemplate.EndOfMonthAfter(periodEnd);
+
+        return calendarFilingDeadline;
     }
 
-    /// <summary>Init period template table wins over calendar defaults.</summary>
+    /// <summary>Init period template: periods[] = taxable slice + per-row due; window* = legacy fallback.</summary>
     private static (DateTime Start, DateTime End, DateTime Limite, string Periode) ApplyPeriodTemplate(
         CreateDeclarationDto? dto, MoroccoDeclarationCalendar.Window window, string type)
     {
@@ -292,10 +325,13 @@ public class DeclarationService : IDeclarationService
                 : (ps.Month == 1 && pe.Month == 12 && ps.Day == 1 && pe.Day == 31 && ps.Year == pe.Year
                     ? ps.Year.ToString()
                     : ps.ToString("yyyy-MM"));
-            return (ps.Date, pe.Date, pe.Date, label);
+            var limite = ResolveInitDateLimite(dto, pe.Date, dto.Frequency ?? window.Frequency, type, window.FilingDeadline);
+            return (ps.Date, pe.Date, limite, label);
         }
 
-        return (window.PeriodStart, window.PeriodEnd, ResolveInitDateLimite(dto, window, type), window.PeriodeLabel);
+        return (window.PeriodStart, window.PeriodEnd,
+            ResolveInitDateLimite(dto, window.PeriodEnd, window.Frequency, type, window.FilingDeadline),
+            window.PeriodeLabel);
     }
 
     /// <summary>
@@ -339,7 +375,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId,
             DonneesJson = "{}"
         };
@@ -803,7 +839,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1165,7 +1201,7 @@ public class DeclarationService : IDeclarationService
         var freq = periodCfg?.Frequency ?? "Annuelle";
         var window = MoroccoDeclarationCalendar.ResolveForCreate(
             "IS", DateTime.UtcNow, anneeFiscale, periodCfg?.Periode, null, freq);
-        var dateLimite = ResolveInitDateLimite(periodCfg, window, "IS");
+        var (debut, fin, dateLimite, periode) = ApplyPeriodTemplate(periodCfg, window, "IS");
 
         var declaration = new Declaration
         {
@@ -1173,12 +1209,12 @@ public class DeclarationService : IDeclarationService
             CabinetId = cabinetId,
             ExerciceComptableId = exoGate.Data.Id,
             Type = "IS",
-            Periode = window.PeriodeLabel,
-            DateDebut = window.PeriodStart,
-            DateFin = window.PeriodEnd,
+            Periode = periode,
+            DateDebut = debut,
+            DateFin = fin,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1389,7 +1425,7 @@ public class DeclarationService : IDeclarationService
         var freq = periodCfg?.Frequency ?? "Annuelle";
         var window = MoroccoDeclarationCalendar.ResolveForCreate(
             "IR", DateTime.UtcNow, anneeFiscale, periodCfg?.Periode, null, freq);
-        var dateLimite = ResolveInitDateLimite(periodCfg, window, "IR");
+        var (debut, fin, dateLimite, periode) = ApplyPeriodTemplate(periodCfg, window, "IR");
 
         var declaration = new Declaration
         {
@@ -1397,12 +1433,12 @@ public class DeclarationService : IDeclarationService
             CabinetId = cabinetId,
             ExerciceComptableId = exoGate.Data.Id,
             Type = "IR",
-            Periode = window.PeriodeLabel,
-            DateDebut = window.PeriodStart,
-            DateFin = window.PeriodEnd,
+            Periode = periode,
+            DateDebut = debut,
+            DateFin = fin,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1502,7 +1538,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);

@@ -1,0 +1,278 @@
+/* MetaCompta — 5 mini-app visual systems (Bootstrap 5 + CSS variables)
+   Mapped from the 5 demo product skins to BackOffice spaces. */
+
+/* 1. Cabinet ← Admin Dashboard */
+body.app-cabinet,
+body.app-gateway {
+  --app-bg: #F8F9FC;
+  --app-primary: #6C63FF;
+  --app-secondary: #212529;
+  --app-card: #FFFFFF;
+  --app-text: #343A40;
+  --app-muted: #6c757d;
+  --app-border: #e4e6ef;
+  --app-accent: var(--app-primary);
+  --app-accent-soft: #eeedff;
+  --app-sidebar-bg: #FFFFFF;
+  --app-topbar-bg: #FFFFFF;
+  --app-is-dark: 0;
+}
+
+/* 2. Suivi déclarations ← Task Management App */
+body.app-declarations {
+  --app-bg: #F5FAFA;
+  --app-primary: #0D9488;
+  --app-secondary: #173B3A;
+  --app-card: #FFFFFF;
+  --app-text: #334155;
+  --app-muted: #64748b;
+  --app-border: #d5e8e6;
+  --app-accent: var(--app-primary);
+  --app-accent-soft: #e6f7f5;
+  --app-sidebar-bg: #FFFFFF;
+  --app-topbar-bg: #FFFFFF;
+  --app-is-dark: 0;
+}
+
+/* 3. Tenue comptable ← Finance palette (light UX — readable tables/forms all day)
+   Colors from Finance Dashboard, applied as accents on a light shell (not full dark). */
+body.app-compta {
+  --app-bg: #F0FDF4;
+  --app-primary: #16A34A;
+  --app-secondary: #14532D;
+  --app-card: #FFFFFF;
+  --app-text: #0F172A;
+  --app-muted: #64748B;
+  --app-border: #BBF7D0;
+  --app-accent: var(--app-primary);
+  --app-accent-soft: #DCFCE7;
+  --app-sidebar-bg: #FFFFFF;
+  --app-topbar-bg: #FFFFFF;
+  --app-highlight: #A78BFA;
+  --app-is-dark: 0;
+}
+
+/* 4. Paie ← E-commerce Store */
+body.app-paie {
+  --app-bg: #FFF8F0;
+  --app-primary: #E8793E;
+  --app-secondary: #402C24;
+  --app-card: #FFFFFF;
+  --app-text: #292524;
+  --app-muted: #78716c;
+  --app-border: #f0e4d8;
+  --app-accent: var(--app-primary);
+  --app-accent-soft: #fff1e6;
+  --app-sidebar-bg: #FFFFFF;
+  --app-topbar-bg: #FFFFFF;
+  --app-is-dark: 0;
+}
+
+/* 5. Juridique ← E-learning Platform */
+body.app-juridique {
+  --app-bg: #EFF6FF;
+  --app-primary: #2563EB;
+  --app-secondary: #172554;
+  --app-card: #FFFFFF;
+  --app-text: #1E293B;
+  --app-muted: #64748b;
+  --app-border: #dbe7f8;
+  --app-accent: var(--app-primary);
+  --app-accent-soft: #e0ebff;
+  --app-sidebar-bg: #FFFFFF;
+  --app-topbar-bg: #FFFFFF;
+  --app-is-dark: 0;
+}
+
+/* —— Shell overrides (keep layout structure; recolor only) —— */
+body.app-cabinet,
+body.app-gateway,
+body.app-declarations,
+body.app-compta,
+body.app-paie,
+body.app-juridique {
+  background: var(--app-bg) !important;
+  color: var(--app-text);
+}
+
+body.app-cabinet .mc-main,
+body.app-gateway .mc-main,
+body.app-declarations .mc-main,
+body.app-compta .mc-main,
+body.app-paie .mc-main,
+body.app-juridique .mc-main {
+  background: var(--app-bg) !important;
+  color: var(--app-text);
+}
+
+body.app-cabinet .mc-main,
+body.app-declarations .mc-main,
+body.app-compta .mc-main,
+body.app-paie .mc-main,
+body.app-juridique .mc-main {
+  margin-left: var(--monday-sidebar-width, 260px) !important;
+}
+
+body.app-cabinet .mc-sidebar,
+body.app-declarations .mc-sidebar,
+body.app-compta .mc-sidebar,
+body.app-paie .mc-sidebar,
+body.app-juridique .mc-sidebar {
+  background: var(--app-sidebar-bg) !important;
+  border-right: 1px solid var(--app-border) !important;
+  color: var(--app-text);
+  /* MUST stay fixed — relative/static puts sidebar in flow and pushes .mc-main under it */
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+body.app-cabinet .mc-sidebar::before,
+body.app-declarations .mc-sidebar::before,
+body.app-compta .mc-sidebar::before,
+body.app-paie .mc-sidebar::before,
+body.app-juridique .mc-sidebar::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--app-primary);
+  z-index: 2;
+  pointer-events: none;
+}
+
+body.app-cabinet .mc-topbar,
+body.app-declarations .mc-topbar,
+body.app-compta .mc-topbar,
+body.app-paie .mc-topbar,
+body.app-juridique .mc-topbar {
+  background: var(--app-topbar-bg) !important;
+  border-bottom: 1px solid var(--app-border) !important;
+  color: var(--app-text);
+}
+
+body.app-cabinet .mc-sidebar .nav-link,
+body.app-declarations .mc-sidebar .nav-link,
+body.app-compta .mc-sidebar .nav-link,
+body.app-paie .mc-sidebar .nav-link,
+body.app-juridique .mc-sidebar .nav-link {
+  color: var(--app-muted) !important;
+}
+
+body.app-cabinet .mc-sidebar .nav-link:hover,
+body.app-declarations .mc-sidebar .nav-link:hover,
+body.app-compta .mc-sidebar .nav-link:hover,
+body.app-paie .mc-sidebar .nav-link:hover,
+body.app-juridique .mc-sidebar .nav-link:hover {
+  background: var(--app-accent-soft) !important;
+  color: var(--app-text) !important;
+}
+
+body.app-cabinet .mc-sidebar .nav-link.active,
+body.app-declarations .mc-sidebar .nav-link.active,
+body.app-compta .mc-sidebar .nav-link.active,
+body.app-paie .mc-sidebar .nav-link.active,
+body.app-juridique .mc-sidebar .nav-link.active {
+  background: var(--app-accent-soft) !important;
+  color: var(--app-secondary) !important;
+  box-shadow: inset 3px 0 0 var(--app-primary);
+  font-weight: 700;
+}
+
+body.app-cabinet .mc-sidebar .nav-section,
+body.app-declarations .mc-sidebar .nav-section,
+body.app-compta .mc-sidebar .nav-section,
+body.app-paie .mc-sidebar .nav-section,
+body.app-juridique .mc-sidebar .nav-section,
+body.app-cabinet .mc-sidebar .brand-sub,
+body.app-declarations .mc-sidebar .brand-sub,
+body.app-compta .mc-sidebar .brand-sub,
+body.app-paie .mc-sidebar .brand-sub,
+body.app-juridique .mc-sidebar .brand-sub {
+  color: var(--app-muted) !important;
+}
+
+body.app-cabinet .mc-sidebar .sidebar-brand h4,
+body.app-declarations .mc-sidebar .sidebar-brand h4,
+body.app-compta .mc-sidebar .sidebar-brand h4,
+body.app-paie .mc-sidebar .sidebar-brand h4,
+body.app-juridique .mc-sidebar .sidebar-brand h4,
+body.app-cabinet .client-context-name,
+body.app-declarations .client-context-name,
+body.app-compta .client-context-name,
+body.app-paie .client-context-name,
+body.app-juridique .client-context-name {
+  color: var(--app-text) !important;
+}
+
+body.app-cabinet .mc-sidebar .mode-badge,
+body.app-declarations .mc-sidebar .mode-badge,
+body.app-compta .mc-sidebar .mode-badge,
+body.app-paie .mc-sidebar .mode-badge,
+body.app-juridique .mc-sidebar .mode-badge {
+  background: var(--app-accent-soft) !important;
+  color: var(--app-secondary) !important;
+}
+
+body.app-cabinet .btn-primary,
+body.app-declarations .btn-primary,
+body.app-compta .btn-primary,
+body.app-paie .btn-primary,
+body.app-juridique .btn-primary {
+  --bs-btn-bg: var(--app-primary);
+  --bs-btn-border-color: var(--app-primary);
+  --bs-btn-hover-bg: var(--app-secondary);
+  --bs-btn-hover-border-color: var(--app-secondary);
+  --bs-btn-color: #fff;
+}
+
+body.app-cabinet .card,
+body.app-declarations .card,
+body.app-paie .card,
+body.app-juridique .card,
+body.app-cabinet .stat-card,
+body.app-declarations .stat-card,
+body.app-paie .stat-card,
+body.app-juridique .stat-card {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text);
+  border-radius: 0.75rem !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+}
+
+/* Compta finance accents (light shell — keep Bootstrap tables/forms readable) */
+body.app-compta .mc-sidebar .nav-link.active {
+  color: var(--app-secondary) !important;
+}
+body.app-compta .btn-primary {
+  --bs-btn-color: #fff;
+  --bs-btn-hover-bg: #15803d;
+  --bs-btn-hover-border-color: #15803d;
+  --bs-btn-hover-color: #fff;
+}
+body.app-compta .mode-badge.client,
+body.app-compta .mc-sidebar .mode-badge {
+  background: var(--app-accent-soft) !important;
+  color: var(--app-secondary) !important;
+}
+body.app-compta .app-space-banner {
+  background: linear-gradient(90deg, #DCFCE7 0%, #F5F3FF 100%) !important;
+  border-color: #BBF7D0 !important;
+}
+body.app-compta .app-space-banner a {
+  color: #7C3AED !important; /* violet accent from Finance palette */
+}
+
+.app-space-banner {
+  background: var(--app-accent-soft) !important;
+  border: 1px solid var(--app-border) !important;
+  border-left: 4px solid var(--app-primary) !important;
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+  color: var(--app-text) !important;
+}
+.app-space-banner strong { color: var(--app-secondary) !important; }
+.app-space-banner a { color: var(--app-primary) !important; font-weight: 600; }

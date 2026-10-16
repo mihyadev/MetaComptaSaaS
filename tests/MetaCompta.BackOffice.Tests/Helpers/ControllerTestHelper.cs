@@ -32,21 +32,41 @@ public static class ControllerTestHelper
 
     /// <summary>
     /// Configures a controller with HttpContext, TempData, and routing needed for unit testing.
+    /// When <paramref name="sharedContext"/> is provided (from CreateMockContextAccessor), the same
+    /// HttpContext is used so BaseController.SelectedClientId and Controller.HttpContext stay aligned.
     /// </summary>
-    public static void SetupController(Controller controller, bool authenticated = true)
+    public static void SetupController(Controller controller, bool authenticated = true, HttpContext? sharedContext = null)
     {
-        var session = new MockSession();
-        if (authenticated)
+        HttpContext httpContext;
+        if (sharedContext != null)
         {
-            session.SetString("JwtToken", "mock-jwt-token");
-            session.SetString("UserName", "Test User");
-            session.SetString("UserRole", "Manager");
-            session.SetString("CabinetName", "Test Cabinet");
-            session.SetString("CabinetId", "1");
-            session.SetString("HasActiveContract", "True");
+            httpContext = sharedContext;
+            var session = httpContext.Session;
+            if (authenticated)
+            {
+                session.SetString("JwtToken", "mock-jwt-token");
+                session.SetString("UserName", "Test User");
+                session.SetString("UserRole", "Manager");
+                session.SetString("CabinetName", "Test Cabinet");
+                session.SetString("CabinetId", "1");
+                session.SetString("HasActiveContract", "True");
+            }
+        }
+        else
+        {
+            var session = new MockSession();
+            if (authenticated)
+            {
+                session.SetString("JwtToken", "mock-jwt-token");
+                session.SetString("UserName", "Test User");
+                session.SetString("UserRole", "Manager");
+                session.SetString("CabinetName", "Test Cabinet");
+                session.SetString("CabinetId", "1");
+                session.SetString("HasActiveContract", "True");
+            }
+            httpContext = new DefaultHttpContext { Session = session };
         }
 
-        var httpContext = new DefaultHttpContext { Session = session };
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,

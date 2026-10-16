@@ -1,0 +1,198 @@
+@using MetaCompta.Domain.Common
+@model MetaCompta.Application.DTOs.CourrierDomiciliationDto
+@{
+    ViewData["Title"] = "Courrier #" + Model.Id;
+    var timeline = ViewBag.CourrierTimeline as List<MetaCompta.Application.DTOs.DomiciliationTimelineDto> ?? new();
+    var statutLabel = RefCodes.StatutCourrierDomiciliation.Label(Model.Statut);
+    var statutColor = RefCodes.StatutCourrierDomiciliation.Color(Model.Statut);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index")">Domiciliation</a></li>
+                <li class="breadcrumb-item"><a href="@Url.Action("Client", new { id = Model.ClientId })">@(Model.ClientNom ?? "Client")</a></li>
+                <li class="breadcrumb-item active">Courrier #@Model.Id</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0">@Model.TypeCourrier — @(Model.Expediteur ?? "Sans expéditeur")</h4>
+        <span class="badge rounded-pill" style="background:@(statutColor)18;color:@statutColor;">@statutLabel</span>
+    </div>
+    <a href="@Url.Action("Client", new { id = Model.ClientId })" class="btn btn-outline-secondary rounded-pill">
+        <i class="bi bi-arrow-left me-1"></i>Retour
+    </a>
+</div>
+
+@await Html.PartialAsync("_CourrierActionBar", Model)
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+@{
+    var canDepositScan = ViewBag.CanDomiciliationProcess == true
+        || ViewBag.CanDomiciliationNotify == true
+        || MetaCompta.BackOffice.Helpers.PermissionHelper.HasPermission(Context.Session, MetaCompta.Domain.Common.ClaimDefinitions.DomiciliationReceive)
+        || MetaCompta.BackOffice.Helpers.PermissionHelper.HasPermission(Context.Session, MetaCompta.Domain.Common.ClaimDefinitions.DomiciliationProcess);
+    ViewBag.CanEditPieces = canDepositScan;
+    var hasPieces = Model.Pieces?.Any() == true || Model.ScanDocumentId.HasValue;
+}
+
+@await Html.PartialAsync("_CourrierLifecycle", Model)
+
+@await Html.PartialAsync("_CourrierPhototheque", Model)
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-transparent border-0 pt-3 px-4 fw-bold">Fiche courrier</div>
+            <div class="card-body pt-0">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted">Client</dt><dd class="col-sm-8 fw-semibold">@Model.ClientNom</dd>
+                    <dt class="col-sm-4 text-muted">Reçu le</dt><dd class="col-sm-8">@Model.DateReception.ToLocalTime().ToString("dd/MM/yyyy")</dd>
+                    <dt class="col-sm-4 text-muted">Référence</dt><dd class="col-sm-8">@(Model.Reference ?? "—")</dd>
+                    <dt class="col-sm-4 text-muted">Confidentialité</dt><dd class="col-sm-8">@Model.Confidentialite</dd>
+                    <dt class="col-sm-4 text-muted">Action requise</dt><dd class="col-sm-8">@(Model.ActionRequise ? "Oui" : "Non")</dd>
+                    <dt class="col-sm-4 text-muted">Responsable</dt><dd class="col-sm-8">@(Model.ResponsableNom ?? "—")</dd>
+                    <dt class="col-sm-4 text-muted">Échéance</dt><dd class="col-sm-8">@(Model.DateEcheance?.ToString("dd/MM/yyyy") ?? "—")</dd>
+                    <dt class="col-sm-4 text-muted">Documents</dt>
+                    <dd class="col-sm-8">
+                        @if (hasPieces)
+                        {
+                            <span class="fw-semibold">@(Model.Pieces?.Count ?? 0) fichier(s)</span>
+                            <span class="text-muted small">— gérés dans la photothèque</span>
+                        }
+                        else
+                        {
+                            <span class="text-warning fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>Aucun document</span>
+                        }
+                    </dd>
+                    <dt class="col-sm-4 text-muted">Notifié client</dt><dd class="col-sm-8">@(Model.ClientNotifie ? "Oui" : "Non")</dd>
+                    <dt class="col-sm-4 text-muted">Notes</dt><dd class="col-sm-8">@(Model.Notes ?? "—")</dd>
+                </dl>
+            </div>
+        </div>
+
+        @if (Model.ActionsClient.Any())
+        {
+            var hasOpenClientDemande = Model.ActionsClient.Any(a =>
+                a.TypeAction is "Pickup" or "Forward"
+                && a.Statut is not ("Closed" or "HandedOver" or "Delivered"));
+            <div class="card border-0 shadow-sm rounded-4 mb-3 @(hasOpenClientDemande ? "border-warning" : "")" id="demandes-client">
+                <div class="card-header bg-transparent border-0 pt-3 px-4 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-person-check me-1"></i>Demandes client</span>
+                    @if (hasOpenClientDemande)
+                    {
+                        <span class="badge bg-warning text-dark">À traiter</span>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (hasOpenClientDemande)
+                    {
+                        <div class="alert alert-warning border-0 small mb-3">
+                            Le client a fait une demande. Avancez chaque étape avec les boutons ci-dessous, puis clôturez le courrier.
+                        </div>
+                    }
+                    @foreach (var a in Model.ActionsClient)
+                    {
+                        var nextSteps = GetNextClientActionSteps(a.TypeAction, a.Statut);
+                        <div class="border rounded-3 p-3 mb-2 @(nextSteps.Count > 0 ? "border-warning-subtle bg-warning-subtle" : "")">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>@RefCodes.StatutDemandeActionCourrier.TypeLabel(a.TypeAction)</strong>
+                                <span class="badge bg-secondary-subtle text-secondary">@RefCodes.StatutDemandeActionCourrier.Label(a.Statut)</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(a.AdresseForward))
+                            {
+                                <div class="small text-muted mt-1">Adresse : @a.AdresseForward</div>
+                            }
+                            @if (!string.IsNullOrEmpty(a.ShippingReference))
+                            {
+                                <div class="small text-muted">Envoi : @a.ShippingReference</div>
+                            }
+                            @if (ViewBag.CanDomiciliationProcess == true && nextSteps.Count > 0)
+                            {
+                                <div class="mt-2 d-flex flex-wrap gap-1 align-items-center">
+                                    @foreach (var (act, label) in nextSteps)
+                                    {
+                                        <form asp-action="AdvanceAction" method="post" class="d-inline-flex align-items-center gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="actionId" value="@a.Id" />
+                                            <input type="hidden" name="courrierId" value="@Model.Id" />
+                                            <input type="hidden" name="Action" value="@act" />
+                                            @if (act == "handover") { <input type="hidden" name="IdentityCheckDone" value="true" /> }
+                                            @if (act == "sent")
+                                            {
+                                                <input type="text" name="ShippingReference" class="form-control form-control-sm" style="width:140px;" placeholder="N° suivi" required />
+                                            }
+                                            <button class="wf-btn wf-btn-complete" type="submit"><i class="bi bi-arrow-right-circle"></i> <span>@label</span></button>
+                                        </form>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-3 px-4 fw-bold">Historique</div>
+            <div class="card-body">
+                @if (!timeline.Any())
+                {
+                    <div class="text-muted small">Aucun événement pour l’instant.</div>
+                }
+                else
+                {
+                    <ul class="list-unstyled mb-0">
+                        @foreach (var t in timeline)
+                        {
+                            <li class="mb-3 pb-3 border-bottom">
+                                <div class="d-flex justify-content-between gap-2">
+                                    <strong style="font-size:0.85rem;">@t.Action</strong>
+                                    <span class="text-muted" style="font-size:0.75rem;">@t.At.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                                </div>
+                                <div style="font-size:0.8rem;">
+                                    @if (!string.IsNullOrEmpty(t.PreviousStatus) || !string.IsNullOrEmpty(t.NewStatus))
+                                    {
+                                        <span class="text-muted">@RefCodes.StatutCourrierDomiciliation.Label(t.PreviousStatus)</span>
+                                        <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                                        <span>@RefCodes.StatutCourrierDomiciliation.Label(t.NewStatus)</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(t.UserName))
+                                {
+                                    <div class="text-muted" style="font-size:0.75rem;"><i class="bi bi-person me-1"></i>@t.UserName</div>
+                                }
+                                @if (!string.IsNullOrEmpty(t.Note))
+                                {
+                                    <div class="small mt-1">@t.Note</div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private static List<(string Action, string Label)> GetNextClientActionSteps(string type, string statut)
+    {
+        // One button only — no multi-step prepare/ready/handover chain.
+        if (statut == "Closed" || statut == "HandedOver" || statut == "Delivered")
+            return new();
+        if (type is "Pickup" or "Forward")
+            return new() { ("done", "Demande traitée") };
+        return new();
+    }
+}

@@ -5175,8 +5175,7 @@ namespace MetaCompta.API.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("ServicesActivesJson")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SignataireFonction")
                         .HasColumnType("nvarchar(max)");

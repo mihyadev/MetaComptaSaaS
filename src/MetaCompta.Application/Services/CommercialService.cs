@@ -18,11 +18,13 @@ public class CommercialService : ICommercialService
 {
     private readonly MetaComptaDbContext _db;
     private readonly IMapper _mapper;
+    private readonly IWorkflowService _workflow;
 
-    public CommercialService(MetaComptaDbContext db, IMapper mapper)
+    public CommercialService(MetaComptaDbContext db, IMapper mapper, IWorkflowService workflow)
     {
         _db = db;
         _mapper = mapper;
+        _workflow = workflow;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -828,6 +830,7 @@ public class CommercialService : ICommercialService
 
     public async Task<ApiResponse<ContratCommercialDto>> CreateContratAsync(ContratCommercialCreateDto dto, int cabinetId, string userId)
     {
+        NormalizeContratBillingFields(dto);
         var validityError = ValidateContratValidity(dto);
         if (validityError != null)
             return ApiResponse<ContratCommercialDto>.Fail(validityError);
@@ -845,12 +848,14 @@ public class CommercialService : ICommercialService
             ClientId = dto.ClientId,
             Objet = dto.Objet,
             Description = dto.Description,
-            Devise = dto.Devise,
+            Devise = string.IsNullOrWhiteSpace(dto.Devise) ? "MAD" : dto.Devise,
             DateEmission = DateTime.UtcNow,
             DateDebutContrat = dto.DateDebutContrat,
             DateFinContrat = dto.DateFinContrat,
             Statut = RefCodes.StatutContrat.Brouillon,
-            ModeleFacturation = dto.ModeleFacturation,
+            ModeleFacturation = string.IsNullOrWhiteSpace(dto.ModeleFacturation)
+                ? RefCodes.ModeleFacturation.Forfait
+                : dto.ModeleFacturation,
             FrequenceFacturation = dto.FrequenceFacturation,
             ClausesSpecifiques = dto.ClausesSpecifiques,
             ConditionsParticulieres = dto.ConditionsParticulieres,
@@ -909,6 +914,19 @@ public class CommercialService : ICommercialService
         _db.ContratsCommerciaux.Add(contrat);
         await _db.SaveChangesAsync();
 
+        // One-save create: apply workflow templates / step actors (team used when assignees omitted)
+        if (dto.ServicesActives.Any())
+        {
+            try
+            {
+                await ApplyWorkflowAffectationsFromContratAsync(contrat, dto.ServicesActives, cabinetId, userId);
+            }
+            catch
+            {
+                // Non-blocking on create
+            }
+        }
+
         _db.DocumentsCommerciauxHistorique.Add(new DocumentCommercialHistorique
         {
             CabinetId = cabinetId,
@@ -933,6 +951,7 @@ public class CommercialService : ICommercialService
         if (dto.ClientId <= 0)
             return ApiResponse<ContratCommercialDto>.Fail("Le client est requis.");
 
+        NormalizeContratBillingFields(dto);
         var validityError = ValidateContratValidity(dto);
         if (validityError != null)
             return ApiResponse<ContratCommercialDto>.Fail(validityError);
@@ -953,10 +972,12 @@ public class CommercialService : ICommercialService
         contrat.ClientId = dto.ClientId;
         contrat.Objet = dto.Objet;
         contrat.Description = dto.Description;
-        contrat.Devise = dto.Devise;
+        contrat.Devise = string.IsNullOrWhiteSpace(dto.Devise) ? "MAD" : dto.Devise;
         contrat.DateDebutContrat = dto.DateDebutContrat;
         contrat.DateFinContrat = dto.DateFinContrat;
-        contrat.ModeleFacturation = dto.ModeleFacturation;
+        contrat.ModeleFacturation = string.IsNullOrWhiteSpace(dto.ModeleFacturation)
+            ? RefCodes.ModeleFacturation.Forfait
+            : dto.ModeleFacturation;
         contrat.FrequenceFacturation = dto.FrequenceFacturation;
         contrat.ClausesSpecifiques = dto.ClausesSpecifiques;
         contrat.ConditionsParticulieres = dto.ConditionsParticulieres;
@@ -1032,6 +1053,19 @@ public class CommercialService : ICommercialService
         });
 
         await _db.SaveChangesAsync();
+
+        if (dto.ServicesActives.Any())
+        {
+            try
+            {
+                await ApplyWorkflowAffectationsFromContratAsync(contrat, dto.ServicesActives, cabinetId, userId);
+            }
+            catch
+            {
+                // Non-blocking
+            }
+        }
+
         return await GetContratByIdAsync(contrat.Id, cabinetId);
     }
 
@@ -1061,6 +1095,19 @@ public class CommercialService : ICommercialService
             "Équipe du dossier mise à jour");
 
         await _db.SaveChangesAsync();
+
+        // Refresh auto workflow actors from the new team
+        try
+        {
+            var lines = ParseServiceLinesFromContrat(contrat);
+            if (lines.Count > 0)
+                await ApplyWorkflowAffectationsFromContratAsync(contrat, lines, cabinetId, userId);
+        }
+        catch
+        {
+            // Non-blocking
+        }
+
         return await GetContratByIdAsync(contrat.Id, cabinetId);
     }
 
@@ -1173,11 +1220,12 @@ public class CommercialService : ICommercialService
         if (contrat.ParentContratId is int parentExcl)
             excludeIds.Add(parentExcl);
 
-        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: excludeIds);
-        if (overlapRef != null)
-            return ApiResponse<ContratCommercialDto>.Fail(
-                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
+        // Multiple active contracts are allowed for the same client when they cover different services.
+        var conflict = await FindOverlappingActiveContratConflictAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat,
+            GetContratServiceCodes(contrat), excludeContratIds: excludeIds);
+        if (conflict != null)
+            return ApiResponse<ContratCommercialDto>.Fail(conflict);
 
         var ancienStatut = contrat.Statut;
         contrat.Statut = RefCodes.StatutContrat.Valide;
@@ -1256,11 +1304,11 @@ public class CommercialService : ICommercialService
         if (!await _db.ContratMembres.AnyAsync(m => m.ContratId == contrat.Id))
             return ApiResponse<ContratCommercialDto>.Fail("L'équipe du dossier est obligatoire avant réactivation.");
 
-        var overlapRef = await FindOverlappingActiveContratReferenceAsync(
-            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat, excludeContratIds: new[] { contrat.Id });
-        if (overlapRef != null)
-            return ApiResponse<ContratCommercialDto>.Fail(
-                $"Un contrat actif ({overlapRef}) couvre déjà cette période pour ce client.");
+        var conflict = await FindOverlappingActiveContratConflictAsync(
+            contrat.ClientId, cabinetId, contrat.DateDebutContrat, contrat.DateFinContrat,
+            GetContratServiceCodes(contrat), excludeContratIds: new[] { contrat.Id });
+        if (conflict != null)
+            return ApiResponse<ContratCommercialDto>.Fail(conflict);
 
         var ancienStatut = contrat.Statut;
         contrat.Statut = RefCodes.StatutContrat.Valide;
@@ -1299,6 +1347,37 @@ public class CommercialService : ICommercialService
 
         await _db.SaveChangesAsync();
         return await GetContratByIdAsync(id, cabinetId);
+    }
+
+    public async Task<ApiResponse<bool>> DeleteContratAsync(int id, int cabinetId, string userId)
+    {
+        var contrat = await _db.ContratsCommerciaux
+            .Where(c => c.Id == id && c.CabinetId == cabinetId && !c.IsDeleted)
+            .FirstOrDefaultAsync();
+
+        if (contrat == null)
+            return ApiResponse<bool>.Fail("Contrat introuvable.");
+        if (contrat.Statut == RefCodes.StatutContrat.Remplace)
+            return ApiResponse<bool>.Fail("Un contrat remplacé ne peut pas être supprimé.");
+
+        var ancienStatut = contrat.Statut;
+        if (contrat.Statut == RefCodes.StatutContrat.Valide
+            || contrat.Statut == RefCodes.StatutContrat.Actif
+            || contrat.Statut == RefCodes.StatutContrat.Suspendu)
+        {
+            await DesactiverServicesFromContratAsync(contrat);
+        }
+
+        contrat.IsDeleted = true;
+        contrat.DeletedBy = userId;
+        contrat.DeletedAt = DateTime.UtcNow;
+        contrat.UpdatedBy = userId;
+        contrat.UpdatedAt = DateTime.UtcNow;
+
+        AddHistoriqueContrat("Contrat", contrat, "Suppression", ancienStatut, ancienStatut, userId, "Contrat soft-deleted");
+
+        await _db.SaveChangesAsync();
+        return ApiResponse<bool>.Ok(true);
     }
 
     public async Task<ApiResponse<int>> SyncServicesFromContratAsync(int contratId, int cabinetId, string userId)
@@ -1608,6 +1687,12 @@ public class CommercialService : ICommercialService
 
         var reference = await GenerateReferenceAsync("INV", cabinetId);
 
+        // Avoid FK violation when Hangfire uses a synthetic system user id
+        var emetteurId = string.IsNullOrWhiteSpace(userId)
+            || userId == FacturationSchedulerService.SystemUserId
+            ? null
+            : userId;
+
         var facture = new Facture
         {
             CabinetId = cabinetId,
@@ -1623,9 +1708,9 @@ public class CommercialService : ICommercialService
             DateEcheance = dto.DateEcheance ?? DateTime.UtcNow.AddDays(30),
             Statut = RefCodes.StatutFacture.Brouillon,
             Version = 1,
-            EmetteurId = userId,
+            EmetteurId = emetteurId,
             Notes = dto.Notes,
-            CreatedBy = userId
+            CreatedBy = string.IsNullOrWhiteSpace(userId) ? FacturationSchedulerService.SystemUserId : userId
         };
 
         // Ajouter les lignes depuis le contrat (si contrat et LigneContratIds spécifiés)
@@ -2164,6 +2249,8 @@ public class CommercialService : ICommercialService
                     : GetServiceLabel(svcLine.TypeService);
                 serviceExistant.Categorie = GetServiceCategory(svcLine.TypeService);
                 serviceExistant.Frequence = GetSmartFrequency(svcLine.TypeService, typeTVA);
+                if (string.Equals(svcLine.TypeService, "DOMICILIATION", StringComparison.OrdinalIgnoreCase))
+                    serviceExistant.AutoGenererDeclarations = false;
                 serviceExistant.DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow;
                 serviceExistant.DateFin = contrat.DateFinContrat;
                 serviceExistant.AutoGenererDeclarations = svcLine.AutoGenererDeclarations;
@@ -2189,7 +2276,9 @@ public class CommercialService : ICommercialService
                     ExerciceFiscal = exercice,
                     ExerciceComptableId = openExo?.Id,
                     Actif = true,
-                    AutoGenererDeclarations = svcLine.AutoGenererDeclarations,
+                    AutoGenererDeclarations = string.Equals(svcLine.TypeService, "DOMICILIATION", StringComparison.OrdinalIgnoreCase)
+                        ? false
+                        : svcLine.AutoGenererDeclarations,
                     DateDebut = contrat.DateDebutContrat ?? DateTime.UtcNow,
                     DateFin = contrat.DateFinContrat,
                     HonorairesMensuels = null,
@@ -2204,7 +2293,257 @@ public class CommercialService : ICommercialService
         // NOTE: We do NOT deactivate services not in this contract.
         // A client may have multiple contracts covering different services.
         // Service deactivation should only happen via explicit contract termination.
+
+        await ApplyWorkflowAffectationsFromContratAsync(contrat, serviceLines, cabinetId, userId);
+
         return null;
+    }
+
+    /// <summary>
+    /// For each active TypeService: attach default cabinet workflow + assignee from this contrat's team (métier role).
+    /// Explicit WorkflowTemplateId / PrimaryAssigneeUserId on the line (legacy JSON) win when present.
+    /// </summary>
+    private async Task ApplyWorkflowAffectationsFromContratAsync(
+        ContratCommercial contrat,
+        List<ContratServiceActiveLine> serviceLines,
+        int cabinetId,
+        string userId)
+    {
+        var membres = await _db.ContratMembres.AsNoTracking()
+            .Where(m => m.ContratId == contrat.Id && m.CabinetId == cabinetId && !m.IsDeleted)
+            .Select(m => new { m.UserId, m.RoleLabel })
+            .ToListAsync();
+
+        var serviceRows = await _db.ServiceContrats
+            .Where(s => s.ClientId == contrat.ClientId && s.Actif)
+            .ToListAsync();
+
+        foreach (var line in serviceLines)
+        {
+            if (string.IsNullOrWhiteSpace(line.TypeService)) continue;
+
+            var declType = ContratWorkflowAutoAssign.MapDeclarationType(line.TypeService);
+            if (declType == null) continue;
+
+            var assignee = !string.IsNullOrWhiteSpace(line.PrimaryAssigneeUserId)
+                ? line.PrimaryAssigneeUserId
+                : ContratWorkflowAutoAssign.ResolveAssignee(
+                    membres.Select(m => (m.UserId, m.RoleLabel)).ToList(), line.TypeService);
+
+            var templateId = line.WorkflowTemplateId
+                ?? await FindDefaultCabinetWorkflowTemplateIdAsync(declType, cabinetId);
+
+            // Still set ServiceContrat.ResponsableId from team even if no template yet
+            var sc = serviceRows.FirstOrDefault(s =>
+                string.Equals(s.TypeService, line.TypeService, StringComparison.OrdinalIgnoreCase));
+            if (sc != null && !string.IsNullOrWhiteSpace(assignee))
+                sc.ResponsableId = assignee;
+
+            if (!templateId.HasValue && string.IsNullOrWhiteSpace(assignee))
+                continue;
+
+            try
+            {
+                var stepAssigns = line.StepAssignments?
+                    .Where(s => s != null)
+                    .ToList() ?? new List<ContratWorkflowStepAssignmentDto>();
+
+                if (templateId.HasValue && stepAssigns.Count > 0)
+                {
+                    var tpl = await _workflow.GetTemplateByIdAsync(templateId.Value, cabinetId);
+                    var full = tpl?.Data;
+                    if (full?.Steps != null && full.Steps.Count > 0)
+                    {
+                        var byOrder = stepAssigns.ToDictionary(s => s.StepOrder, s => s);
+                        var steps = full.Steps.OrderBy(s => s.StepOrder).Select(s =>
+                        {
+                            var create = MapWorkflowStepForContrat(s);
+                            if (s.IsClientStep
+                                || string.Equals(s.AssignmentType, "Client", StringComparison.OrdinalIgnoreCase))
+                            {
+                                create.AssignmentType = "Client";
+                                create.AssignedToUserId = null;
+                                create.AssignedToUserIds = null;
+                                create.AssignedToRoleName = null;
+                                return create;
+                            }
+
+                            if (string.Equals(s.AssignmentType, "AutoSystem", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(s.StepType, "Initialisation", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(s.StepType, "DemandePieces", StringComparison.OrdinalIgnoreCase))
+                            {
+                                create.AssignmentType = "AutoSystem";
+                                create.AssignedToUserId = null;
+                                create.AssignedToUserIds = null;
+                                create.AssignedToRoleName = null;
+                                create.IsClientStep = false;
+                                return create;
+                            }
+
+                            byOrder.TryGetValue(s.StepOrder, out var assign);
+                            var actorIds = new List<string>();
+                            if (assign?.AssignedToUserIds?.Count > 0)
+                                actorIds.AddRange(assign.AssignedToUserIds.Where(id => !string.IsNullOrWhiteSpace(id)));
+                            else if (!string.IsNullOrWhiteSpace(assign?.AssignedToUserId))
+                                actorIds.Add(assign.AssignedToUserId!);
+
+                            actorIds = actorIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                            if (actorIds.Count == 0 && !string.IsNullOrWhiteSpace(assignee))
+                                actorIds.Add(assignee);
+
+                            var roleNames = (assign?.AssignedToRoleNames ?? new List<string>())
+                                .Where(r => !string.IsNullOrWhiteSpace(r)
+                                            && !string.Equals(r, "Client", StringComparison.OrdinalIgnoreCase))
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            if (actorIds.Count > 0)
+                            {
+                                create.AssignmentType = "Employee";
+                                create.AssignedToUserId = actorIds[0];
+                                create.AssignedToUserIds = actorIds;
+                                create.AssignedToRoleName = roleNames.Count > 0 ? string.Join(",", roleNames) : null;
+                            }
+                            else if (roleNames.Count > 0)
+                            {
+                                create.AssignmentType = "Role";
+                                create.AssignedToUserId = null;
+                                create.AssignedToUserIds = null;
+                                create.AssignedToRoleName = string.Join(",", roleNames);
+                            }
+
+                            return create;
+                        }).ToList();
+
+                        await _workflow.SaveClientWorkflowCustomizationAsync(new ClientWorkflowCustomizeDto
+                        {
+                            ClientId = contrat.ClientId,
+                            DeclarationType = declType,
+                            SourceTemplateId = templateId,
+                            TemplateName = $"{full.Name} — client {contrat.ClientId}",
+                            AutoStartWorkflow = false,
+                            PrimaryAssigneeUserId = assignee,
+                            IsActive = true,
+                            Steps = steps
+                        }, cabinetId, userId);
+                        continue;
+                    }
+                }
+
+                await _workflow.SaveClientConfigAsync(new ClientWorkflowConfigCreateDto
+                {
+                    ClientId = contrat.ClientId,
+                    DeclarationType = declType,
+                    WorkflowTemplateId = templateId,
+                    PrimaryAssigneeUserId = assignee,
+                    AutoStartWorkflow = false,
+                    ClientValidationEnabled = true,
+                    DocumentRequestEnabled = true,
+                    SLAMultiplier = 1m,
+                    IsActive = true
+                }, cabinetId, userId);
+            }
+            catch
+            {
+                // Non-blocking: contract activation must not fail if WF config save fails
+            }
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private async Task<int?> FindDefaultCabinetWorkflowTemplateIdAsync(string declarationTypeName, int cabinetId)
+    {
+        if (!Enum.TryParse<WorkflowDeclarationType>(declarationTypeName, true, out var declType))
+            return null;
+
+        var id = await _db.WorkflowTemplates.AsNoTracking()
+            .Where(t => t.CabinetId == cabinetId && t.ClientId == null && t.IsActive && !t.IsDeleted
+                        && t.DeclarationType == declType)
+            .OrderByDescending(t => t.IsDefault)
+            .ThenBy(t => t.Id)
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync();
+
+        if (id != null) return id;
+
+        // Fallback: cabinet "All" template
+        return await _db.WorkflowTemplates.AsNoTracking()
+            .Where(t => t.CabinetId == cabinetId && t.ClientId == null && t.IsActive && !t.IsDeleted
+                        && t.DeclarationType == WorkflowDeclarationType.All)
+            .OrderByDescending(t => t.IsDefault)
+            .ThenBy(t => t.Id)
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    private static WorkflowStepTemplateCreateDto MapWorkflowStepForContrat(WorkflowStepTemplateDto s) => new()
+    {
+        Name = s.Name,
+        Description = s.Description,
+        StepOrder = s.StepOrder,
+        StepType = s.StepType,
+        AssignmentType = s.AssignmentType,
+        AssignedToUserId = s.AssignedToUserId,
+        AssignedToUserIds = s.AssignedToUserIdList?.Count > 0
+            ? s.AssignedToUserIdList
+            : (string.IsNullOrWhiteSpace(s.AssignedToUserId) ? null : new List<string> { s.AssignedToUserId }),
+        AssignedToRoleName = s.AssignedToRoleName,
+        AssignedToDepartmentId = s.AssignedToDepartmentId,
+        IsClientStep = s.IsClientStep,
+        RequiredPermission = s.RequiredPermission,
+        SLAHours = s.SLAHours,
+        DeadlineAnchor = s.DeadlineAnchor,
+        DeadlineOffsetDays = s.DeadlineOffsetDays,
+        DeadlineDay = s.DeadlineDay,
+        DeadlineMonth = s.DeadlineMonth,
+        DeadlineMonthOffset = s.DeadlineMonthOffset,
+        DeadlineYearOffset = s.DeadlineYearOffset,
+        ApplyDeadlineToDeclaration = s.ApplyDeadlineToDeclaration,
+        LifecycleEndMode = s.LifecycleEndMode,
+        LifecycleEndDays = s.LifecycleEndDays,
+        ActionOnLifecycleEnd = s.ActionOnLifecycleEnd,
+        IsRequired = s.IsRequired,
+        IsBlocking = s.IsBlocking,
+        AutoCreateTask = s.AutoCreateTask,
+        TaskType = s.TaskType,
+        TaskPriority = s.TaskPriority,
+        AutoNotify = s.AutoNotify,
+        ValidationRulesJson = s.ValidationRulesJson,
+        DeclarationStatusOnComplete = s.DeclarationStatusOnComplete,
+        DeclarationStatusOnEntry = s.DeclarationStatusOnEntry,
+        ActionOnEntry = s.ActionOnEntry,
+        ActionOnComplete = s.ActionOnComplete,
+        ActionConfigJson = s.ActionConfigJson,
+        CronExpression = s.CronExpression,
+        CronDescription = s.CronDescription,
+        IsScheduled = s.IsScheduled,
+        MaxRetries = s.MaxRetries,
+        RetryIntervalHours = s.RetryIntervalHours,
+        OnMaxRetriesAction = s.OnMaxRetriesAction,
+        RoutingMode = s.RoutingMode,
+        RoutingConditionsJson = s.RoutingConditionsJson,
+        GotoStepOrder = s.GotoStepOrder,
+        TriggerSource = s.TriggerSource,
+        UseServiceContratAffectation = s.UseServiceContratAffectation,
+        ServiceContratTypeCode = s.ServiceContratTypeCode
+    };
+
+    private static List<ContratServiceActiveLine> ParseServiceLinesFromContrat(ContratCommercial contrat)
+    {
+        if (string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
+            return new List<ContratServiceActiveLine>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                       contrat.ServicesActivesJson,
+                       new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                   ?? new List<ContratServiceActiveLine>();
+        }
+        catch
+        {
+            return new List<ContratServiceActiveLine>();
+        }
     }
 
     /// <summary>
@@ -2289,23 +2628,95 @@ public class CommercialService : ICommercialService
             return "La date de fin du contrat est obligatoire.";
         if (dto.DateFinContrat.Value.Date < dto.DateDebutContrat.Value.Date)
             return "La date de fin doit être postérieure ou égale à la date de début.";
+        if (!RefCodes.FrequenceFacturation.IsValid(dto.FrequenceFacturation))
+            return "La fréquence de facturation est obligatoire (Mensuel, Trimestriel ou Annuel).";
         return null;
     }
 
+    /// <summary>Forces MAD/Forfait and syncs line ModeFacturation from contract frequency.</summary>
+    private static void NormalizeContratBillingFields(ContratCommercialCreateDto dto)
+    {
+        dto.Devise = string.IsNullOrWhiteSpace(dto.Devise) ? "MAD" : dto.Devise.Trim();
+        if (string.IsNullOrWhiteSpace(dto.ModeleFacturation))
+            dto.ModeleFacturation = RefCodes.ModeleFacturation.Forfait;
+
+        var freq = RefCodes.FrequenceFacturation.Normalize(dto.FrequenceFacturation);
+        if (freq != null)
+        {
+            dto.FrequenceFacturation = freq;
+            foreach (var l in dto.Lignes)
+                l.ModeFacturation = freq;
+        }
+    }
+
     /// <summary>
-    /// Returns the Reference of another Valide/Actif contract for the same client
-    /// whose date window overlaps [debut, fin] (inclusive), or null if none.
+    /// Extracts TypeService codes from ServicesActivesJson and/or line items.
     /// </summary>
-    private async Task<string?> FindOverlappingActiveContratReferenceAsync(
+    private static HashSet<string> GetContratServiceCodes(ContratCommercial contrat)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(contrat.ServicesActivesJson))
+        {
+            try
+            {
+                var lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                    contrat.ServicesActivesJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (lines != null)
+                {
+                    foreach (var l in lines)
+                        if (!string.IsNullOrWhiteSpace(l.TypeService))
+                            codes.Add(l.TypeService.Trim());
+                }
+            }
+            catch { /* ignore malformed JSON */ }
+        }
+
+        if (contrat.Lignes != null)
+        {
+            foreach (var l in contrat.Lignes)
+                if (!string.IsNullOrWhiteSpace(l.TypeService))
+                    codes.Add(l.TypeService.Trim());
+        }
+
+        return codes;
+    }
+
+    private static HashSet<string> ParseServiceCodesFromJson(string? json)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return codes;
+        try
+        {
+            var lines = JsonSerializer.Deserialize<List<ContratServiceActiveLine>>(
+                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (lines == null) return codes;
+            foreach (var l in lines)
+                if (!string.IsNullOrWhiteSpace(l.TypeService))
+                    codes.Add(l.TypeService.Trim());
+        }
+        catch { /* ignore malformed JSON */ }
+        return codes;
+    }
+
+    /// <summary>
+    /// Conflict only when another Valide/Actif contract overlaps the period AND shares at least one service.
+    /// Different services on the same client/period are allowed.
+    /// </summary>
+    private async Task<string?> FindOverlappingActiveContratConflictAsync(
         int clientId,
         int cabinetId,
         DateTime? debut,
         DateTime? fin,
+        ISet<string> serviceCodes,
         int? excludeContratId = null,
         IEnumerable<int>? excludeContratIds = null)
     {
         if (!debut.HasValue || !fin.HasValue)
             return null;
+        if (serviceCodes == null || serviceCodes.Count == 0)
+            return null; // no services to conflict on
 
         var start = debut.Value.Date;
         var end = fin.Value.Date;
@@ -2315,7 +2726,7 @@ public class CommercialService : ICommercialService
         if (excludeContratIds != null)
             foreach (var x in excludeContratIds) excludes.Add(x);
 
-        var query = _db.ContratsCommerciaux
+        var candidates = await _db.ContratsCommerciaux
             .AsNoTracking()
             .Where(c => c.ClientId == clientId
                 && c.CabinetId == cabinetId
@@ -2324,15 +2735,51 @@ public class CommercialService : ICommercialService
                 && c.DateDebutContrat != null
                 && c.DateFinContrat != null
                 && c.DateDebutContrat.Value.Date <= end
-                && c.DateFinContrat.Value.Date >= start);
+                && c.DateFinContrat.Value.Date >= start)
+            .Select(c => new { c.Id, c.Reference, c.ServicesActivesJson, c.DateValidation })
+            .ToListAsync();
 
         if (excludes.Count > 0)
-            query = query.Where(c => !excludes.Contains(c.Id));
+            candidates = candidates.Where(c => !excludes.Contains(c.Id)).ToList();
 
-        return await query
-            .OrderByDescending(c => c.DateValidation)
-            .Select(c => c.Reference)
-            .FirstOrDefaultAsync();
+        // Also load TypeService from lines for candidates (covers older contracts without JSON)
+        var candidateIds = candidates.Select(c => c.Id).ToList();
+        var ligneServices = candidateIds.Count == 0
+            ? new List<(int ContratId, string TypeService)>()
+            : (await _db.LignesDocumentsCommerciaux
+                .AsNoTracking()
+                .Where(l => l.ContratId != null
+                    && candidateIds.Contains(l.ContratId.Value)
+                    && l.TypeService != null
+                    && l.TypeService != "")
+                .Select(l => new { ContratId = l.ContratId!.Value, TypeService = l.TypeService! })
+                .ToListAsync())
+                .Select(x => (x.ContratId, x.TypeService))
+                .ToList();
+
+        var ligneByContrat = ligneServices
+            .GroupBy(x => x.ContratId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.TypeService).ToList());
+
+        foreach (var c in candidates.OrderByDescending(x => x.DateValidation))
+        {
+            var otherCodes = ParseServiceCodesFromJson(c.ServicesActivesJson);
+            if (ligneByContrat.TryGetValue(c.Id, out var fromLignes))
+                foreach (var s in fromLignes)
+                    otherCodes.Add(s.Trim());
+
+            var shared = serviceCodes
+                .Where(s => otherCodes.Contains(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s)
+                .ToList();
+            if (shared.Count == 0) continue;
+
+            var labels = string.Join(", ", shared.Select(GetServiceLabel));
+            return $"Un contrat actif ({c.Reference}) couvre déjà le(s) service(s) {labels} sur cette période pour ce client.";
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -2377,6 +2824,7 @@ public class CommercialService : ICommercialService
             "ETATSFISCAUX" => "États fiscaux (CPC, ESG, TFT)",
             "LIASSEFISCALE" => "Liasse fiscale",
             "JURIDIQUE" => "Dossiers Juridiques",
+            "DOMICILIATION" => "Domiciliation – Siège social et courrier",
             _ => typeService ?? ""
         };
     }
@@ -2390,7 +2838,7 @@ public class CommercialService : ICommercialService
                 => RefCodes.CategorieService.Fiscal,
             "CNSS" or "DTS" or "PAIE" or "DCH_ETS" => RefCodes.CategorieService.Social,
             "COMPTABILITE" or "TRESORERIE" or "IMMOBILISATION" or "BILAN" => RefCodes.CategorieService.Comptable,
-            "PV_AGO" or "DEPOT_RC" or "JURIDIQUE" => RefCodes.CategorieService.Juridique,
+            "PV_AGO" or "DEPOT_RC" or "JURIDIQUE" or "DOMICILIATION" => RefCodes.CategorieService.Juridique,
             "AUDITCOMPTABLE" or "CONSEILFISCAL" => RefCodes.CategorieService.Conseil,
             _ => RefCodes.CategorieService.Autre
         };
@@ -2401,7 +2849,7 @@ public class CommercialService : ICommercialService
         return typeService?.ToUpperInvariant() switch
         {
             "TVA" => typeTVA == RefCodes.Frequence.Trimestrielle ? RefCodes.Frequence.Trimestrielle : RefCodes.Frequence.Mensuelle,
-            "IR_SAL" or "CNSS" or "PAIE" or "COMPTABILITE" or "TRESORERIE" => RefCodes.Frequence.Mensuelle,
+            "IR_SAL" or "CNSS" or "PAIE" or "COMPTABILITE" or "TRESORERIE" or "DOMICILIATION" => RefCodes.Frequence.Mensuelle,
             "ACOMPTES" => RefCodes.Frequence.Trimestrielle,
             "CM" or "DRF" or "REG_IS" or "BILAN" or "LIASSEFISCALE" or "ETATSFISCAUX" or "DTS" or "PV_AGO" or "DEPOT_RC" or "EG"
                 => RefCodes.Frequence.Annuelle,
@@ -2415,7 +2863,7 @@ public class CommercialService : ICommercialService
         switch (sc.TypeService?.ToUpperInvariant())
         {
             case "TVA":
-                sc.JourLimiteDeclaration = 30; // 30th of following month (SIMPL)
+                sc.JourLimiteDeclaration = 26; // working deadline: 26th of following month
                 sc.DelaiDeclarationMois = 1;
                 break;
             case "IR_SAL":

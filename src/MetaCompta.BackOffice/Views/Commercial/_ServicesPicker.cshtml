@@ -1,21 +1,70 @@
+@using MetaCompta.Domain.Common
+@using System.Text.Json
 @{
     var typeServiceItems = (ViewData["typeServiceItems"] as List<ReferenceDataDto>) ?? new();
-    var checkedServices  = (ViewData["checkedServices"]  as List<ContratServiceActiveLine>) ?? new();
-    var prefix           = (ViewData["prefix"]           as string) ?? "svc";
-    var allServicesJson  = System.Text.Json.JsonSerializer.Serialize(
-        typeServiceItems.Select(s => new { code = s.Code, label = s.Label }).ToList()
+    var checkedServices = (ViewData["checkedServices"] as List<ContratServiceActiveLine>) ?? new();
+    var prefix = (ViewData["prefix"] as string) ?? "svc";
+    var groups = (ViewData["ServiceGroups"] as IReadOnlyList<ContractServiceGroups.ContractServiceGroup>)
+        ?? ContractServiceGroups.All;
+
+    var refPairs = typeServiceItems.Select(s => (s.Code, s.Label)).ToList();
+    var groupsJson = JsonSerializer.Serialize(groups.Select(g => new
+    {
+        id = g.GroupId,
+        title = g.Title,
+        shortTitle = g.ShortTitle,
+        reference = g.ReferenceNote,
+        color = g.Color,
+        codes = g.AttachedTypeServiceCodes.Select(c => new
+        {
+            code = c,
+            label = ContractServiceGroups.LabelForCode(c, refPairs)
+        }).ToList(),
+        info = g.InfoItems.Select(i => new
+        {
+            n = i.Number,
+            label = i.Label,
+            period = i.Periodicite
+        }).ToList()
+    }));
+    var checkedCodesJson = JsonSerializer.Serialize(
+        checkedServices.Select(s => s.TypeService ?? "").Where(c => !string.IsNullOrWhiteSpace(c)).ToList()
     );
-    var checkedCodesJson = System.Text.Json.JsonSerializer.Serialize(
-        checkedServices.Select(s => s.TypeService ?? "").ToList()
+    // Always camelCase so JS (wfMeta / renderWfAffectation) can read stepOrder / assignedToUserIds.
+    var checkedMetaJson = JsonSerializer.Serialize(
+        checkedServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.TypeService))
+            .Select(s => new
+            {
+                code = s.TypeService,
+                workflowTemplateId = s.WorkflowTemplateId,
+                primaryAssigneeUserId = s.PrimaryAssigneeUserId,
+                stepAssignments = (s.StepAssignments ?? new List<ContratWorkflowStepAssignmentDto>())
+                    .Select(st => new
+                    {
+                        stepOrder = st.StepOrder,
+                        assignedToUserId = st.AssignedToUserId,
+                        assignedToUserIds = st.AssignedToUserIds
+                            ?? (string.IsNullOrWhiteSpace(st.AssignedToUserId)
+                                ? new List<string>()
+                                : new List<string> { st.AssignedToUserId! }),
+                        assignedToRoleNames = st.AssignedToRoleNames ?? new List<string>()
+                    })
+                    .ToList()
+            })
+            .ToList()
     );
 }
 
-<div id="@(prefix)Picker">
+<div id="@(prefix)Picker" class="svc-picker">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <span class="badge rounded-pill bg-dark text-white px-3 py-2" id="@(prefix)CountBadge">0 sélectionné(s)</span>
+        <div>
+            <span class="badge rounded-pill bg-dark text-white px-3 py-2" id="@(prefix)CountBadge">0 pack</span>
+            <span class="small text-body-secondary ms-2">Cochez les packs métier du contrat.</span>
+        </div>
         <div class="btn-group">
-            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="spcSelectAll_@(prefix)()">Tout</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="spcClearAll_@(prefix)()">Effacer</button>
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="spcProposeAll_@(prefix)()">Tout cocher</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="spcClearAll_@(prefix)()">Tout décocher</button>
         </div>
     </div>
     <div class="vstack gap-3" id="@(prefix)Families"></div>
@@ -25,57 +74,77 @@
 <script>
 (function () {
     var pfx = '@prefix';
-    var ALL_SERVICES  = @Html.Raw(allServicesJson);
+    var GROUPS = @Html.Raw(groupsJson);
     var CHECKED_CODES = @Html.Raw(checkedCodesJson);
-    var COLORS = ['primary','info','warning','success','danger'];
+    var CHECKED_META = @Html.Raw(checkedMetaJson);
 
-    var FAMILIES = [
-        { id: 'compta', title: 'Tenue comptable & États financiers',
-          items: ['COMPTABILITE','TRESORERIE','BILAN','ETATSFISCAUX','LIASSEFISCALE','EG'] },
-        { id: 'fiscale', title: 'Déclarations fiscales (DGI / SIMPL)',
-          items: ['TVA','IR_SAL','RAS_FONC','RAS_DIV','DRF','CM'] },
-        { id: 'acomptes', title: 'Acomptes IS & Solde',
-          items: ['ACOMPTES','REG_IS'] },
-        { id: 'sociale', title: 'Social (CNSS / Damancom) & Paie',
-          items: ['CNSS','DTS','PAIE'] },
-        { id: 'juridique', title: 'Secrétariat juridique annuel',
-          items: ['PV_AGO','DEPOT_RC'] }
-    ];
+    var checkedCodes = new Set();
+    CHECKED_CODES.forEach(function (c) { if (c) checkedCodes.add(String(c).toUpperCase()); });
 
-    var FALLBACK = {
-        PAIE: 'Bulletins de paie & traitement de la paie',
-        DEPOT_RC: 'Dépôt des comptes au greffe',
-        COMPTABILITE: 'Tenue comptable, saisie & rapprochements',
-        TRESORERIE: 'Trésorerie & rapprochements bancaires',
-        BILAN: 'Bilan, CPC & états de synthèse',
-        ETATSFISCAUX: 'États fiscaux (CPC, ESG, TFT)',
-        LIASSEFISCALE: 'Liasse fiscale',
-        EG: 'E.G – État Descriptif du Gasoil',
-        TVA: 'TVA – Taxe sur la Valeur Ajoutée',
-        IR_SAL: 'IR / Salaires – Retenue à la source',
-        RAS_FONC: 'RAS / Foncier', RAS_DIV: 'RAS / Dividendes',
-        DRF: 'D.R.F – Déclaration du Résultat Fiscal',
-        CM: 'CM – Cotisation Minimale',
-        ACOMPTES: 'Acomptes IS (trimestriels)', REG_IS: 'Régularisation / Solde IS',
-        CNSS: 'CNSS – Déclarations Damancom', DTS: 'D.T.S / État 9421',
-        PV_AGO: 'PV AGO & Rapport de gestion'
-    };
+    // Optional WF meta restored on edit (code -> { templateId, assigneeId, stepAssignments })
+    var wfMeta = {};
+    (CHECKED_META || []).forEach(function (m) {
+        if (!m || !m.code) return;
+        var steps = (m.stepAssignments || m.StepAssignments || []).map(function (st) {
+            if (!st) return null;
+            var users = st.assignedToUserIds || st.AssignedToUserIds || [];
+            if ((!users || !users.length) && (st.assignedToUserId || st.AssignedToUserId)) {
+                users = [st.assignedToUserId || st.AssignedToUserId];
+            }
+            return {
+                stepOrder: st.stepOrder != null ? st.stepOrder : st.StepOrder,
+                assignedToUserIds: users,
+                assignedToRoleNames: st.assignedToRoleNames || st.AssignedToRoleNames || []
+            };
+        }).filter(Boolean);
+        wfMeta[String(m.code).toUpperCase()] = {
+            workflowTemplateId: m.workflowTemplateId || m.WorkflowTemplateId || null,
+            primaryAssigneeUserId: m.primaryAssigneeUserId || m.PrimaryAssigneeUserId || null,
+            stepAssignments: steps
+        };
+    });
 
-    var checked = new Set();
-    CHECKED_CODES.forEach(function (c) { if (c) checked.add(String(c).toUpperCase()); });
-
-    function labelFor(code) {
-        var cu = (code || '').toUpperCase();
-        var found = ALL_SERVICES.find(function (s) { return (s.code || '').toUpperCase() === cu; });
-        return (found && found.label) ? found.label : (FALLBACK[cu] || cu);
-    }
     function esc(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+
+    function codeKey(c) { return String(c || '').toUpperCase(); }
+
+    function groupSelectedCount(g) {
+        return (g.codes || []).filter(function (x) { return checkedCodes.has(codeKey(x.code)); }).length;
+    }
+
+    function isGroupOn(g) {
+        var total = (g.codes || []).length;
+        if (total === 0) return false;
+        return groupSelectedCount(g) === total;
+    }
+
+    function selectedPackCount() {
+        return GROUPS.filter(isGroupOn).length;
+    }
+
     function updateBadge() {
-        var n = checked.size;
+        var n = selectedPackCount();
         var b = document.getElementById(pfx + 'CountBadge');
-        if (b) b.textContent = n + (n <= 1 ? ' sélectionné' : ' sélectionnés');
+        if (b) b.textContent = n + (n <= 1 ? ' pack' : ' packs');
+    }
+
+    function proposeGroup(g) {
+        (g.codes || []).forEach(function (x) { checkedCodes.add(codeKey(x.code)); });
+    }
+
+    function clearGroup(g) {
+        (g.codes || []).forEach(function (x) { checkedCodes.delete(codeKey(x.code)); });
+    }
+
+    function notifyChange() {
+        updateBadge();
+        try {
+            document.dispatchEvent(new CustomEvent('svc-picker-change', {
+                detail: { prefix: pfx, selection: window['spcGetSelection_' + pfx]() }
+            }));
+        } catch (e) { /* ignore */ }
     }
 
     function render() {
@@ -83,85 +152,152 @@
         if (!root) return;
         root.innerHTML = '';
 
-        FAMILIES.forEach(function (fam, idx) {
-            var color = COLORS[idx % COLORS.length];
-            var selectedInFam = fam.items.filter(function (code) {
-                return checked.has(String(code).toUpperCase());
-            }).length;
+        GROUPS.forEach(function (g) {
+            var total = (g.codes || []).length;
+            var on = isGroupOn(g);
+            var color = g.color || 'primary';
+            var infoId = pfx + '_info_' + g.id;
 
             var card = document.createElement('div');
-            card.className = 'card border-0 shadow-sm rounded-4 border-start border-4 border-' + color;
+            card.className = 'svc-group card border-0 shadow-sm rounded-4 border-start border-4 border-' + color
+                + (on ? ' bg-' + color + '-subtle bg-opacity-25' : '');
+            card.setAttribute('data-group-id', g.id);
 
             var head = document.createElement('div');
-            head.className = 'card-header bg-white border-0 py-3 d-flex flex-wrap align-items-center gap-2 rounded-top-4';
-            head.innerHTML =
-                '<span class="badge rounded-pill bg-' + color + '-subtle text-' + color + '-emphasis px-3 py-2">' + esc(fam.title) + '</span>' +
-                '<span class="small text-body-secondary fam-count">' + selectedInFam + '/' + fam.items.length + '</span>' +
-                '<div class="ms-auto btn-group btn-group-sm">' +
-                '<button type="button" class="btn btn-outline-' + color + ' rounded-pill" data-act="all">Tout</button>' +
-                '<button type="button" class="btn btn-outline-secondary rounded-pill" data-act="none">Aucun</button></div>';
+            head.className = 'card-body py-3 px-3';
 
-            head.querySelector('[data-act=all]').addEventListener('click', function () {
-                fam.items.forEach(function (code) { checked.add(String(code).toUpperCase()); });
+            var top = document.createElement('div');
+            top.className = 'd-flex flex-wrap align-items-start justify-content-between gap-2';
+
+            var checkId = pfx + '_pack_' + g.id;
+            var checkWrap = document.createElement('div');
+            checkWrap.className = 'form-check form-check-lg m-0 flex-shrink-0 pt-1';
+
+            var chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'form-check-input border-' + color;
+            chk.id = checkId;
+            chk.checked = on;
+            chk.addEventListener('change', function () {
+                if (chk.checked) proposeGroup(g); else clearGroup(g);
                 render();
             });
-            head.querySelector('[data-act=none]').addEventListener('click', function () {
-                fam.items.forEach(function (code) { checked.delete(String(code).toUpperCase()); });
-                render();
-            });
 
-            var body = document.createElement('div');
-            body.className = 'card-body pt-0';
-            var list = document.createElement('div');
-            list.className = 'list-group list-group-flush rounded-3 border';
+            var checkLabel = document.createElement('label');
+            checkLabel.className = 'form-check-label visually-hidden';
+            checkLabel.setAttribute('for', checkId);
+            checkLabel.textContent = 'Inclure ' + (g.shortTitle || g.id);
+            checkWrap.appendChild(chk);
+            checkWrap.appendChild(checkLabel);
 
-            fam.items.forEach(function (raw) {
-                var code = String(raw).toUpperCase();
-                var on = checked.has(code);
-                var uid = pfx + '_' + fam.id + '_' + code;
-                var row = document.createElement('label');
-                row.className = 'list-group-item list-group-item-action d-flex align-items-start gap-3 py-3' + (on ? ' bg-' + color + '-subtle' : '');
-                row.setAttribute('for', uid);
-                row.innerHTML =
-                    '<input class="form-check-input mt-1 flex-shrink-0" type="checkbox" id="' + uid + '" data-code="' + esc(code) + '"' + (on ? ' checked' : '') + '>' +
-                    '<span class="flex-grow-1">' +
-                    '<span class="badge rounded-pill text-bg-light border me-2">' + esc(code) + '</span>' +
-                    '<span>' + esc(labelFor(code)) + '</span></span>';
-                var cb = row.querySelector('input');
-                cb.addEventListener('change', function () {
-                    if (cb.checked) checked.add(code); else checked.delete(code);
-                    updateBadge();
-                    row.classList.toggle('bg-' + color + '-subtle', cb.checked);
-                    var n = fam.items.filter(function (c) { return checked.has(String(c).toUpperCase()); }).length;
-                    var countEl = head.querySelector('.fam-count');
-                    if (countEl) countEl.textContent = n + '/' + fam.items.length;
-                });
-                list.appendChild(row);
-            });
+            var titleBlock = document.createElement('label');
+            titleBlock.className = 'flex-grow-1 mb-0';
+            titleBlock.setAttribute('for', checkId);
+            titleBlock.style.cursor = 'pointer';
+            titleBlock.innerHTML =
+                '<div class="fw-semibold">' + esc(g.title) + '</div>' +
+                '<div class="small text-body-secondary mt-1">' +
+                '<span class="badge rounded-pill bg-' + color + '-subtle text-' + color + '-emphasis border me-1">' +
+                (on ? 'Inclus' : 'Non inclus') + '</span>' +
+                ((g.info || []).length) + ' formalité(s) catalogue</div>';
 
-            body.appendChild(list);
+            var actions = document.createElement('div');
+            actions.className = 'd-flex flex-wrap align-items-center gap-1';
+
+            var infoBtn = document.createElement('button');
+            infoBtn.type = 'button';
+            infoBtn.className = 'btn btn-sm btn-outline-' + color + ' rounded-circle';
+            infoBtn.title = 'Voir le catalogue des formalités';
+            infoBtn.setAttribute('data-bs-toggle', 'collapse');
+            infoBtn.setAttribute('data-bs-target', '#' + infoId);
+            infoBtn.setAttribute('aria-expanded', 'false');
+            infoBtn.innerHTML = '<i class="bi bi-info-lg"></i>';
+            infoBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
+
+            actions.appendChild(infoBtn);
+            top.appendChild(checkWrap);
+            top.appendChild(titleBlock);
+            top.appendChild(actions);
+            head.appendChild(top);
             card.appendChild(head);
-            card.appendChild(body);
+
+            var collapse = document.createElement('div');
+            collapse.className = 'collapse';
+            collapse.id = infoId;
+            var body = document.createElement('div');
+            body.className = 'card-body pt-0 border-top';
+
+            if (g.info && g.info.length) {
+                var table = document.createElement('div');
+                table.className = 'table-responsive';
+                var html = '<table class="table table-sm align-middle mb-2" style="font-size:0.82rem;">' +
+                    '<thead class="table-light"><tr><th style="width:3rem;">N°</th><th>Déclaration / formalité</th><th>Périodicité ou événement</th></tr></thead><tbody>';
+                g.info.forEach(function (row) {
+                    html += '<tr><td class="text-body-secondary">' + esc(row.n) + '</td><td>' + esc(row.label) +
+                        '</td><td class="text-body-secondary">' + esc(row.period) + '</td></tr>';
+                });
+                html += '</tbody></table>';
+                table.innerHTML = html;
+                body.appendChild(table);
+            }
+
+            var note = document.createElement('div');
+            note.className = 'small text-body-secondary fst-italic';
+            note.textContent = g.reference || '';
+            body.appendChild(note);
+
+            collapse.appendChild(body);
+            card.appendChild(collapse);
             root.appendChild(card);
         });
-        updateBadge();
+        notifyChange();
     }
 
-    window['spcSelectAll_' + pfx] = function () {
-        FAMILIES.forEach(function (f) { f.items.forEach(function (code) { checked.add(String(code).toUpperCase()); }); });
+    window['spcProposeAll_' + pfx] = function () {
+        GROUPS.forEach(proposeGroup);
         render();
     };
-    window['spcClearAll_' + pfx] = function () { checked.clear(); render(); };
+    window['spcSelectAll_' + pfx] = window['spcProposeAll_' + pfx];
+    window['spcClearAll_' + pfx] = function () {
+        checkedCodes.clear();
+        render();
+    };
+    window['spcGetCodes_' + pfx] = function () {
+        var list = [];
+        var emitted = new Set();
+        GROUPS.forEach(function (g) {
+            (g.codes || []).forEach(function (x) {
+                var code = codeKey(x.code);
+                if (!checkedCodes.has(code) || emitted.has(code)) return;
+                emitted.add(code);
+                list.push({ code: code, label: x.label || code, group: g.shortTitle || g.id, groupId: g.id });
+            });
+        });
+        return list;
+    };
+    window['spcGetWfMeta_' + pfx] = function () { return wfMeta; };
+    window['spcSetWfMeta_' + pfx] = function (code, templateId, assigneeId, stepAssignments) {
+        var k = codeKey(code);
+        var prev = wfMeta[k] || {};
+        wfMeta[k] = {
+            workflowTemplateId: templateId || null,
+            primaryAssigneeUserId: assigneeId || null,
+            stepAssignments: stepAssignments != null ? stepAssignments : (prev.stepAssignments || [])
+        };
+    };
     window['spcSerialize_' + pfx] = function () {
         var hid = document.getElementById(pfx + 'Hidden');
         if (!hid) return;
         hid.innerHTML = '';
         var idx = 0;
-        FAMILIES.forEach(function (fam) {
-            fam.items.forEach(function (raw) {
-                var code = String(raw).toUpperCase();
-                if (!checked.has(code)) return;
+        var emitted = new Set();
+        GROUPS.forEach(function (g) {
+            (g.codes || []).forEach(function (x) {
+                var code = codeKey(x.code);
+                if (!checkedCodes.has(code) || emitted.has(code)) return;
+                emitted.add(code);
                 function h(name, val) {
+                    if (val === null || val === undefined || val === '') return;
                     var inp = document.createElement('input');
                     inp.type = 'hidden';
                     inp.name = 'ServicesActives[' + idx + '].' + name;
@@ -169,11 +305,37 @@
                     hid.appendChild(inp);
                 }
                 h('TypeService', code);
-                h('LibelleService', labelFor(code));
+                h('LibelleService', x.label || code);
                 h('AutoGenererDeclarations', 'true');
+                var meta = wfMeta[code];
+                if (meta) {
+                    if (meta.workflowTemplateId) h('WorkflowTemplateId', String(meta.workflowTemplateId));
+                    if (meta.primaryAssigneeUserId) h('PrimaryAssigneeUserId', String(meta.primaryAssigneeUserId));
+                    (meta.stepAssignments || []).forEach(function (st, si) {
+                        if (!st || st.stepOrder == null) return;
+                        h('StepAssignments[' + si + '].StepOrder', String(st.stepOrder));
+                        (st.assignedToUserIds || []).forEach(function (uid, ui) {
+                            h('StepAssignments[' + si + '].AssignedToUserIds[' + ui + ']', uid);
+                        });
+                        (st.assignedToRoleNames || []).forEach(function (rn, ri) {
+                            h('StepAssignments[' + si + '].AssignedToRoleNames[' + ri + ']', rn);
+                        });
+                    });
+                }
                 idx++;
             });
         });
+    };
+    window['spcGetSelection_' + pfx] = function () {
+        var domains = [];
+        var seen = new Set();
+        GROUPS.forEach(function (g) {
+            if (isGroupOn(g) && !seen.has(g.id)) {
+                seen.add(g.id);
+                domains.push(g.shortTitle || g.id);
+            }
+        });
+        return { count: checkedCodes.size, packs: selectedPackCount(), domains: domains, codes: window['spcGetCodes_' + pfx]() };
     };
 
     render();

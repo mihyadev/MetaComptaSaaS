@@ -1,0 +1,162 @@
+@model MetaCompta.Application.DTOs.DomiciliationClientWorkspaceDto
+@{
+    ViewData["Title"] = Model.RaisonSociale + " — Domiciliation";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index")">Domiciliation</a></li>
+                <li class="breadcrumb-item active">@Model.RaisonSociale</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold mb-0">@Model.RaisonSociale</h4>
+        <small class="text-muted">@Model.PendingActions en cours · @Model.OverdueActions en retard</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <form asp-controller="Workflow" asp-action="StartWorkflow" method="post" class="d-inline"
+              onsubmit="return confirm('Démarrer le workflow Domiciliation pour ce client ?\nUn collaborateur prendra la 1ère étape (ouverture du dossier).');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="ClientId" value="@Model.ClientId" />
+            <input type="hidden" name="DeclarationType" value="Domiciliation" />
+            <button type="submit" class="btn btn-success rounded-pill">
+                <i class="bi bi-play-fill me-1"></i>Démarrer le workflow
+            </button>
+        </form>
+        <a class="btn btn-outline-secondary rounded-pill" href="@Url.Action("Details", "Clients", new { id = Model.ClientId, tab = "workflow" })">
+            <i class="bi bi-diagram-3 me-1"></i>Voir étapes / acteurs
+        </a>
+        <a class="btn btn-outline-primary rounded-pill" href="@Url.Action("RequestDocument", new { clientId = Model.ClientId })">+ Demander</a>
+        <a class="btn btn-primary rounded-pill" href="@Url.Action("Receive", new { clientId = Model.ClientId })">+ Recevoir</a>
+    </div>
+</div>
+<div class="alert alert-light border rounded-4 mb-3 py-2 px-3" style="font-size:0.85rem;">
+    <i class="bi bi-info-circle text-primary me-1"></i>
+    Contrairement aux déclarations (création système), le dossier domiciliation est <strong>ouvert par un employé du cabinet</strong>.
+    Assignez les collaborateurs dans le Builder, puis cliquez <strong>Démarrer le workflow</strong>.
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-transparent border-0 pt-3 px-4 fw-bold">Courriers entrants</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table mb-0 align-middle">
+                        <thead class="table-light"><tr><th>Date</th><th>Expéditeur</th><th>Type</th><th>Statut</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var c in Model.Courriers)
+                        {
+                            var cLabel = MetaCompta.Domain.Common.RefCodes.StatutCourrierDomiciliation.Label(c.Statut);
+                            var cColor = MetaCompta.Domain.Common.RefCodes.StatutCourrierDomiciliation.Color(c.Statut);
+                            <tr>
+                                <td>@c.DateReception.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                                <td>@(c.Expediteur ?? "—")</td>
+                                <td>@c.TypeCourrier</td>
+                                <td><span class="badge rounded-pill" style="background:@(cColor)18;color:@cColor;">@cLabel</span></td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-primary rounded-pill" href="@Url.Action("Courrier", new { id = c.Id })">
+                                        <i class="bi bi-arrow-right-circle me-1"></i>Traiter
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Courriers.Any())
+                        {
+                            <tr><td colspan="5" class="text-muted text-center py-4">Aucun courrier.</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-3 px-4 fw-bold">Demandes de documents</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table mb-0 align-middle">
+                        <thead class="table-light"><tr><th>Type</th><th>Statut</th><th>Échéance</th><th>Versions</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach (var d in Model.DemandesDocuments)
+                        {
+                            <tr>
+                                <td>@d.DocumentType</td>
+                                <td><span class="badge bg-info-subtle text-info">@MetaCompta.Domain.Common.RefCodes.StatutDemandeDocumentDomiciliation.Label(d.Statut)</span>
+                                    @if (!string.IsNullOrEmpty(d.RejectionReasonCode))
+                                    {
+                                        <div class="small text-danger">@d.RejectionReasonCode</div>
+                                    }
+                                </td>
+                                <td>@(d.DateEcheance?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td>@d.Versions.Count</td>
+                                <td class="text-end">
+                                    @if (d.Statut is "UnderReview" or "Uploaded")
+                                    {
+                                        <form asp-action="ReviewDocument" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@d.Id" />
+                                            <input type="hidden" name="clientId" value="@Model.ClientId" />
+                                            <input type="hidden" name="Approve" value="true" />
+                                            <button class="btn btn-sm btn-success rounded-pill">Valider</button>
+                                        </form>
+                                        <button class="btn btn-sm btn-outline-danger rounded-pill" type="button"
+                                                onclick="document.getElementById('rej-@d.Id').classList.toggle('d-none')">Rejeter</button>
+                                        <form asp-action="ReviewDocument" method="post" id="rej-@d.Id" class="d-none mt-2 text-start">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@d.Id" />
+                                            <input type="hidden" name="clientId" value="@Model.ClientId" />
+                                            <input type="hidden" name="Approve" value="false" />
+                                            <select name="RejectionReasonCode" class="form-select form-select-sm mb-1" required>
+                                                <option value="Expired">Expiré</option>
+                                                <option value="WrongDocument">Mauvais document</option>
+                                                <option value="MissingPage">Page manquante</option>
+                                                <option value="Unreadable">Illisible</option>
+                                                <option value="InformationMismatch">Incohérence</option>
+                                                <option value="Other">Autre</option>
+                                            </select>
+                                            <input name="RejectionReasonText" class="form-control form-control-sm mb-1" placeholder="Précision" />
+                                            <button class="btn btn-sm btn-danger">Confirmer rejet</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.DemandesDocuments.Any())
+                        {
+                            <tr><td colspan="5" class="text-muted text-center py-4">Aucune demande.</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-transparent border-0 pt-3 px-4 fw-bold">Timeline</div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                @foreach (var t in Model.Timeline)
+                {
+                    <li class="mb-3 pb-3 border-bottom">
+                        <div class="small text-muted">@t.At.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · @(t.UserName ?? "—")</div>
+                        <div class="fw-semibold">@t.Action</div>
+                        <div class="small">@(t.PreviousStatus ?? "—") → @(t.NewStatus ?? "—")</div>
+                        @if (!string.IsNullOrEmpty(t.Note))
+                        {
+                            <div class="small text-muted">@t.Note</div>
+                        }
+                    </li>
+                }
+                @if (!Model.Timeline.Any())
+                {
+                    <li class="text-muted">Aucune activité.</li>
+                }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

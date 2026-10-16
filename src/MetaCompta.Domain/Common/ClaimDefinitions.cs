@@ -93,6 +93,13 @@ public static class ClaimDefinitions
     public const string JuridiqueEdit = "juridique.edit";
     public const string JuridiqueDetail = "juridique.detail";
 
+    // ── Domiciliation ────────────────────────────────────────────
+    public const string DomiciliationView = "domiciliation.view";
+    public const string DomiciliationReceive = "domiciliation.receive";
+    public const string DomiciliationProcess = "domiciliation.process";
+    public const string DomiciliationRequest = "domiciliation.request";
+    public const string DomiciliationNotify = "domiciliation.notify";
+
     // ── Comptabilite ─────────────────────────────────────────────
     public const string ComptabiliteCreate = "comptabilite.create";
     public const string ComptabiliteEdit = "comptabilite.edit";
@@ -158,6 +165,7 @@ public static class ClaimDefinitions
         TaskCreate, TaskEdit, TaskAssign, TaskDetail,
         ReportView, ReportExport,
         JuridiqueCreate, JuridiqueEdit, JuridiqueDetail,
+        DomiciliationView, DomiciliationReceive, DomiciliationProcess, DomiciliationRequest, DomiciliationNotify,
         ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail, ComptabiliteCloture,
         WorkflowView, WorkflowCreate, WorkflowEdit, WorkflowDelete, WorkflowConfigure,
         WorkflowAdvance, WorkflowValidate, WorkflowReassign, WorkflowCancel, WorkflowMonitor,
@@ -185,6 +193,7 @@ public static class ClaimDefinitions
         ["task"] = new[] { TaskCreate, TaskEdit, TaskAssign, TaskDetail },
         ["report"] = new[] { ReportView, ReportExport },
         ["juridique"] = new[] { JuridiqueCreate, JuridiqueEdit, JuridiqueDetail },
+        ["domiciliation"] = new[] { DomiciliationView, DomiciliationReceive, DomiciliationProcess, DomiciliationRequest, DomiciliationNotify },
         ["comptabilite"] = new[] { ComptabiliteCreate, ComptabiliteEdit, ComptabiliteDetail, ComptabiliteCloture },
         ["workflow"] = new[] { WorkflowView, WorkflowCreate, WorkflowEdit, WorkflowDelete, WorkflowConfigure, WorkflowAdvance, WorkflowValidate, WorkflowReassign, WorkflowCancel, WorkflowMonitor },
         ["department"] = new[] { DepartmentView, DepartmentCreate, DepartmentEdit, DepartmentDelete, DepartmentManageMembers },

@@ -52,10 +52,11 @@ public class ClientsController : BaseController
     }
 
     [RequirePermission(ClaimDefinitions.ClientDetail)]
-    public async Task<IActionResult> Details(int id)
+    public async Task<IActionResult> Details(int id, string? tab = null)
     {
         try
         {
+            ViewBag.ActiveTab = tab;
             var client = await _clients.GetByIdAsync(id);
             if (client == null)
             {
@@ -242,6 +243,49 @@ public class ClientsController : BaseController
         return View(new ClientCreateDto());
     }
 
+    /// <summary>
+    /// Parse a DGI BNIF PDF (Bulletin de Notification du N° d'Identification Fiscale)
+    /// and return fields to prefill Nouveau client. Does not create the client.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.ClientCreate)]
+    [RequestSizeLimit(12_000_000)]
+    public async Task<IActionResult> ParseBnif(IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+            return Json(new { success = false, message = "Sélectionnez un fichier PDF BNIF." });
+
+        var ext = Path.GetExtension(file.FileName);
+        if (!string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(file.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json(new { success = false, message = "Le document doit être un PDF (BNIF DGI)." });
+        }
+
+        if (file.Length > 10_000_000)
+            return Json(new { success = false, message = "Fichier trop volumineux (max. 10 Mo)." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var parsed = BnifPdfParser.Parse(stream, file.FileName);
+            return Json(new
+            {
+                success = parsed.FilledFields.Count > 0,
+                message = parsed.FilledFields.Count > 0
+                    ? $"BNIF lu — {parsed.FilledFields.Count} champ(s) proposés. Vérifiez puis enregistrez."
+                    : "Impossible d'extraire les données du BNIF.",
+                data = parsed,
+                warnings = parsed.Warnings
+            });
+        }
+        catch (Exception)
+        {
+            return Json(new { success = false, message = "Lecture du PDF impossible. Vérifiez qu'il s'agit d'un BNIF DGI valide." });
+        }
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequirePermission(ClaimDefinitions.ClientCreate)]
@@ -258,7 +302,7 @@ public class ClientsController : BaseController
             TempData["Success"] = result.Message;
             return RedirectToAction("Index");
         }
-        SetApiError(result, "Erreur lors de la création du client.");
+        ApplyApiErrorsToModelState(result, "Impossible de créer le client. Corrigez les erreurs ci-dessous.");
         await LoadReferenceDataToViewBagAsync(ClientRefCategories);
         return View(dto);
     }
@@ -326,7 +370,7 @@ public class ClientsController : BaseController
             TempData["Success"] = result.Message;
             return RedirectToAction("Details", new { id });
         }
-        SetApiError(result, "Erreur lors de la mise à jour du client.");
+        ApplyApiErrorsToModelState(result, "Impossible de modifier le client. Corrigez les erreurs ci-dessous.");
         ViewBag.ClientId = id;
         await LoadReferenceDataToViewBagAsync(ClientRefCategories);
         return View(dto);
@@ -361,6 +405,18 @@ public class ClientsController : BaseController
                 HttpContext.Session.SetString("SelectedClientName", client.RaisonSociale);
                 // Enter dossier-client workspace mode (dynamic client menu)
                 HttpContext.Session.SetString("WorkspaceMode", "Client");
+
+                var pendingDomain = HomeController.NormalizeDomain(
+                    HttpContext.Session.GetString("PendingWorkspaceDomain")
+                    ?? HttpContext.Session.GetString("WorkspaceDomain"));
+                if (pendingDomain != null)
+                {
+                    HttpContext.Session.SetString("WorkspaceDomain", pendingDomain);
+                    HttpContext.Session.Remove("PendingWorkspaceDomain");
+                }
+                var redirectUrl = pendingDomain != null
+                    ? HomeController.DomainLandingUrl(pendingDomain)
+                    : Url.Action("Index", "Declarations");
 
                 // Auto-pick exercice first, then scope ActiveServices to that exercice
                 object? exercicePayload = null;
@@ -402,6 +458,8 @@ public class ClientsController : BaseController
                     hasActiveContract = access.AllowsManage,
                     contractAccessMode = access.Mode,
                     contractAccessReason = access.Reason,
+                    workspaceDomain = pendingDomain,
+                    redirectUrl,
                     exercice = exercicePayload
                 });
             }
@@ -415,8 +473,10 @@ public class ClientsController : BaseController
         HttpContext.Session.Remove("ContractAccessReason");
         HttpContext.Session.Remove("ContractAccessReasonLabel");
         HttpContext.Session.Remove("WorkspaceMode");
+        HttpContext.Session.Remove("WorkspaceDomain");
+        HttpContext.Session.Remove("PendingWorkspaceDomain");
         ClearExerciceSession();
-        return Json(new { success = true, clientName = (string?)null, clientId = (int?)null, activeServices = new List<string>(), hasActiveContract = false, redirectToWorkspace = true });
+        return Json(new { success = true, clientName = (string?)null, clientId = (int?)null, activeServices = new List<string>(), hasActiveContract = false, redirectToWorkspace = true, redirectUrl = Url.Action("Workspace", "Home") });
     }
 
     /// <summary>
@@ -487,28 +547,40 @@ public class ClientsController : BaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequirePermission(ClaimDefinitions.UserManage)]
-    public async Task<IActionResult> CreateClientUser(int clientId, string email, string password, string firstName, string lastName, string? telephone)
+    [RequirePermission(ClaimDefinitions.UserManage, ClaimDefinitions.ClientEdit)]
+    public async Task<IActionResult> CreateClientUser(int clientId, string email, string firstName, string lastName, string? telephone)
     {
         var dto = new ClientUserCreateDto
         {
             Email = email,
-            Password = password,
             FirstName = firstName,
             LastName = lastName,
             Telephone = telephone
         };
         var result = await _clients.CreateClientUserAsync(clientId, dto);
         if (result?.Success == true)
-            TempData["Success"] = result.Message;
+            TempData["Success"] = result.Message ?? "Invitation envoyée. L'utilisateur recevra un email pour activer son compte.";
         else
-            TempData["Error"] = result?.Message ?? "Erreur lors de la création de l'utilisateur.";
-        return RedirectToAction("Details", new { id = clientId });
+            TempData["Error"] = result?.Message ?? "Erreur lors de l'invitation.";
+        return RedirectToAction("Details", new { id = clientId, tab = "users" });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequirePermission(ClaimDefinitions.UserManage)]
+    [RequirePermission(ClaimDefinitions.UserManage, ClaimDefinitions.ClientEdit)]
+    public async Task<IActionResult> ResendClientUserActivation(int clientId, string userId)
+    {
+        var result = await _clients.ResendClientUserActivationAsync(clientId, userId);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Email d'activation renvoyé.";
+        else
+            TempData["Error"] = result?.Message ?? "Impossible de renvoyer l'invitation.";
+        return RedirectToAction("Details", new { id = clientId, tab = "users" });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.UserManage, ClaimDefinitions.ClientEdit)]
     public async Task<IActionResult> ToggleClientUser(int clientId, string userId)
     {
         var result = await _clients.ToggleClientUserActiveAsync(clientId, userId);

@@ -10,6 +10,7 @@ public class HomeControllerTests
     private readonly Mock<IReferenceDataFacade> _mockRefData;
     private readonly Mock<IHttpContextAccessor> _mockAccessor;
     private readonly Mock<IDashboardFacade> _mockDashboard;
+    private readonly Mock<IComptabiliteFacade> _mockCompta;
     private readonly HomeController _controller;
 
     public HomeControllerTests()
@@ -17,8 +18,11 @@ public class HomeControllerTests
         _mockRefData = ControllerTestHelper.CreateMockReferenceData();
         _mockAccessor = ControllerTestHelper.CreateMockContextAccessor();
         _mockDashboard = new Mock<IDashboardFacade>();
-        _controller = new HomeController(_mockRefData.Object, _mockAccessor.Object, _mockDashboard.Object);
-        ControllerTestHelper.SetupController(_controller);
+        _mockCompta = new Mock<IComptabiliteFacade>();
+        var mockConfig = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+        mockConfig.Setup(c => c["PortalUrls:Extranet"]).Returns("http://localhost:7102");
+        _controller = new HomeController(_mockRefData.Object, _mockAccessor.Object, _mockDashboard.Object, _mockCompta.Object, mockConfig.Object);
+        ControllerTestHelper.SetupController(_controller, sharedContext: _mockAccessor.Object.HttpContext);
     }
 
     [Fact]
