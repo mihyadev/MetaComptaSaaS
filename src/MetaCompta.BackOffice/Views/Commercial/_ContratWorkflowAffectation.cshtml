@@ -1,0 +1,311 @@
+@using System.Text.Json
+@{
+    var prefix = (ViewData["prefix"] as string) ?? "svc";
+    var employees = (ViewData["employees"] as List<CabinetEmployeeDto>)
+        ?? (ViewBag.Employees as List<CabinetEmployeeDto>)
+        ?? new List<CabinetEmployeeDto>();
+    var roles = (ViewData["cabinetRoles"] as List<RoleDto>)
+        ?? (ViewBag.CabinetRoles as List<RoleDto>)
+        ?? new List<RoleDto>();
+    var templates = (ViewData["workflowTemplates"] as List<WorkflowTemplateDto>)
+        ?? (ViewBag.WorkflowTemplates as List<WorkflowTemplateDto>)
+        ?? new List<WorkflowTemplateDto>();
+
+    var employeesJson = JsonSerializer.Serialize(
+        employees.Select(e => new { id = e.Id, name = e.NomComplet, role = e.Role }));
+    var rolesJson = JsonSerializer.Serialize(
+        roles.Where(r => !string.Equals(r.Name, "Client", StringComparison.OrdinalIgnoreCase))
+             .Select(r => new { name = r.Name }));
+    var templatesJson = JsonSerializer.Serialize(
+        templates.Select(t => new
+        {
+            id = t.Id,
+            name = t.Name,
+            declarationType = t.DeclarationType,
+            isDefault = t.IsDefault,
+            steps = (t.Steps ?? new List<WorkflowStepTemplateDto>())
+                .OrderBy(s => s.StepOrder)
+                .Select(s => new
+                {
+                    stepOrder = s.StepOrder,
+                    name = s.Name,
+                    stepType = s.StepType,
+                    assignmentType = s.AssignmentType,
+                    isClientStep = s.IsClientStep
+                        || string.Equals(s.AssignmentType, "Client", StringComparison.OrdinalIgnoreCase),
+                    isSystemStep = string.Equals(s.AssignmentType, "AutoSystem", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(s.StepType, "Initialisation", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(s.StepType, "DemandePieces", StringComparison.OrdinalIgnoreCase)
+                })
+        }));
+}
+
+<div class="contrat-wf-affect" data-prefix="@prefix">
+    <p class="small text-body-secondary mb-3">
+        Pour chaque déclaration du périmètre : modèle de workflow, puis acteurs par étape.
+        Les étapes <strong>Système</strong> (ex. ouverture TVA) et <strong>Client</strong> n’ont pas d’employé à choisir.
+        Les autres étapes acceptent un ou plusieurs employés et/ou profils.
+    </p>
+    @if (!templates.Any())
+    {
+        <div class="alert alert-warning py-2 small mb-3">
+            Aucun modèle de workflow cabinet trouvé.
+            Ouvrez <a asp-controller="Workflow" asp-action="Builder" class="alert-link">Workflow → Builder</a>
+            et lancez « Seed » pour créer les modèles, puis rechargez cette page.
+        </div>
+    }
+    <div class="wf-affect-empty text-body-secondary small py-3">
+        Cochez d’abord un pack dans le périmètre pour afficher les workflows à affecter.
+    </div>
+    <div class="wf-affect-list d-none"></div>
+</div>
+
+<script>
+(function () {
+    var pfx = @JsonSerializer.Serialize(prefix);
+    var WF_EMPLOYEES = @Html.Raw(employeesJson);
+    var WF_ROLES = @Html.Raw(rolesJson);
+    var WF_TEMPLATES = @Html.Raw(templatesJson);
+    var CODE_TO_DECL = {
+        'TVA': 'TVA', 'ACOMPTES': 'ACOMPTES', 'REG_IS': 'REG_IS', 'DRF': 'DRF', 'CM': 'CM',
+        'IR_SAL': 'IR_SAL', 'RAS_FONC': 'RAS_FONC', 'RAS_DIV': 'RAS_DIV', 'IR': 'IR',
+        'CNSS': 'CNSS', 'DTS': 'DTS', 'PAIE': 'Paie',
+        'DOMICILIATION': 'Domiciliation', 'COMPTABILITE': 'Comptabilite',
+        'PV_AGO': 'Juridique', 'DEPOT_RC': 'Juridique'
+    };
+
+    function root() {
+        return document.querySelector('.contrat-wf-affect[data-prefix="' + pfx + '"]');
+    }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function templatesForDecl(declType) {
+        var exact = WF_TEMPLATES.filter(function (t) {
+            return String(t.declarationType || '').toLowerCase() === String(declType || '').toLowerCase();
+        });
+        if (exact.length) return exact;
+        return WF_TEMPLATES.filter(function (t) {
+            return String(t.declarationType || '').toLowerCase() === 'all';
+        });
+    }
+    function pickDefaultTemplate(list, preferredId) {
+        if (preferredId) {
+            var hit = list.find(function (t) { return t.id === preferredId; });
+            if (hit) return hit.id;
+        }
+        var def = list.find(function (t) { return t.isDefault; });
+        return (def || list[0] || {}).id || '';
+    }
+    function findTemplate(id) {
+        return WF_TEMPLATES.find(function (t) { return t.id === id; }) || null;
+    }
+
+    function empOptions(selectedIds) {
+        selectedIds = selectedIds || [];
+        return WF_EMPLOYEES.map(function (e) {
+            var sel = selectedIds.indexOf(e.id) >= 0 || selectedIds.indexOf(String(e.id)) >= 0 ? ' selected' : '';
+            var label = e.name || e.id;
+            if (e.role) label += ' · ' + e.role;
+            return '<option value="' + esc(e.id) + '"' + sel + '>' + esc(label) + '</option>';
+        }).join('');
+    }
+    function roleOptions(selectedNames) {
+        selectedNames = selectedNames || [];
+        return WF_ROLES.map(function (r) {
+            var sel = selectedNames.indexOf(r.name) >= 0 ? ' selected' : '';
+            return '<option value="' + esc(r.name) + '"' + sel + '>' + esc(r.name) + '</option>';
+        }).join('');
+    }
+
+    function readCardMeta(card) {
+        var code = card.getAttribute('data-code');
+        var tpl = parseInt(card.querySelector('.wf-tpl')?.value || '', 10) || null;
+        var asg = card.querySelector('.wf-asg')?.value || null;
+        var steps = [];
+        card.querySelectorAll('.wf-step-row[data-order]').forEach(function (row) {
+            var order = parseInt(row.getAttribute('data-order'), 10);
+            if (isNaN(order)) return;
+            if (row.getAttribute('data-system') === '1' || row.getAttribute('data-client') === '1') {
+                steps.push({ stepOrder: order, assignedToUserIds: [], assignedToRoleNames: [] });
+                return;
+            }
+            var userSel = row.querySelector('.wf-step-users');
+            var roleSel = row.querySelector('.wf-step-roles');
+            var userIds = userSel ? Array.prototype.slice.call(userSel.selectedOptions).map(function (o) { return o.value; }) : [];
+            var roleNames = roleSel ? Array.prototype.slice.call(roleSel.selectedOptions).map(function (o) { return o.value; }) : [];
+            steps.push({ stepOrder: order, assignedToUserIds: userIds, assignedToRoleNames: roleNames });
+        });
+        return { code: code, workflowTemplateId: tpl, primaryAssigneeUserId: asg, stepAssignments: steps };
+    }
+
+    function syncCard(card) {
+        var setMeta = window['spcSetWfMeta_' + pfx];
+        if (typeof setMeta !== 'function') return;
+        var m = readCardMeta(card);
+        setMeta(m.code, m.workflowTemplateId, m.primaryAssigneeUserId, m.stepAssignments);
+    }
+
+    function normalizeStep(s) {
+        if (!s) return { stepOrder: 0, assignedToUserIds: [], assignedToRoleNames: [] };
+        var order = s.stepOrder != null ? s.stepOrder : s.StepOrder;
+        var users = s.assignedToUserIds || s.AssignedToUserIds || [];
+        if ((!users || !users.length) && (s.assignedToUserId || s.AssignedToUserId)) {
+            users = [s.assignedToUserId || s.AssignedToUserId];
+        }
+        var roles = s.assignedToRoleNames || s.AssignedToRoleNames || [];
+        return { stepOrder: order, assignedToUserIds: users, assignedToRoleNames: roles };
+    }
+
+    function renderStepsHtml(tpl, savedSteps) {
+        savedSteps = (savedSteps || []).map(normalizeStep);
+        var byOrder = {};
+        savedSteps.forEach(function (s) { byOrder[s.stepOrder] = s; });
+        var steps = (tpl && tpl.steps) ? tpl.steps : [];
+        if (!steps.length) {
+            return '<div class="small text-body-secondary px-2 py-1">Ce modèle n’a pas d’étapes.</div>';
+        }
+        return steps.map(function (st) {
+            var isSys = !!st.isSystemStep;
+            var isCli = !!st.isClientStep;
+            var saved = byOrder[st.stepOrder] || {};
+            var actorHtml;
+            if (isCli) {
+                actorHtml = '<span class="badge rounded-pill text-bg-info-subtle text-info-emphasis border">Client (extranet)</span>';
+            } else if (isSys) {
+                actorHtml = '<span class="badge rounded-pill text-bg-secondary-subtle text-secondary-emphasis border"><i class="bi bi-cpu me-1"></i>Système</span>';
+            } else {
+                actorHtml = '<div class="wf-assign-multi">'
+                    + '<label class="form-label mb-0" style="font-size:0.68rem;">Employés</label>'
+                    + '<select class="form-select form-select-sm employee-multi wf-step-users" multiple data-placeholder="Choisir un ou plusieurs employés…">'
+                    + empOptions(saved.assignedToUserIds || [])
+                    + '</select>'
+                    + '<label class="form-label mb-0 mt-1" style="font-size:0.68rem;">Profils</label>'
+                    + '<select class="form-select form-select-sm role-multi wf-step-roles" multiple data-placeholder="Choisir un ou plusieurs profils…">'
+                    + roleOptions(saved.assignedToRoleNames || [])
+                    + '</select></div>';
+            }
+            return '<div class="wf-assign-step wf-step-row" data-order="' + st.stepOrder + '"'
+                + (isSys ? ' data-system="1"' : '')
+                + (isCli ? ' data-client="1"' : '') + '>'
+                + '<div class="wf-assign-step-meta">'
+                + '<span class="wf-assign-step-ord">' + st.stepOrder + '</span>'
+                + '<div><div class="fw-semibold small">' + esc(st.name) + '</div>'
+                + '<span class="text-body-secondary" style="font-size:0.72rem;">' + esc(st.stepType) + '</span></div></div>'
+                + '<div class="wf-assign-step-actor">' + actorHtml + '</div></div>';
+        }).join('');
+    }
+
+    function renderWfAffectation() {
+        var r = root();
+        if (!r) return;
+        var list = r.querySelector('.wf-affect-list');
+        var empty = r.querySelector('.wf-affect-empty');
+        if (!list || !empty) return;
+
+        // Persist current UI into meta before rebuild
+        list.querySelectorAll('.wf-affect-card[data-code]').forEach(syncCard);
+
+        var getCodes = window['spcGetCodes_' + pfx];
+        var getMeta = window['spcGetWfMeta_' + pfx];
+        var codes = typeof getCodes === 'function' ? getCodes() : [];
+        var meta = typeof getMeta === 'function' ? getMeta() : {};
+
+        var rows = codes.filter(function (c) {
+            return !!CODE_TO_DECL[String(c.code || '').toUpperCase()];
+        });
+
+        if (!rows.length) {
+            list.classList.add('d-none');
+            empty.classList.remove('d-none');
+            empty.textContent = 'Cochez d’abord un pack dans le périmètre pour afficher les workflows à affecter.';
+            list.innerHTML = '';
+            return;
+        }
+
+        var html = '';
+        rows.forEach(function (c, i) {
+            var code = String(c.code || '').toUpperCase();
+            var decl = CODE_TO_DECL[code];
+            var tpls = templatesForDecl(decl);
+            var m = meta[code] || {};
+            var selectedTpl = pickDefaultTemplate(tpls, m.workflowTemplateId);
+            var selectedAsg = m.primaryAssigneeUserId || '';
+            var tplObj = findTemplate(selectedTpl);
+
+            var tplOpts;
+            if (tpls.length) {
+                tplOpts = tpls.map(function (t) {
+                    var sel = t.id === selectedTpl ? ' selected' : '';
+                    return '<option value="' + t.id + '"' + sel + '>' + esc(t.name) + '</option>';
+                }).join('');
+            } else {
+                tplOpts = '<option value="">— Aucun modèle (seed Builder) —</option>';
+            }
+
+            var asgOpts = '<option value="">Responsable…</option>' + WF_EMPLOYEES.map(function (e) {
+                var sel = e.id === selectedAsg ? ' selected' : '';
+                return '<option value="' + esc(e.id) + '"' + sel + '>' + esc(e.name || e.id) + '</option>';
+            }).join('');
+
+            var collapseId = 'wfCreate_' + pfx + '_' + i;
+            html += '<div class="wf-affect-card border rounded-3 mb-2 overflow-hidden" data-code="' + esc(code) + '">'
+                + '<div class="d-flex flex-wrap align-items-center gap-2 px-3 py-2 bg-white">'
+                + '<button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-start flex-grow-1" data-bs-toggle="collapse" data-bs-target="#' + collapseId + '">'
+                + '<i class="bi bi-chevron-right me-1"></i><span class="fw-semibold small">' + esc(c.label || code) + '</span>'
+                + '<span class="badge rounded-pill text-bg-light border ms-2">' + esc(decl) + '</span></button>'
+                + '<select class="form-select form-select-sm rounded-pill wf-tpl" style="max-width:14rem;"' + (tpls.length ? '' : ' disabled') + '>' + tplOpts + '</select>'
+                + '<select class="form-select form-select-sm rounded-pill wf-asg" style="max-width:11rem;">' + asgOpts + '</select>'
+                + '</div>'
+                + '<div id="' + collapseId + '" class="collapse">'
+                + '<div class="wf-assign-steps wf-steps-body">' + renderStepsHtml(tplObj, m.stepAssignments || []) + '</div>'
+                + '</div></div>';
+        });
+
+        empty.classList.add('d-none');
+        list.classList.remove('d-none');
+        list.innerHTML = html;
+
+        list.querySelectorAll('.wf-affect-card[data-code]').forEach(function (card) {
+            syncCard(card);
+            card.querySelector('.wf-tpl')?.addEventListener('change', function () {
+                var tplId = parseInt(this.value || '', 10) || null;
+                var body = card.querySelector('.wf-steps-body');
+                if (body) body.innerHTML = renderStepsHtml(findTemplate(tplId), []);
+                if (typeof window.initContratWfActorSelect2 === 'function') window.initContratWfActorSelect2(body);
+                bindStepChanges(card);
+                syncCard(card);
+            });
+            card.querySelector('.wf-asg')?.addEventListener('change', function () { syncCard(card); });
+            bindStepChanges(card);
+        });
+        if (typeof window.initContratWfActorSelect2 === 'function') window.initContratWfActorSelect2(list);
+    }
+
+    function bindStepChanges(card) {
+        if (!window.jQuery) {
+            card.querySelectorAll('.wf-steps-body select').forEach(function (sel) {
+                sel.addEventListener('change', function () { syncCard(card); });
+            });
+            return;
+        }
+        jQuery(card).find('.wf-step-users, .wf-step-roles').off('change.wfSync').on('change.wfSync', function () {
+            syncCard(card);
+        });
+    }
+
+    window['renderWfAffectation_' + pfx] = renderWfAffectation;
+    document.addEventListener('svc-picker-change', function (ev) {
+        if (ev.detail && ev.detail.prefix === pfx) renderWfAffectation();
+    });
+    setTimeout(renderWfAffectation, 0);
+
+    var form = root()?.closest('form');
+    if (form) {
+        form.addEventListener('submit', function () {
+            root()?.querySelectorAll('.wf-affect-card[data-code]').forEach(syncCard);
+            renderWfAffectation();
+        }, true);
+    }
+}());
+</script>

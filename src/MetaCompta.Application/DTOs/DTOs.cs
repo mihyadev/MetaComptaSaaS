@@ -4,11 +4,33 @@ using System.ComponentModel.DataAnnotations;
 namespace MetaCompta.Application.DTOs;
 
 // ===== Auth =====
-public record LoginDto(string Email, string Password);
+/// <param name="Portal">Optional: "backoffice" | "extranet" — rejects wrong account type for that portal.</param>
+public record LoginDto(string Email, string Password, string? Portal = null);
 public record RegisterDto(string Email, string Password, string FirstName, string LastName, string? Role, int? CabinetId, int? ClientId);
 public record TokenDto(string AccessToken, string RefreshToken, DateTime Expiration, UserInfoDto User);
 public record UserInfoDto(string Id, string Email, string FullName, string? Role, int? CabinetId, string? CabinetName, string? ProfileImageUrl, string PreferredLanguage, int? ClientId = null, string? ClientName = null);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+
+public class ActivateAccountDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Le mot de passe est requis.")]
+    [MinLength(8)]
+    public string Password { get; set; } = string.Empty;
+    [Required(ErrorMessage = "La confirmation du mot de passe est requise.")]
+    [Compare(nameof(Password), ErrorMessage = "Les mots de passe ne correspondent pas.")]
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class ActivationInfoDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public bool AlreadyActivated { get; set; }
+    public bool TokenValid { get; set; }
+}
 
 // ===== Contract access (Manage vs Consult) =====
 public static class ContractAccessMode
@@ -69,6 +91,28 @@ public class ClientDto
     public int EmployeeCount { get; set; }
     public int DeclarationCount { get; set; }
     public List<ServiceContratDto> ServicesFiduciaires { get; set; } = new();
+}
+
+/// <summary>Lightweight client row for Nouveau contrat picker.</summary>
+public class ClientContratPickerItemDto
+{
+    public int Id { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public string? ICE { get; set; }
+    public string? IF { get; set; }
+    public string? RC { get; set; }
+    public string? NumeroCNSS { get; set; }
+    public string? VilleSiegeSocial { get; set; }
+    public bool HasActiveContract { get; set; }
+    public string? ActiveContractReference { get; set; }
+    public string? ActiveContractStatut { get; set; }
+}
+
+/// <summary>Clients split for Nouveau contrat: without active contract first, then with.</summary>
+public class ClientContratPickerResultDto
+{
+    public List<ClientContratPickerItemDto> SansContratActif { get; set; } = new();
+    public List<ClientContratPickerItemDto> AvecContratActif { get; set; } = new();
 }
 
 // ===== Dossier Fiduciaire / Service Contrat =====
@@ -134,6 +178,77 @@ public class ContratServiceActiveLine
     public decimal? Honoraires { get; set; }
     public string? FrequenceHonoraires { get; set; } // Mensuel, Trimestriel, Semestriel, Annuel
     public bool AutoGenererDeclarations { get; set; } = true;
+    /// <summary>Optional cabinet workflow template chosen at contrat create.</summary>
+    public int? WorkflowTemplateId { get; set; }
+    /// <summary>Optional primary assignee for declarations of this TypeService.</summary>
+    public string? PrimaryAssigneeUserId { get; set; }
+    /// <summary>Per-step actors (employees and/or profiles) set at contrat create.</summary>
+    public List<ContratWorkflowStepAssignmentDto>? StepAssignments { get; set; }
+}
+
+/// <summary>Auto-proposed workflow row for contrat details (packs + équipe → template + actors per step).</summary>
+public class ContratWorkflowProposalDto
+{
+    public string TypeService { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public string DeclarationType { get; set; } = string.Empty;
+    public string? AssigneeUserId { get; set; }
+    public string? AssigneeName { get; set; }
+    public string? AssigneeRole { get; set; }
+    public int? WorkflowTemplateId { get; set; }
+    public string? WorkflowTemplateName { get; set; }
+    public bool HasTemplate { get; set; }
+    public bool HasAssignee { get; set; }
+    public List<ContratWorkflowStepProposalDto> Steps { get; set; } = new();
+}
+
+public class ContratWorkflowStepProposalDto
+{
+    public int StepOrder { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string StepType { get; set; } = string.Empty;
+    /// <summary>Employee | Role | Department | Client | AutoSystem</summary>
+    public string AssignmentType { get; set; } = "Employee";
+    public bool IsClientStep { get; set; }
+    /// <summary>
+    /// No human actors: AutoSystem, Initialisation, or DemandePieces
+    /// (demande documents is always system after Init).
+    /// </summary>
+    public bool IsSystemStep =>
+        string.Equals(AssignmentType, "AutoSystem", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(StepType, "Initialisation", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(StepType, "DemandePieces", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Primary / first employee (compat).</summary>
+    public string? AssignedToUserId { get; set; }
+    /// <summary>One or many cabinet employees for this step.</summary>
+    public List<string> AssignedToUserIds { get; set; } = new();
+    /// <summary>One or many cabinet profiles (Identity role names).</summary>
+    public List<string> AssignedToRoleNames { get; set; } = new();
+}
+
+/// <summary>Save per-step actors from contrat details (employees and/or profiles).</summary>
+public class ContratWorkflowAssignmentsSaveDto
+{
+    public int ContratId { get; set; }
+    public List<ContratWorkflowServiceAssignmentDto> Services { get; set; } = new();
+}
+
+public class ContratWorkflowServiceAssignmentDto
+{
+    public string TypeService { get; set; } = string.Empty;
+    public string DeclarationType { get; set; } = string.Empty;
+    public int SourceTemplateId { get; set; }
+    public string? PrimaryAssigneeUserId { get; set; }
+    public List<ContratWorkflowStepAssignmentDto> Steps { get; set; } = new();
+}
+
+public class ContratWorkflowStepAssignmentDto
+{
+    public int StepOrder { get; set; }
+    /// <summary>Legacy single assignee (ignored when AssignedToUserIds is set).</summary>
+    public string? AssignedToUserId { get; set; }
+    public List<string>? AssignedToUserIds { get; set; }
+    public List<string>? AssignedToRoleNames { get; set; }
 }
 
 public class GenerateDeclarationsResultDto
@@ -235,15 +350,18 @@ public class ClientUserDto
     public string FullName => $"{FirstName} {LastName}";
     public string? Telephone { get; set; }
     public bool IsActive { get; set; }
+    public bool EmailConfirmed { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
 }
 
 public class ClientUserCreateDto
 {
+    [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
+    [Required]
     public string FirstName { get; set; } = string.Empty;
+    [Required]
     public string LastName { get; set; } = string.Empty;
     public string? Telephone { get; set; }
 }
@@ -1067,6 +1185,7 @@ public class CabinetEmployeeDto
     public string? TypeContrat { get; set; }
     public bool EstActif { get; set; }
     public bool IsActive { get => EstActif; set => EstActif = value; }
+    public bool EmailConfirmed { get; set; }
     public DateTime? DateEmbauche { get; set; }
     public DateTime? DerniereConnexion { get; set; }
     public int ClientsAssignes { get; set; }
@@ -1078,12 +1197,15 @@ public class CabinetEmployeeDto
 
 /// <summary>
 /// DTO for creating a new cabinet employee (BackOffice user).
+/// Password is set by the user via email activation link.
 /// </summary>
 public class CabinetEmployeeCreateDto
 {
+    [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
+    [Required]
     public string FirstName { get; set; } = string.Empty;
+    [Required]
     public string LastName { get; set; } = string.Empty;
     public string? CIN { get; set; }
     public string? Telephone { get; set; }
@@ -2366,6 +2488,17 @@ public class FactureCreateDto
     public string? Notes { get; set; }
     public List<int>? LigneContratIds { get; set; } // IDs des lignes du contrat à facturer
     public List<LigneDocumentCommercialCreateDto> Lignes { get; set; } = new(); // Lignes de la facture
+}
+
+/// <summary>Result of Hangfire / manual auto-facturation run.</summary>
+public class AutoFacturationResultDto
+{
+    public DateTime RunDate { get; set; }
+    public int ContractsScanned { get; set; }
+    public int Created { get; set; }
+    public int Skipped { get; set; }
+    public int Errors { get; set; }
+    public List<string> CreatedReferences { get; set; } = new();
 }
 
 // ===== Paiement =====
