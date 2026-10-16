@@ -1,0 +1,100 @@
+@model MetaCompta.Application.DTOs.CourrierReceiveDto
+@{
+    ViewData["Title"] = "Recevoir un courrier";
+    var clients = ViewBag.Clients as List<MetaCompta.Application.DTOs.ClientDto> ?? new();
+    var staff = ViewBag.Staff as List<MetaCompta.Application.DTOs.CabinetEmployeeDto> ?? new();
+    var clientLocked = ViewBag.ClientLocked as bool? == true;
+    var lockedName = ViewBag.LockedClientName as string;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0"><i class="bi bi-plus-circle text-primary me-2"></i>+ Recevoir</h4>
+        <small class="text-muted">Enregistrer un courrier / document physique entrant + déposer le scan</small>
+    </div>
+    <a href="@Url.Action("Index")" class="btn btn-outline-secondary rounded-pill">Retour</a>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<form asp-action="Receive" method="post" enctype="multipart/form-data" class="card border-0 shadow-sm rounded-4">
+    @Html.AntiForgeryToken()
+    <div class="card-body p-4">
+        <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Client <span class="text-danger">*</span></label>
+                @if (clientLocked)
+                {
+                    <input type="hidden" asp-for="ClientId" />
+                    <div class="form-control bg-light fw-semibold">@lockedName</div>
+                    <div class="form-text">Client du dossier sélectionné — pas besoin de le choisir à nouveau.</div>
+                }
+                else
+                {
+                    <select asp-for="ClientId" class="form-select" required>
+                        <option value="0">— Choisir —</option>
+                        @foreach (var c in clients)
+                        {
+                            <option value="@c.Id">@c.RaisonSociale</option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Date réception</label>
+                <input asp-for="DateReception" type="date" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Type</label>
+                <select asp-for="TypeCourrier" class="form-select">
+                    <option>Courrier</option>
+                    <option>Recommandé</option>
+                    <option>Colis</option>
+                    <option>Acte</option>
+                    <option>Facture</option>
+                    <option>Autre</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Expéditeur</label>
+                <input asp-for="Expediteur" class="form-control" placeholder="Nom de l'expéditeur" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Référence</label>
+                <input asp-for="Reference" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Confidentialité</label>
+                <select asp-for="Confidentialite" class="form-select">
+                    <option>Normal</option>
+                    <option>Confidentiel</option>
+                    <option>Strict</option>
+                </select>
+            </div>
+
+            <div class="col-12">
+                <div class="border rounded-3 p-3 bg-light">
+                    <label class="form-label fw-semibold mb-1">
+                        <i class="bi bi-images text-primary me-1"></i>Photothèque — déposer les scans <span class="text-muted fw-normal">(plusieurs fichiers)</span>
+                    </label>
+                    <input type="file" name="scanFiles" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp" multiple />
+                    <div class="form-text">Sélectionnez un ou plusieurs PDF/images. Vous pourrez en ajouter ou en retirer ensuite sur la fiche Traiter.</div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optionnel)</span></label>
+                <textarea asp-for="Notes" class="form-control" rows="2"></textarea>
+            </div>
+            <input type="hidden" asp-for="ActionRequise" value="false" />
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="@Url.Action("Index")" class="btn btn-outline-secondary rounded-pill px-4">Annuler</a>
+            <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+        </div>
+    </div>
+</form>

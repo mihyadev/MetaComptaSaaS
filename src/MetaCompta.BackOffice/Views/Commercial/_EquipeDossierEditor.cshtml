@@ -35,7 +35,12 @@
         }).ToList();
     }
 
-    var roles = new[] { "Chef de mission", "Collaborateur", "Superviseur", "Contrôleur qualité" };
+    // Métier roles aligned with workflow ResolveAssignee (Fiscaliste / Comptable / Manager…)
+    var roles = new[]
+    {
+        "Fiscaliste", "Comptable", "Manager", "Chef de mission",
+        "Social", "Juridique", "Collaborateur"
+    };
     var editorId = (ViewBag.EditorId as string) ?? "equipeDossier";
     var showActions = ViewBag.ShowActions as bool? ?? true;
 }
@@ -68,10 +73,16 @@ else if (showActions)
         <div class="col-md-4">
             <label class="form-label small text-body-secondary mb-1" for="@(editorId)-role">Rôle sur le dossier</label>
             <select id="@(editorId)-role" class="form-select form-select-sm">
-                <option value="Collaborateur">Collaborateur</option>
-                @foreach (var r in roles.Where(x => x != "Collaborateur"))
+                @foreach (var r in roles)
                 {
-                    <option value="@r">@r</option>
+                    if (r == "Fiscaliste")
+                    {
+                        <option value="@r" selected>@r</option>
+                    }
+                    else
+                    {
+                        <option value="@r">@r</option>
+                    }
                 }
             </select>
         </div>

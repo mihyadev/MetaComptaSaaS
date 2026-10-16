@@ -11,6 +11,7 @@ public class PayrollControllerTests
     private readonly Mock<IHttpContextAccessor> _mockAccessor;
     private readonly Mock<IPayrollFacade> _mockPayroll;
     private readonly Mock<IClientFacade> _mockClients;
+    private readonly BulletinPdfService _pdf;
     private readonly PayrollController _controller;
 
     public PayrollControllerTests()
@@ -19,14 +20,20 @@ public class PayrollControllerTests
         _mockAccessor = ControllerTestHelper.CreateMockContextAccessor();
         _mockPayroll = new Mock<IPayrollFacade>();
         _mockClients = new Mock<IClientFacade>();
+        _pdf = new BulletinPdfService();
         _mockClients.Setup(x => x.GetAllForDropdownAsync()).ReturnsAsync(new List<ClientDto>
         {
             TestDataFactory.CreateClient(1),
             TestDataFactory.CreateClient(2)
         });
 
-        _controller = new PayrollController(_mockRefData.Object, _mockAccessor.Object, _mockPayroll.Object, _mockClients.Object);
-        ControllerTestHelper.SetupController(_controller);
+        _controller = new PayrollController(
+            _mockRefData.Object,
+            _mockAccessor.Object,
+            _mockPayroll.Object,
+            _mockClients.Object,
+            _pdf);
+        ControllerTestHelper.SetupController(_controller, sharedContext: _mockAccessor.Object.HttpContext);
     }
 
     [Fact]
@@ -37,7 +44,7 @@ public class PayrollControllerTests
             TestDataFactory.CreatePayrollPeriod(1, 1),
             TestDataFactory.CreatePayrollPeriod(2, 2)
         };
-        _mockPayroll.Setup(x => x.GetAllPeriodsAsync(null)).ReturnsAsync(periods);
+        _mockPayroll.Setup(x => x.GetAllPeriodsAsync(It.IsAny<int?>(), It.IsAny<int?>())).ReturnsAsync(periods);
 
         var result = await _controller.Index();
 
@@ -49,12 +56,12 @@ public class PayrollControllerTests
     [Fact]
     public async Task Index_WithClientFilter_PassesClientIdToFacade()
     {
-        _mockPayroll.Setup(x => x.GetAllPeriodsAsync(5))
+        _mockPayroll.Setup(x => x.GetAllPeriodsAsync(It.IsAny<int?>(), It.IsAny<int?>()))
             .ReturnsAsync(new List<PayrollPeriodDto>());
 
         await _controller.Index(clientId: 5);
 
-        _mockPayroll.Verify(x => x.GetAllPeriodsAsync(5), Times.Once);
+        _mockPayroll.Verify(x => x.GetAllPeriodsAsync(5, It.IsAny<int?>()), Times.Once);
         Assert.Equal(5, (int?)_controller.ViewBag.ClientId);
     }
 

@@ -12,12 +12,14 @@ public static class DeclarationPeriodTemplate
         string Label,
         DateTime Start,
         DateTime End,
-        int Index);
+        int Index,
+        DateTime? Due = null);
 
+    // ASCII-safe source (accents via \u) — avoids mojibake if file encoding drifts.
     private static readonly string[] MonthLabelsFr =
     {
-        "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+        "", "Janvier", "F\u00e9vrier", "Mars", "Avril", "Mai", "Juin",
+        "Juillet", "Ao\u00fbt", "Septembre", "Octobre", "Novembre", "D\u00e9cembre"
     };
 
     public static string NormalizeFrequency(string? value)
@@ -85,7 +87,8 @@ public static class DeclarationPeriodTemplate
             var startMonth = (q - 1) * 3 + 1;
             var start = new DateTime(year, startMonth, 1);
             var end = start.AddMonths(3).AddDays(-1);
-            list.Add(new Slice($"{year}-Q{q}", $"T{q}", start, end, q));
+            var shortM = new[] { "", "Jan", "F\u00e9v", "Mar", "Avr", "Mai", "Juin", "Juil", "Ao\u00fbt", "Sep", "Oct", "Nov", "D\u00e9c" };
+            list.Add(new Slice($"{year}-Q{q}", $"T{q} ({shortM[startMonth]}-{shortM[end.Month]})", start, end, q));
         }
         return list;
     }
@@ -181,10 +184,31 @@ public static class DeclarationPeriodTemplate
         return false;
     }
 
+    /// <summary>
+    /// Materialize due MM-DD relative to period end: if due month/day is before period end, year = periodEnd.Year + 1.
+    /// </summary>
+    public static DateTime MaterializeDue(int dueMonth, int dueDay, DateTime periodEnd)
+    {
+        dueMonth = Math.Clamp(dueMonth, 1, 12);
+        var year = periodEnd.Year;
+        if (dueMonth < periodEnd.Month
+            || (dueMonth == periodEnd.Month && dueDay < periodEnd.Day))
+            year = periodEnd.Year + 1;
+        var dim = DateTime.DaysInMonth(year, dueMonth);
+        return new DateTime(year, dueMonth, Math.Min(Math.Max(dueDay, 1), dim));
+    }
+
+    /// <summary>Last day of the calendar month after period end (TVA electronic filing default).</summary>
+    public static DateTime EndOfMonthAfter(DateTime periodEnd)
+    {
+        var m = periodEnd.Date.AddMonths(1);
+        return new DateTime(m.Year, m.Month, DateTime.DaysInMonth(m.Year, m.Month));
+    }
+
     /// <summary>Materialize all pattern rows onto year-1 / year / year+1 and pick the Init slice.</summary>
     public static Slice? ResolvePatternTableAsOf(
         DateTime asOf,
-        IReadOnlyList<(int StartMonth, int StartDay, int EndMonth, int EndDay, string? Label)> patterns,
+        IReadOnlyList<(int StartMonth, int StartDay, int EndMonth, int EndDay, string? Label, int? DueMonth, int? DueDay)> patterns,
         bool previousClosed = true)
     {
         if (patterns == null || patterns.Count == 0) return null;
@@ -197,7 +221,12 @@ public static class DeclarationPeriodTemplate
                 var p = patterns[i];
                 var (start, end) = MaterializeMonthDayPattern(p.StartMonth, p.StartDay, p.EndMonth, p.EndDay, year);
                 var label = string.IsNullOrWhiteSpace(p.Label) ? $"Période {i + 1}" : p.Label!.Trim();
-                candidates.Add(new Slice($"{start:yyyy-MM-dd}", label, start, end, i + 1));
+                DateTime? due = null;
+                if (p.DueMonth is >= 1 and <= 12 && p.DueDay is >= 1 and <= 31)
+                    due = MaterializeDue(p.DueMonth.Value, p.DueDay.Value, end);
+                else
+                    due = EndOfMonthAfter(end);
+                candidates.Add(new Slice($"{start:yyyy-MM-dd}", label, start, end, i + 1, due));
             }
         }
 

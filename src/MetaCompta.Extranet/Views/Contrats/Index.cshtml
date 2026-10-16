@@ -1,186 +1,293 @@
+@using MetaCompta.Domain.Common
 @model ContratCommercialDto?
 @{
     ViewData["Title"] = "Mon contrat";
     var hasContract = ViewBag.HasContract as bool? ?? false;
     var declarations = ViewBag.Declarations as List<DeclarationDto> ?? new();
+
+    string LabelPeriodicite(string? code) => code switch
+    {
+        "Mensuel" => "Tous les mois",
+        "Trimestriel" => "Tous les trimestres",
+        "Annuel" => "Tous les ans",
+        _ => string.IsNullOrWhiteSpace(code) ? "—" : code
+    };
+
+    string LabelStatut(string? s) => s switch
+    {
+        "Brouillon" => "Brouillon",
+        "EnCours" => "En cours",
+        "Valide" or "Actif" => "En vigueur",
+        "Signe" => "Signé",
+        "Suspendu" => "Suspendu",
+        "Termine" or "Terminé" => "Terminé",
+        "Resilie" or "Résilié" => "Résilié",
+        _ => string.IsNullOrWhiteSpace(s) ? "—" : s
+    };
+
+    string StatutTone(string? s) => s switch
+    {
+        "Valide" or "Actif" or "Signe" => "ok",
+        "Suspendu" or "Resilie" or "Résilié" => "warn",
+        "Termine" or "Terminé" => "muted",
+        _ => "info"
+    };
+
+    var periodiciteHonoraires = LabelPeriodicite(Model?.FrequenceFacturation);
+    var selectedGroups = Model != null
+        ? ContractServiceGroups.InferSelectedGroupIds(Model.ServicesActives.Select(s => s.TypeService))
+        : Array.Empty<string>();
+    var groupModels = selectedGroups
+        .Select(id => ContractServiceGroups.Get(id))
+        .Where(g => g != null)
+        .Cast<ContractServiceGroups.ContractServiceGroup>()
+        .ToList();
 }
 
 @if (!hasContract || Model == null)
 {
-    <div class="ex-page-hero">
-        <div>
-            <h4>Mon contrat</h4>
-            <p class="ex-sub">Synthèse de votre mission fiduciaire.</p>
-        </div>
-    </div>
-    <div class="ex-board-card">
-        <div class="ex-empty py-5">
-            <i class="bi bi-file-earmark-text"></i>
-            <p>Aucun contrat n'est encore disponible dans votre espace client.</p>
+    <div class="ex-contrat-page">
+        <header class="ex-contrat-hero ex-contrat-hero--empty">
+            <div>
+                <p class="ex-contrat-kicker">Espace client</p>
+                <h1 class="ex-contrat-title">Mon contrat</h1>
+                <p class="ex-contrat-lead">La synthèse de votre mission fiduciaire apparaîtra ici dès qu’un contrat est actif.</p>
+            </div>
+        </header>
+        <div class="ex-contrat-empty">
+            <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+            <p>Aucun contrat n’est encore disponible dans votre espace.</p>
         </div>
     </div>
 }
 else
 {
-    <div class="ex-page-hero">
-        <div>
-            <h4>Mon contrat</h4>
-            <p class="ex-sub">Honoraires, périmètre et suivi des dépôts.</p>
-        </div>
-        <span class="badge text-bg-success rounded-pill px-3 py-2">@Model.Statut</span>
-    </div>
+    var debut = Model.DateDebutContrat?.ToString("dd/MM/yyyy") ?? "—";
+    var fin = Model.DateFinContrat?.ToString("dd/MM/yyyy") ?? "—";
+    var statutLabel = LabelStatut(Model.Statut);
+    var statutTone = StatutTone(Model.Statut);
+    var clientName = string.IsNullOrWhiteSpace(Model.ClientName) ? "Votre entreprise" : Model.ClientName;
+    var rcLine = string.IsNullOrWhiteSpace(Model.ClientRC) ? "—" : Model.ClientRC;
+    if (!string.IsNullOrWhiteSpace(Model.ClientVille) && rcLine != "—")
+        rcLine += " — " + Model.ClientVille;
+    else if (!string.IsNullOrWhiteSpace(Model.ClientVille))
+        rcLine = Model.ClientVille;
 
-    <div class="ex-company-banner">
-        <div class="ex-co-mark"><i class="bi bi-file-earmark-medical"></i></div>
-        <div class="flex-grow-1">
-            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div class="ex-contrat-page">
+        <header class="ex-contrat-hero">
+            <div class="ex-contrat-hero-main">
+                <p class="ex-contrat-kicker">Mission fiduciaire</p>
+                <h1 class="ex-contrat-title">@clientName</h1>
+                <p class="ex-contrat-lead">@(string.IsNullOrWhiteSpace(Model.Objet) ? "Contrat de mission fiduciaire" : Model.Objet)</p>
+                <div class="ex-contrat-hero-meta">
+                    <span class="ex-contrat-ref">@Model.Reference</span>
+                    <span class="ex-contrat-status ex-contrat-status--@statutTone">@statutLabel</span>
+                </div>
+            </div>
+            <div class="ex-contrat-hero-side">
+                <div class="ex-contrat-validity">
+                    <span class="ex-contrat-validity-label">Période de validité</span>
+                    <strong>@debut <span class="ex-contrat-arrow">→</span> @fin</strong>
+                </div>
+                <div class="ex-contrat-ids" aria-label="Identifiants légaux">
+                    <span><em>ICE</em> @(Model.ClientICE ?? "—")</span>
+                    <span><em>IF</em> @(Model.ClientIF ?? "—")</span>
+                    <span><em>CNSS</em> @(Model.ClientNumeroCNSS ?? "—")</span>
+                    <span><em>RC</em> @rcLine</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="ex-contrat-kpis" aria-label="Indicateurs du contrat">
+            <article class="ex-contrat-kpi">
+                <span class="ex-contrat-kpi-label">Montant TTC</span>
+                <strong class="ex-contrat-kpi-value">@Model.MontantTTC.ToString("N2") <small>@Model.Devise</small></strong>
+            </article>
+            <article class="ex-contrat-kpi">
+                <span class="ex-contrat-kpi-label">Périodicité des honoraires</span>
+                <strong class="ex-contrat-kpi-value">@periodiciteHonoraires</strong>
+            </article>
+            <article class="ex-contrat-kpi">
+                <span class="ex-contrat-kpi-label">Début — fin</span>
+                <strong class="ex-contrat-kpi-value ex-contrat-kpi-value--sm">@debut → @fin</strong>
+            </article>
+            <article class="ex-contrat-kpi">
+                <span class="ex-contrat-kpi-label">Domaines inclus</span>
+                <strong class="ex-contrat-kpi-value">@groupModels.Count <small>domaine@(groupModels.Count > 1 ? "s" : "")</small></strong>
+            </article>
+        </section>
+
+        <section class="ex-contrat-panel">
+            <div class="ex-contrat-panel-head">
                 <div>
-                    <h2 class="h5 mb-1 fw-bold" style="letter-spacing:-0.02em;">@Model.Reference</h2>
-                    <p class="ex-sub mb-0">@(Model.Objet ?? "Contrat de mission fiduciaire")</p>
-                </div>
-                <div class="text-md-end">
-                    <div class="small text-muted fw-semibold text-uppercase" style="letter-spacing:.04em;">Validité</div>
-                    <div class="fw-bold">
-                        @(Model.DateDebutContrat?.ToString("dd/MM/yyyy") ?? "—")
-                        <span class="text-muted mx-1">→</span>
-                        @(Model.DateFinContrat?.ToString("dd/MM/yyyy") ?? "—")
-                    </div>
+                    <h2>Votre périmètre</h2>
+                    <p>Domaines couverts par votre mission — détail des formalités à la demande.</p>
                 </div>
             </div>
-            <div class="ex-meta-row mt-3">
-                <span><i class="bi bi-upc"></i>ICE <strong>@(Model.ClientICE ?? "—")</strong></span>
-                <span><i class="bi bi-hash"></i>IF <strong>@(Model.ClientIF ?? "—")</strong></span>
-                <span><i class="bi bi-shield"></i>CNSS <strong>@(Model.ClientNumeroCNSS ?? "—")</strong></span>
-                <span><i class="bi bi-geo"></i>RC <strong>@(string.IsNullOrWhiteSpace(Model.ClientRC) ? "—" : Model.ClientRC)@(string.IsNullOrWhiteSpace(Model.ClientVille) ? "" : " — " + Model.ClientVille)</strong></span>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-3">
-        <div class="col-lg-7">
-            <div class="ex-board-card h-100">
-                <div class="ex-panel-head"><div><h3><i class="bi bi-cash-coin text-primary me-2"></i>Grille d'honoraires</h3><p>Détail des lignes contractuelles</p></div></div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0 ex-table">
-                        <thead>
-                            <tr>
-                                <th>Description</th>
-                                <th class="text-end">Prix HT</th>
-                                <th class="text-end">Remise %</th>
-                                <th class="text-end">TVA %</th>
-                                <th class="text-end">TTC</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var l in Model.Lignes.OrderBy(x => x.Ordre))
-                            {
-                                <tr>
-                                    <td>
-                                        <div class="fw-semibold">@l.Description</div>
-                                        @if (!string.IsNullOrWhiteSpace(l.ModeFacturation))
-                                        {
-                                            <small class="text-muted">@l.ModeFacturation</small>
-                                        }
-                                    </td>
-                                    <td class="text-end">@l.PrixUnitaireHT.ToString("N2")</td>
-                                    <td class="text-end">@((l.RemisePourcentage ?? 0).ToString("N2"))</td>
-                                    <td class="text-end">@l.TauxTVA.ToString("N0")</td>
-                                    <td class="text-end fw-semibold">@l.MontantTTC.ToString("N2")</td>
-                                </tr>
-                            }
-                            @if (!Model.Lignes.Any())
-                            {
-                                <tr><td colspan="5" class="text-center text-muted py-3">Aucune ligne d'honoraires</td></tr>
-                            }
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="4" class="text-end fw-semibold">Total contrat TTC (@Model.Devise)</td>
-                                <td class="text-end fw-bold">@Model.MontantTTC.ToString("N2")</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-5">
-            <div class="ex-board-card h-100">
-                <div class="ex-panel-head"><div><h3><i class="bi bi-check2-square text-success me-2"></i>Périmètre de mission</h3><p>Services opérationnels</p></div></div>
-                <div class="ex-panel-body">
-                    @if (Model.ServicesActives.Any())
+            @if (groupModels.Any())
+            {
+                <div class="ex-contrat-groups">
+                    @foreach (var g in groupModels)
                     {
-                        <div class="ex-activity-list">
-                            @foreach (var s in Model.ServicesActives)
-                            {
-                                <div class="ex-activity-item">
-                                    <div class="d-flex align-items-start gap-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1"></i>
-                                        <div>
-                                            <div class="fw-semibold">@(s.LibelleService ?? s.TypeService)</div>
-                                            <div class="ex-activity-meta">@s.TypeService</div>
-                                        </div>
-                                    </div>
+                        var infoId = "ex-contrat-info-" + g.GroupId;
+                        <div class="ex-contrat-group ex-contrat-group--@g.Color">
+                            <div class="ex-contrat-group-main">
+                                <div>
+                                    <span class="ex-contrat-group-badge">@g.ShortTitle</span>
+                                    <h3>@g.Title</h3>
+                                    <p>@g.InfoItems.Count formalité(s) / déclaration(s) dans le périmètre</p>
                                 </div>
-                            }
+                                <button type="button" class="ex-contrat-info-btn" data-bs-toggle="collapse" data-bs-target="#@infoId" aria-expanded="false" aria-controls="@infoId" title="Voir le détail">
+                                    <i class="bi bi-info-lg" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="collapse" id="@infoId">
+                                <div class="ex-contrat-group-detail">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>N°</th>
+                                                <th>Déclaration / formalité</th>
+                                                <th>Périodicité</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var row in g.InfoItems)
+                                            {
+                                                <tr>
+                                                    <td>@row.Number</td>
+                                                    <td>@row.Label</td>
+                                                    <td>@row.Periodicite</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                    @if (!string.IsNullOrWhiteSpace(g.ReferenceNote))
+                                    {
+                                        <p class="ex-contrat-ref-note">@g.ReferenceNote</p>
+                                    }
+                                </div>
+                            </div>
                         </div>
                     }
-                    else
+                </div>
+            }
+            else if (Model.ServicesActives.Any())
+            {
+                <ul class="ex-contrat-service-fallback">
+                    @foreach (var s in Model.ServicesActives)
                     {
-                        <div class="ex-empty"><p>Aucun service opérationnel listé sur ce contrat.</p></div>
+                        <li>
+                            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                            <span>@(s.LibelleService ?? s.TypeService)</span>
+                        </li>
                     }
+                </ul>
+            }
+            else
+            {
+                <p class="ex-contrat-muted">Aucun domaine opérationnel listé sur ce contrat.</p>
+            }
+        </section>
+
+        <section class="ex-contrat-panel">
+            <div class="ex-contrat-panel-head">
+                <div>
+                    <h2>Grille d’honoraires</h2>
+                    <p>Montants facturés — @periodiciteHonoraires</p>
+                </div>
+                <span class="ex-contrat-chip">@Model.MontantTTC.ToString("N2") @Model.Devise TTC</span>
+            </div>
+            <div class="ex-contrat-table-wrap">
+                <table class="ex-contrat-table">
+                    <thead>
+                        <tr>
+                            <th>Libellé</th>
+                            <th class="num">Montant HT</th>
+                            <th class="num">Remise %</th>
+                            <th class="num">TVA %</th>
+                            <th class="num">TTC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in Model.Lignes.OrderBy(x => x.Ordre))
+                        {
+                            <tr>
+                                <td>@l.Description</td>
+                                <td class="num">@l.PrixUnitaireHT.ToString("N2")</td>
+                                <td class="num">@((l.RemisePourcentage ?? 0).ToString("N2"))</td>
+                                <td class="num">@l.TauxTVA.ToString("N0")</td>
+                                <td class="num strong">@l.MontantTTC.ToString("N2")</td>
+                            </tr>
+                        }
+                        @if (!Model.Lignes.Any())
+                        {
+                            <tr><td colspan="5" class="empty">Aucune ligne d’honoraires</td></tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4">Total contrat TTC (@Model.Devise)</td>
+                            <td class="num">@Model.MontantTTC.ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="ex-contrat-panel">
+            <div class="ex-contrat-panel-head">
+                <div>
+                    <h2>Suivi des dépôts</h2>
+                    <p>Déclarations liées à votre mission</p>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <div class="ex-board-card">
-        <div class="ex-panel-head"><div><h3><i class="bi bi-clipboard2-check text-primary me-2"></i>Suivi des dépôts</h3><p>Déclarations liées au contrat</p></div></div>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0 ex-table">
-                <thead>
-                    <tr>
-                        <th>Déclaration</th>
-                        <th>Période</th>
-                        <th>Statut</th>
-                        <th>Reçu / PDF</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var d in declarations.OrderByDescending(x => x.DateLimite))
-                    {
-                        var badge = d.Statut switch
-                        {
-                            "Brouillon" or "ACompleter" => ("secondary", "À faire"),
-                            "EnCours" or "EnPreparation" or "EnRevision" => ("warning", "En cours"),
-                            "Completee" or "Validee" => ("info", "Prêt"),
-                            "Soumise" or "Payee" => ("success", "Déposé / Transmis"),
-                            _ => ("light", d.Statut)
-                        };
+            <div class="ex-contrat-table-wrap">
+                <table class="ex-contrat-table">
+                    <thead>
                         <tr>
-                            <td class="fw-semibold">@d.Type</td>
-                            <td class="small">@(string.IsNullOrWhiteSpace(d.Periode) ? d.DateDebut.ToString("MM/yyyy") : d.Periode)</td>
-                            <td><span class="badge text-bg-@badge.Item1 rounded-pill">@badge.Item2</span></td>
-                            <td>
-                                @if (!string.IsNullOrWhiteSpace(d.PdfUrl))
-                                {
-                                    <a class="btn btn-sm btn-outline-primary" href="@d.PdfUrl" target="_blank" rel="noopener">
-                                        <i class="bi bi-download me-1"></i>Reçu
-                                    </a>
-                                }
-                                else
-                                {
-                                    <span class="text-muted small">—</span>
-                                }
-                            </td>
+                            <th>Déclaration</th>
+                            <th>Période</th>
+                            <th>Statut</th>
+                            <th>Reçu / PDF</th>
                         </tr>
-                    }
-                    @if (!declarations.Any())
-                    {
-                        <tr><td colspan="4" class="text-center text-muted py-3">Aucune déclaration générée pour le moment</td></tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in declarations.OrderByDescending(x => x.DateLimite))
+                        {
+                            var badge = d.Statut switch
+                            {
+                                "Brouillon" or "ACompleter" => ("todo", "À faire"),
+                                "EnCours" or "EnPreparation" or "EnRevision" => ("progress", "En cours"),
+                                "Completee" or "Validee" => ("ready", "Prêt"),
+                                "Soumise" or "Payee" => ("done", "Déposé / Transmis"),
+                                _ => ("muted", d.Statut)
+                            };
+                            <tr>
+                                <td class="strong">@d.Type</td>
+                                <td>@(string.IsNullOrWhiteSpace(d.Periode) ? d.DateDebut.ToString("MM/yyyy") : d.Periode)</td>
+                                <td><span class="ex-contrat-pill ex-contrat-pill--@badge.Item1">@badge.Item2</span></td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(d.PdfUrl))
+                                    {
+                                        <a class="ex-contrat-link" href="@d.PdfUrl" target="_blank" rel="noopener">
+                                            <i class="bi bi-download" aria-hidden="true"></i> Reçu
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="ex-contrat-muted">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (!declarations.Any())
+                        {
+                            <tr><td colspan="4" class="empty">Aucune déclaration générée pour le moment</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </div>
 }

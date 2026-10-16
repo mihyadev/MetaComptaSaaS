@@ -131,4 +131,49 @@ public class ClientFacadeTests
         result.Should().NotBeNull();
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task GetForContratPickerAsync_CallsCorrectEndpoint_AndReturnsGroups()
+    {
+        var payload = new ClientContratPickerResultDto
+        {
+            SansContratActif =
+            {
+                new ClientContratPickerItemDto { Id = 1, RaisonSociale = "Sans SARL", HasActiveContract = false }
+            },
+            AvecContratActif =
+            {
+                new ClientContratPickerItemDto
+                {
+                    Id = 2,
+                    RaisonSociale = "Avec SA",
+                    HasActiveContract = true,
+                    ActiveContractReference = "CTR-2026-0001",
+                    ActiveContractStatut = "Actif"
+                }
+            }
+        };
+        _mockApi.Setup(x => x.GetAsync<ClientContratPickerResultDto>("api/clients/for-contrat-picker", default))
+            .ReturnsAsync(ApiResponse<ClientContratPickerResultDto>.Ok(payload));
+
+        var result = await _facade.GetForContratPickerAsync();
+
+        result.SansContratActif.Should().HaveCount(1);
+        result.AvecContratActif.Should().HaveCount(1);
+        result.AvecContratActif[0].ActiveContractReference.Should().Be("CTR-2026-0001");
+        _mockApi.Verify(x => x.GetAsync<ClientContratPickerResultDto>("api/clients/for-contrat-picker", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetForContratPickerAsync_WhenNull_ReturnsEmptyGroups()
+    {
+        _mockApi.Setup(x => x.GetAsync<ClientContratPickerResultDto>(It.IsAny<string>(), default))
+            .ReturnsAsync((ApiResponse<ClientContratPickerResultDto>?)null);
+
+        var result = await _facade.GetForContratPickerAsync();
+
+        result.Should().NotBeNull();
+        result.SansContratActif.Should().BeEmpty();
+        result.AvecContratActif.Should().BeEmpty();
+    }
 }

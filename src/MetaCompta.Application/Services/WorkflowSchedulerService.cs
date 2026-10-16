@@ -1,3 +1,5 @@
+using Hangfire;
+using Hangfire.Storage;
 using MetaCompta.Application.Interfaces;
 using MetaCompta.Domain.Entities;
 using MetaCompta.Infrastructure.Data;
@@ -8,6 +10,8 @@ namespace MetaCompta.Application.Services;
 
 public class WorkflowSchedulerService : IWorkflowSchedulerService
 {
+    private const string JobIdPrefix = "wf-step-";
+
     private readonly MetaComptaDbContext _db;
     private readonly IWorkflowService _workflowService;
     private readonly ILogger<WorkflowSchedulerService> _logger;
@@ -36,7 +40,61 @@ public class WorkflowSchedulerService : IWorkflowSchedulerService
         _logger.LogInformation(
             "WorkflowScheduler: Found {Count} scheduled step templates to sync.",
             scheduledSteps.Count);
+
+        var desiredJobIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var step in scheduledSteps)
+        {
+            var jobId = BuildJobId(step.Id, step.CabinetId);
+            desiredJobIds.Add(jobId);
+
+            try
+            {
+                var stepId = step.Id;
+                var cabinetId = step.CabinetId;
+                var cron = step.CronExpression!;
+
+                RecurringJob.AddOrUpdate<IWorkflowSchedulerService>(
+                    jobId,
+                    svc => svc.ExecuteScheduledStepAsync(stepId, cabinetId),
+                    cron);
+
+                _logger.LogInformation(
+                    "WorkflowScheduler: Registered Hangfire job {JobId} cron='{Cron}' for step '{Name}'.",
+                    jobId, cron, step.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "WorkflowScheduler: Failed to register Hangfire job for step template {Id}.",
+                    step.Id);
+            }
+        }
+
+        // Remove stale per-step jobs that are no longer scheduled/active
+        try
+        {
+            using var connection = JobStorage.Current.GetConnection();
+            var existing = connection.GetRecurringJobs();
+            foreach (var job in existing)
+            {
+                if (job.Id == null || !job.Id.StartsWith(JobIdPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (desiredJobIds.Contains(job.Id))
+                    continue;
+
+                RecurringJob.RemoveIfExists(job.Id);
+                _logger.LogInformation("WorkflowScheduler: Removed stale Hangfire job {JobId}.", job.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "WorkflowScheduler: Could not prune stale Hangfire jobs.");
+        }
     }
+
+    private static string BuildJobId(int stepTemplateId, int cabinetId)
+        => $"{JobIdPrefix}{stepTemplateId}-cab-{cabinetId}";
 
     public async Task ExecuteScheduledStepAsync(int stepTemplateId, int cabinetId)
     {
@@ -129,7 +187,9 @@ public class WorkflowSchedulerService : IWorkflowSchedulerService
             template.Name, template.Id);
 
         var declType = template.DeclarationType;
-        var clientsQuery = _db.Clients.Where(c => c.CabinetId == cabinetId && !c.IsDeleted && c.Statut == "Actif");
+        // Client.Statut is stored as "Active" (see Client entity default); accept "Actif" for older rows.
+        var clientsQuery = _db.Clients.Where(c => c.CabinetId == cabinetId && !c.IsDeleted
+            && (c.Statut == "Active" || c.Statut == "Actif"));
 
         if (template.ClientId.HasValue)
         {

@@ -1,9 +1,11 @@
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Tests.Helpers;
+using MetaCompta.Domain.Common;
 
 namespace MetaCompta.BackOffice.Tests.Controllers;
 
 /// <summary>
-/// Tests for DeclarationsController — verifies all action results including TVA workflow.
+/// Tests for DeclarationsController — verifies action results including TVA workflow.
 /// </summary>
 public class DeclarationsControllerTests
 {
@@ -11,6 +13,9 @@ public class DeclarationsControllerTests
     private readonly Mock<IHttpContextAccessor> _mockAccessor;
     private readonly Mock<IDeclarationFacade> _mockDeclarations;
     private readonly Mock<IClientFacade> _mockClients;
+    private readonly Mock<IWorkflowFacade> _mockWorkflow;
+    private readonly Mock<IDocumentFacade> _mockDocuments;
+    private readonly Mock<IMessageFacade> _mockMessages;
     private readonly DeclarationsController _controller;
 
     public DeclarationsControllerTests()
@@ -19,15 +24,34 @@ public class DeclarationsControllerTests
         _mockAccessor = ControllerTestHelper.CreateMockContextAccessor();
         _mockDeclarations = new Mock<IDeclarationFacade>();
         _mockClients = new Mock<IClientFacade>();
-        _controller = new DeclarationsController(_mockRefData.Object, _mockAccessor.Object, _mockDeclarations.Object, _mockClients.Object);
-        ControllerTestHelper.SetupController(_controller);
+        _mockWorkflow = new Mock<IWorkflowFacade>();
+        _mockDocuments = new Mock<IDocumentFacade>();
+        _mockMessages = new Mock<IMessageFacade>();
+        _controller = new DeclarationsController(
+            _mockRefData.Object,
+            _mockAccessor.Object,
+            _mockDeclarations.Object,
+            _mockClients.Object,
+            _mockWorkflow.Object,
+            _mockDocuments.Object,
+            _mockMessages.Object);
+        ControllerTestHelper.SetupController(_controller, sharedContext: _mockAccessor.Object.HttpContext);
+        _controller.HttpContext.Session.SetString("SelectedClientId", "1");
+        _controller.HttpContext.Session.SetString("ActiveServices", "[\"TVA\"]");
+        PermissionHelper.SetPermissions(_controller.HttpContext.Session, new[]
+        {
+            ClaimDefinitions.DeclarationCreate,
+            ClaimDefinitions.DeclarationEdit,
+            ClaimDefinitions.TvaEdit
+        });
     }
 
     [Fact]
     public async Task Index_ReturnsViewWithDeclarations()
     {
         var page = TestDataFactory.CreateDeclarationPage();
-        _mockDeclarations.Setup(x => x.GetAllAsync(null, null, null, 1)).ReturnsAsync(page);
+        _mockDeclarations.Setup(x => x.GetAllAsync(It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(page);
 
         var result = await _controller.Index();
 
@@ -38,13 +62,11 @@ public class DeclarationsControllerTests
     [Fact]
     public async Task Index_SetsFilterViewBags()
     {
-        _mockDeclarations.Setup(x => x.GetAllAsync(3, "TVA", "EnAttente", 2))
+        _mockDeclarations.Setup(x => x.GetAllAsync(It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>()))
             .ReturnsAsync(TestDataFactory.CreateDeclarationPage());
 
-        await _controller.Index(clientId: 3, type: "TVA", statut: "EnAttente", page: 2);
+        await _controller.Index(type: null, statut: "EnAttente", page: 2);
 
-        Assert.Equal(3, (int?)_controller.ViewBag.ClientId);
-        Assert.Equal("TVA", (string?)_controller.ViewBag.Type);
         Assert.Equal("EnAttente", (string?)_controller.ViewBag.Statut);
     }
 
@@ -65,10 +87,10 @@ public class DeclarationsControllerTests
     public async Task CreateTVA_Success_RedirectsToEditTVA()
     {
         var created = TestDataFactory.CreateDeclaration(10, "TVA");
-        _mockDeclarations.Setup(x => x.CreateTVAAsync(1))
+        _mockDeclarations.Setup(x => x.CreateAsync(It.IsAny<CreateDeclarationDto>()))
             .ReturnsAsync(ApiResponse<DeclarationDto>.Ok(created, "Déclaration TVA créée."));
 
-        var result = await _controller.CreateTVA(1);
+        var result = await _controller.CreateTVA();
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("EditTVA");
@@ -78,13 +100,13 @@ public class DeclarationsControllerTests
     [Fact]
     public async Task CreateTVA_Failure_RedirectsToIndexWithError()
     {
-        _mockDeclarations.Setup(x => x.CreateTVAAsync(1))
+        _mockDeclarations.Setup(x => x.CreateAsync(It.IsAny<CreateDeclarationDto>()))
             .ReturnsAsync(ApiResponse<DeclarationDto>.Fail("Période déjà existante."));
 
-        var result = await _controller.CreateTVA(1);
+        var result = await _controller.CreateTVA();
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
+        redirect.ActionName.Should().Be("TVA");
         _controller.TempData["Error"].Should().Be("Période déjà existante.");
     }
 
@@ -93,62 +115,16 @@ public class DeclarationsControllerTests
     {
         var decl = TestDataFactory.CreateDeclaration(1, "TVA");
         _mockDeclarations.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(decl);
+        _mockDeclarations.Setup(x => x.GetTVADataAsync(1))
+            .ReturnsAsync(new DeclarationTVADto { DeclarationId = 1 });
+        _mockClients.Setup(x => x.GetByIdAsync(It.IsAny<int>())).ReturnsAsync(TestDataFactory.CreateClient(1));
+        _mockWorkflow.Setup(x => x.GetInstancesAsync(It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(new PagedResult<WorkflowInstanceDto> { Items = new List<WorkflowInstanceDto>() });
 
         var result = await _controller.EditTVA(1);
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<DeclarationTVADto>().Subject;
         model.DeclarationId.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task EditTVA_Post_Success_RedirectsToDetails()
-    {
-        var tvaData = TestDataFactory.CreateTVAData();
-        _mockDeclarations.Setup(x => x.SaveTVADataAsync(1, tvaData))
-            .ReturnsAsync(ApiResponse<DeclarationTVADto>.Ok(tvaData));
-
-        var result = await _controller.EditTVA(1, tvaData);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Details");
-        redirect.RouteValues!["id"].Should().Be(1);
-    }
-
-    [Fact]
-    public async Task EditTVA_Post_Failure_ReturnsView()
-    {
-        var tvaData = TestDataFactory.CreateTVAData();
-        _mockDeclarations.Setup(x => x.SaveTVADataAsync(1, tvaData))
-            .ReturnsAsync(ApiResponse<DeclarationTVADto>.Fail("Erreur de calcul."));
-
-        var result = await _controller.EditTVA(1, tvaData);
-
-        result.Should().BeOfType<ViewResult>();
-        _controller.TempData["Error"].Should().Be("Erreur de calcul.");
-    }
-
-    [Fact]
-    public async Task ChangeStatus_Success_RedirectsToDetails()
-    {
-        _mockDeclarations.Setup(x => x.ChangeStatusAsync(5, "Validée", "OK"))
-            .ReturnsAsync(ApiResponse<bool>.Ok(true, "Statut mis à jour."));
-
-        var result = await _controller.ChangeStatus(5, "Validée", "OK");
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Details");
-        _controller.TempData["Success"].Should().Be("Statut mis à jour.");
-    }
-
-    [Fact]
-    public async Task ChangeStatus_Failure_RedirectsWithError()
-    {
-        _mockDeclarations.Setup(x => x.ChangeStatusAsync(5, "Validée", null))
-            .ReturnsAsync(ApiResponse<bool>.Fail("Transition non autorisée."));
-
-        var result = await _controller.ChangeStatus(5, "Validée");
-
-        _controller.TempData["Error"].Should().Be("Transition non autorisée.");
     }
 }

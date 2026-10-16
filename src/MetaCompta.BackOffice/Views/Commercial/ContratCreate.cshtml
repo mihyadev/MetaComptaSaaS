@@ -2,8 +2,23 @@
 @{
     var isEdit = ViewBag.ContratId != null;
     var contratId = isEdit ? (int)ViewBag.ContratId : 0;
-    ViewData["Title"] = isEdit ? "Modifier le contrat" : "Nouveau contrat";
+    ViewData["Title"] = isEdit ? "Modifier la mission / contrat" : "Nouvelle mission / contrat";
+    var clientsSans = ViewBag.ClientsSansContratActif as List<ClientContratPickerItemDto> ?? new();
     var clients = ViewBag.Clients as List<ClientDto> ?? new();
+    if (!clients.Any() && clientsSans.Any())
+    {
+        clients = clientsSans.Select(c => new ClientDto
+        {
+            Id = c.Id,
+            RaisonSociale = c.RaisonSociale,
+            ICE = c.ICE,
+            IF = c.IF,
+            RC = c.RC,
+            NumeroCNSS = c.NumeroCNSS,
+            VilleSiegeSocial = c.VilleSiegeSocial
+        }).ToList();
+    }
+    var freq = Model.FrequenceFacturation ?? "Mensuel";
     var typeServiceItems = (ViewData["Ref_TYPE_SERVICE"] as List<ReferenceDataDto>) ?? new();
     var checkedServices = Model.ServicesActives ?? new List<ContratServiceActiveLine>();
     var clientsJson = System.Text.Json.JsonSerializer.Serialize(
@@ -12,294 +27,587 @@
             cnss = c.NumeroCNSS, ville = c.VilleSiegeSocial, name = c.RaisonSociale
         })
     );
+    var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new();
+    var hasAdvanced = !string.IsNullOrWhiteSpace(Model.Description)
+        || !string.IsNullOrWhiteSpace(Model.ConditionsParticulieres)
+        || !string.IsNullOrWhiteSpace(Model.ClausesSpecifiques)
+        || !string.IsNullOrWhiteSpace(Model.Notes);
+    var steps = new[]
+    {
+        new { Id = 1, Key = "client", Label = "Client", Icon = "bi-building" },
+        new { Id = 2, Key = "periode", Label = "Période", Icon = "bi-calendar3" },
+        new { Id = 3, Key = "services", Label = "Services", Icon = "bi-grid-3x3-gap" },
+        new { Id = 4, Key = "equipe", Label = "Équipe", Icon = "bi-people" },
+        new { Id = 5, Key = "honoraires", Label = "Honoraires", Icon = "bi-receipt" },
+        new { Id = 6, Key = "workflows", Label = "Workflows", Icon = "bi-diagram-3" }
+    };
 }
 
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <div class="d-flex align-items-center gap-3">
-        <span class="bg-primary text-white rounded-3 p-3 lh-1">
-            <i class="bi bi-file-earmark-plus fs-4"></i>
-        </span>
+<div class="contrat-create contrat-wizard @(isEdit ? "is-edit-tabs" : "is-create-wizard")" data-mode="@(isEdit ? "edit" : "create")">
+    <div class="contrat-create-header d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1 small">
                     <li class="breadcrumb-item"><a asp-action="Contrats" class="text-decoration-none">Contrats</a></li>
-                    <li class="breadcrumb-item active">@(isEdit ? "Éditer" : "Nouveau")</li>
+                    @if (isEdit)
+                    {
+                        <li class="breadcrumb-item"><a asp-action="ContratDetails" asp-route-id="@contratId" class="text-decoration-none">Détail</a></li>
+                    }
+                    <li class="breadcrumb-item active">@(isEdit ? "Éditer" : "Nouvelle mission")</li>
                 </ol>
             </nav>
-            <h1 class="h3 fw-bold mb-0">@ViewData["Title"]</h1>
+            <h1 class="h3 fw-bold mb-1">@ViewData["Title"]</h1>
+            <p class="text-body-secondary mb-0 small">
+                @(isEdit
+                    ? "Onglets — ouvrez chaque section pour modifier les détails"
+                    : "Parcours en 6 étapes — une seule à la fois")
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (isEdit)
+            {
+                <a asp-action="ContratDetails" asp-route-id="@contratId" class="btn btn-light border rounded-pill px-3">Voir le détail</a>
+            }
+            <a asp-action="Contrats" class="btn btn-light border rounded-pill px-3">Retour au board</a>
         </div>
     </div>
-    <a asp-action="Contrats" class="btn btn-light border rounded-pill px-3">Retour au board</a>
-</div>
 
-<form asp-action="@(isEdit ? "ContratEdit" : "ContratCreate")" asp-route-id="@(isEdit ? contratId : null)"
-      method="post" id="contratForm" class="needs-validation" novalidate>
-
-    <div class="row g-4">
-        <div class="col-lg-8">
-
-            <div class="card border-0 shadow-sm rounded-4 mb-4 border-start border-4 border-primary">
-                <div class="card-header bg-white border-0 pt-4 px-4 rounded-top-4">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis px-3 py-2">1 · Client</span>
-                        <span class="text-body-secondary small">Identité &amp; période</span>
-                    </div>
-                </div>
-                <div class="card-body p-4">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label for="clientSelect" class="form-label fw-semibold">Client</label>
-                            <select asp-for="ClientId" class="form-select form-select-lg rounded-3" id="clientSelect" required>
-                                <option value="">Sélectionner un client…</option>
-                                @foreach (var c in clients)
-                                {
-                                    <option value="@c.Id" selected="@(c.Id == Model.ClientId ? "selected" : null)">@c.RaisonSociale</option>
-                                }
-                            </select>
-                            <div class="invalid-feedback">Client obligatoire.</div>
-                        </div>
-                        <div class="col-12">
-                            <label asp-for="Objet" class="form-label fw-semibold">Objet</label>
-                            <input asp-for="Objet" class="form-control rounded-3" placeholder="Mission fiduciaire — exercice 2026" />
-                        </div>
-                        <div class="col-sm-6">
-                            <label asp-for="DateDebutContrat" class="form-label fw-semibold">Début</label>
-                            <input asp-for="DateDebutContrat" type="date" class="form-control rounded-3" required />
-                        </div>
-                        <div class="col-sm-6">
-                            <label asp-for="DateFinContrat" class="form-label fw-semibold">Fin</label>
-                            <input asp-for="DateFinContrat" type="date" class="form-control rounded-3" required />
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="Devise" class="form-label fw-semibold">Devise</label>
-                            <select asp-for="Devise" class="form-select rounded-3" id="deviseSelect">
-                                <option value="MAD" selected="@(Model.Devise == "MAD" ? "selected" : null)">MAD</option>
-                                <option value="EUR" selected="@(Model.Devise == "EUR" ? "selected" : null)">EUR</option>
-                                <option value="USD" selected="@(Model.Devise == "USD" ? "selected" : null)">USD</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="ModeleFacturation" class="form-label fw-semibold">Modèle</label>
-                            <select asp-for="ModeleFacturation" class="form-select rounded-3">
-                                <option value="Forfait" selected="@(Model.ModeleFacturation == "Forfait" ? "selected" : null)">Forfait</option>
-                                <option value="Regie" selected="@(Model.ModeleFacturation == "Regie" ? "selected" : null)">Régie</option>
-                                <option value="Mixte" selected="@(Model.ModeleFacturation == "Mixte" ? "selected" : null)">Mixte</option>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <div id="clientLegalBadge" class="bg-primary-subtle rounded-3 p-3 d-none">
-                                <div class="small fw-semibold text-primary-emphasis mb-2">Identifiants légaux</div>
-                                <div class="d-flex flex-wrap gap-2" id="clientLegalChips"></div>
-                            </div>
-                            <div id="clientLegalEmpty" class="form-text">Sélectionnez un client pour afficher ICE, IF, CNSS, RC.</div>
-                        </div>
-                        <div class="col-12">
-                            <label asp-for="Description" class="form-label fw-semibold">Description</label>
-                            <textarea asp-for="Description" class="form-control rounded-3" rows="2"></textarea>
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="ConditionsParticulieres" class="form-label fw-semibold">Conditions particulières</label>
-                            <textarea asp-for="ConditionsParticulieres" class="form-control rounded-3" rows="2"></textarea>
-                        </div>
-                        <div class="col-md-6">
-                            <label asp-for="ClausesSpecifiques" class="form-label fw-semibold">Clauses spécifiques</label>
-                            <textarea asp-for="ClausesSpecifiques" class="form-control rounded-3" rows="2"></textarea>
-                        </div>
-                        <div class="col-12">
-                            <label asp-for="Notes" class="form-label fw-semibold">Notes internes</label>
-                            <textarea asp-for="Notes" class="form-control rounded-3" rows="2"></textarea>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            @{
-                var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new();
+    <nav class="contrat-wizard-steps @(isEdit ? "contrat-edit-tabs" : "") mb-4" id="contratWizardSteps" role="tablist" aria-label="@(isEdit ? "Onglets du contrat" : "Étapes du contrat")">
+        @foreach (var s in steps)
+        {
+            if (!isEdit && s.Id > 1)
+            {
+                <div class="contrat-wizard-line" data-line-before="@s.Id"></div>
             }
-            <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-header bg-white border-0 pt-4 px-4">
-                    <div class="fw-semibold">Équipe du dossier</div>
-                    <div class="small text-body-secondary">Affectation des collaborateurs du cabinet</div>
-                </div>
-                <div class="card-body p-4">
-                    @{
-                        ViewBag.Employees = employees;
-                        ViewBag.InitialMembreInputs = Model.Membres;
-                        ViewBag.EditorId = "equipeCreate";
-                        ViewBag.ShowActions = true;
-                    }
-                    @await Html.PartialAsync("_EquipeDossierEditor")
-                </div>
-            </div>
+            <button type="button"
+                    class="contrat-wizard-step @(s.Id == 1 ? "is-active" : "") @(isEdit ? "is-tab" : "")"
+                    data-goto-step="@s.Id"
+                    role="tab"
+                    aria-selected="@(s.Id == 1 ? "true" : "false")"
+                    aria-controls="step-@s.Key"
+                    aria-current="@(s.Id == 1 ? "step" : null)">
+                <span class="contrat-wizard-step-num"><i class="bi @s.Icon"></i><span class="contrat-wizard-step-idx">@s.Id</span></span>
+                <span class="contrat-wizard-step-label">@s.Label</span>
+            </button>
+        }
+    </nav>
 
-            <div class="card border-0 shadow-sm rounded-4 mb-4 border-start border-4 border-info">
-                <div class="card-header bg-white border-0 pt-4 px-4">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge rounded-pill bg-info-subtle text-info-emphasis px-3 py-2">2 · Services</span>
-                        <span class="text-body-secondary small">Périmètre opérationnel</span>
-                    </div>
-                </div>
-                <div class="card-body p-4">
-                    @{
-                        var svcVD = new ViewDataDictionary(ViewData);
-                        svcVD["typeServiceItems"] = typeServiceItems;
-                        svcVD["checkedServices"] = checkedServices;
-                        svcVD["prefix"] = "svc";
-                    }
-                    @await Html.PartialAsync("_ServicesPicker", null, svcVD)
-                </div>
-            </div>
+    <form asp-action="@(isEdit ? "ContratEdit" : "ContratCreate")" asp-route-id="@(isEdit ? contratId : null)"
+          method="post" id="contratForm" class="needs-validation" novalidate data-current-step="1" data-is-edit="@(isEdit ? "1" : "0")">
 
-            <div class="card border-0 shadow-sm rounded-4 mb-4 border-start border-4 border-success">
-                <div class="card-header bg-white border-0 pt-4 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge rounded-pill bg-success-subtle text-success-emphasis px-3 py-2">3 · Honoraires</span>
-                        <span class="text-body-secondary small">Lignes libres</span>
+        <div class="row g-4">
+            <div class="col-lg-8">
+
+                @* —— 1. Client —— *@
+                <section class="contrat-create-panel contrat-wizard-panel is-active" data-step="1" id="step-client">
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge">1</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Client</h2>
+                            <p class="small text-body-secondary mb-0">Choisissez le client et l’objet de la mission</p>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3" onclick="addLigne()">
-                        <i class="bi bi-plus-lg me-1"></i>Ajouter
-                    </button>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" id="feeTable">
-                            <thead class="table-light">
-                                <tr class="small text-body-secondary text-uppercase">
-                                    <th class="ps-4 fw-semibold border-0">Description</th>
-                                    <th class="fw-semibold border-0 text-end">Prix HT</th>
-                                    <th class="fw-semibold border-0 text-end">Remise</th>
-                                    <th class="fw-semibold border-0">TVA</th>
-                                    <th class="fw-semibold border-0">Périodicité</th>
-                                    <th class="fw-semibold border-0 text-end">Net</th>
-                                    <th class="fw-semibold border-0 text-end">TTC</th>
-                                    <th class="border-0 pe-3"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="lignesContainer">
-                                @if (Model.Lignes.Any())
-                                {
-                                    for (int i = 0; i < Model.Lignes.Count; i++)
+                    <div class="contrat-create-panel-body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                                    <label for="clientSelect" class="form-label fw-semibold mb-0">Client</label>
+                                    <span class="badge rounded-pill text-bg-success-subtle text-success-emphasis border border-success-subtle">@clientsSans.Count sans contrat actif</span>
+                                </div>
+                                <select asp-for="ClientId" class="form-select form-select-lg rounded-3" id="clientSelect" required data-step-required="1">
+                                    <option value="">Sélectionner un client…</option>
+                                    @foreach (var c in clientsSans)
                                     {
-                                        var mode = Model.Lignes[i].ModeFacturation ?? "";
-                                        var tva = Model.Lignes[i].TauxTVA;
-                                        <tr class="ligne-row">
-                                            <td class="ps-4">
-                                                <input name="Lignes[@i].Description" value="@Model.Lignes[i].Description"
-                                                       class="form-control form-control-sm rounded-3" required />
-                                                <input type="hidden" name="Lignes[@i].Quantite" value="@(Model.Lignes[i].Quantite <= 0 ? 1 : Model.Lignes[i].Quantite)" />
-                                                <input type="hidden" name="Lignes[@i].Ordre" value="@(i + 1)" class="ligne-ordre" />
-                                            </td>
-                                            <td>
+                                        <option value="@c.Id"
+                                                selected="@(c.Id == Model.ClientId ? "selected" : null)">@c.RaisonSociale</option>
+                                    }
+                                </select>
+                                <div class="invalid-feedback">Client obligatoire.</div>
+                                @if (!clientsSans.Any() && !isEdit)
+                                {
+                                    <div class="form-text text-warning-emphasis mt-2">
+                                        <i class="bi bi-exclamation-circle me-1"></i>
+                                        Aucun client sans contrat actif.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="form-text mt-1">Seuls les clients sans contrat Valide / Actif sont listés.</div>
+                                }
+                                <input type="hidden" asp-for="Devise" value="MAD" />
+                                <input type="hidden" asp-for="ModeleFacturation" value="Forfait" />
+                            </div>
+                            <div class="col-12">
+                                <label asp-for="Objet" class="form-label fw-semibold">Objet de la mission</label>
+                                <input asp-for="Objet" class="form-control rounded-3" id="objetMission" placeholder="Mission fiduciaire — exercice 2026" />
+                            </div>
+                            <div class="col-12">
+                                <div id="clientLegalBadge" class="contrat-create-legal d-none">
+                                    <div class="small fw-semibold text-primary-emphasis mb-2">Identifiants légaux</div>
+                                    <div class="d-flex flex-wrap gap-2" id="clientLegalChips"></div>
+                                </div>
+                                <div id="clientLegalEmpty" class="form-text">Sélectionnez un client pour afficher ICE, IF, CNSS, RC.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                @* —— 2. Période —— *@
+                <section class="contrat-create-panel contrat-wizard-panel" data-step="2" id="step-periode" hidden>
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge" style="background:#6f42c1;">2</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Période</h2>
+                            <p class="small text-body-secondary mb-0">Dates de début et de fin de la mission</p>
+                        </div>
+                    </div>
+                    <div class="contrat-create-panel-body">
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label asp-for="DateDebutContrat" class="form-label fw-semibold">Date de début</label>
+                                <input asp-for="DateDebutContrat" type="date" class="form-control rounded-3" id="DateDebutContrat" required data-step-required="2" />
+                                <div class="invalid-feedback">Date de début obligatoire.</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label asp-for="DateFinContrat" class="form-label fw-semibold">Date de fin</label>
+                                <input asp-for="DateFinContrat" type="date" class="form-control rounded-3" id="DateFinContrat" required data-step-required="2" />
+                                <div class="invalid-feedback">Date de fin obligatoire.</div>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-link btn-sm text-decoration-none px-0 contrat-create-adv-toggle"
+                                        type="button" data-bs-toggle="collapse" data-bs-target="#optionsAvancees"
+                                        aria-expanded="@(hasAdvanced ? "true" : "false")" aria-controls="optionsAvancees">
+                                    <i class="bi bi-chevron-down me-1"></i>Options avancées
+                                    <span class="text-body-secondary fw-normal">— description, clauses, notes</span>
+                                </button>
+                                <div class="collapse @(hasAdvanced ? "show" : "")" id="optionsAvancees">
+                                    <div class="contrat-create-advanced mt-3">
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label asp-for="Description" class="form-label fw-semibold">Description</label>
+                                                <textarea asp-for="Description" class="form-control rounded-3" rows="2"></textarea>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label asp-for="ConditionsParticulieres" class="form-label fw-semibold">Conditions particulières</label>
+                                                <textarea asp-for="ConditionsParticulieres" class="form-control rounded-3" rows="2"></textarea>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label asp-for="ClausesSpecifiques" class="form-label fw-semibold">Clauses spécifiques</label>
+                                                <textarea asp-for="ClausesSpecifiques" class="form-control rounded-3" rows="2"></textarea>
+                                            </div>
+                                            <div class="col-12">
+                                                <label asp-for="Notes" class="form-label fw-semibold">Notes internes</label>
+                                                <textarea asp-for="Notes" class="form-control rounded-3" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                @* —— 3. Services —— *@
+                <section class="contrat-create-panel contrat-wizard-panel" data-step="3" id="step-services" hidden>
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge contrat-create-badge-info">3</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Activation des services</h2>
+                            <p class="small text-body-secondary mb-0">Incluez les packs métier (Fiscal, Social, Juridique, Comptable, Domiciliation)</p>
+                        </div>
+                    </div>
+                    <div class="contrat-create-panel-body">
+                        @{
+                            var svcVD = new ViewDataDictionary(ViewData);
+                            svcVD["typeServiceItems"] = typeServiceItems;
+                            svcVD["checkedServices"] = checkedServices;
+                            svcVD["ServiceGroups"] = ViewData["ServiceGroups"] ?? ViewBag.ServiceGroups;
+                            svcVD["prefix"] = "svc";
+                        }
+                        @await Html.PartialAsync("_ServicesPicker", null, svcVD)
+                    </div>
+                </section>
+
+                @* —— 4. Équipe —— *@
+                <section class="contrat-create-panel contrat-wizard-panel" data-step="4" id="step-equipe" hidden>
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge" style="background:#6f42c1;">4</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Équipe du dossier</h2>
+                            <p class="small text-body-secondary mb-0">Collaborateurs du cabinet affectés à cette mission</p>
+                        </div>
+                    </div>
+                    <div class="contrat-create-panel-body">
+                        @{
+                            ViewBag.Employees = employees;
+                            ViewBag.InitialMembreInputs = Model.Membres;
+                            ViewBag.EditorId = "equipeCreate";
+                            ViewBag.ShowActions = true;
+                        }
+                        @await Html.PartialAsync("_EquipeDossierEditor")
+                    </div>
+                </section>
+
+                @* —— 5. Honoraires —— *@
+                <section class="contrat-create-panel contrat-wizard-panel" data-step="5" id="step-honoraires" hidden>
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge contrat-create-badge-success">5</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Honoraires</h2>
+                            <p class="small text-body-secondary mb-0">Montants et périodicité — lignes compactes</p>
+                        </div>
+                    </div>
+                    <div class="contrat-create-panel-body">
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-sm-6 col-md-4">
+                                <label for="freqFacturation" class="form-label fw-semibold mb-1">Périodicité</label>
+                                <select asp-for="FrequenceFacturation" class="form-select form-select-sm rounded-3" id="freqFacturation" required>
+                                    <option value="Mensuel" selected="@(freq == "Mensuel" ? "selected" : null)">Tous les mois</option>
+                                    <option value="Trimestriel" selected="@(freq == "Trimestriel" ? "selected" : null)">Tous les trimestres</option>
+                                    <option value="Annuel" selected="@(freq == "Annuel" ? "selected" : null)">Tous les ans</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 col-md-8">
+                                <div class="form-text">Facturation auto selon cette périodicité.</div>
+                            </div>
+                        </div>
+
+                        <div id="lignesContainer" class="fee-lines">
+                            @if (Model.Lignes.Any())
+                            {
+                                for (int i = 0; i < Model.Lignes.Count; i++)
+                                {
+                                    var tva = Model.Lignes[i].TauxTVA;
+                                    <article class="fee-line ligne-row">
+                                        <div class="fee-line-head">
+                                            <span class="fee-line-idx">@(i + 1)</span>
+                                            <input name="Lignes[@i].Description" value="@Model.Lignes[i].Description"
+                                                   class="form-control form-control-sm rounded-2 fee-desc" placeholder="Libellé (ex. Forfait mensuel)" required />
+                                            <button type="button" class="btn btn-sm btn-link text-danger fee-line-remove p-0"
+                                                    title="Supprimer"
+                                                    onclick="this.closest('.ligne-row').remove(); checkNoLignes(); recalcFees();">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                            <input type="hidden" name="Lignes[@i].Quantite" value="@(Model.Lignes[i].Quantite <= 0 ? 1 : Model.Lignes[i].Quantite)" />
+                                            <input type="hidden" name="Lignes[@i].Ordre" value="@(i + 1)" class="ligne-ordre" />
+                                            <input type="hidden" name="Lignes[@i].ModeFacturation" value="@freq" class="ligne-mode-facturation" />
+                                        </div>
+                                        <div class="fee-line-body">
+                                            <div class="fee-field">
+                                                <label class="fee-field-label">HT</label>
                                                 <div class="input-group input-group-sm">
                                                     <input name="Lignes[@i].PrixUnitaireHT" value="@Model.Lignes[i].PrixUnitaireHT.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-                                                           type="number" step="0.01" min="0" class="form-control text-end fee-pu rounded-start-3" oninput="recalcFees()" />
-                                                    <span class="input-group-text rounded-end-3">MAD</span>
+                                                           type="number" step="0.01" min="0" class="form-control text-end fee-pu" oninput="recalcFees()" />
+                                                    <span class="input-group-text">MAD</span>
                                                 </div>
-                                            </td>
-                                            <td>
+                                            </div>
+                                            <div class="fee-field fee-field-sm">
+                                                <label class="fee-field-label">Remise</label>
                                                 <div class="input-group input-group-sm">
                                                     <input name="Lignes[@i].RemisePourcentage" value="@((Model.Lignes[i].RemisePourcentage ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
                                                            type="number" step="0.01" min="0" max="100" class="form-control text-end fee-remise" oninput="recalcFees()" />
                                                     <span class="input-group-text">%</span>
                                                 </div>
-                                            </td>
-                                            <td>
-                                                <select name="Lignes[@i].TauxTVA" class="form-select form-select-sm rounded-3 fee-tva" onchange="recalcFees()">
+                                            </div>
+                                            <div class="fee-field fee-field-sm">
+                                                <label class="fee-field-label">TVA</label>
+                                                <select name="Lignes[@i].TauxTVA" class="form-select form-select-sm fee-tva" onchange="recalcFees()">
                                                     <option value="20" selected="@(tva != 0 ? "selected" : null)">20 %</option>
                                                     <option value="0" selected="@(tva == 0 ? "selected" : null)">0 %</option>
                                                 </select>
-                                            </td>
-                                            <td>
-                                                <select name="Lignes[@i].ModeFacturation" class="form-select form-select-sm rounded-3">
-                                                    <option value="" selected="@(string.IsNullOrEmpty(mode) ? "selected" : null)">Ponctuel</option>
-                                                    <option value="Mensuel" selected="@(mode == "Mensuel" ? "selected" : null)">Mensuel</option>
-                                                    <option value="Trimestriel" selected="@(mode == "Trimestriel" ? "selected" : null)">Trimestriel</option>
-                                                    <option value="Semestriel" selected="@(mode == "Semestriel" ? "selected" : null)">Semestriel</option>
-                                                    <option value="Annuel" selected="@(mode == "Annuel" ? "selected" : null)">Annuel</option>
-                                                </select>
-                                            </td>
-                                            <td class="text-end fw-semibold fee-net">0,00</td>
-                                            <td class="text-end fw-semibold text-success fee-ttc">0,00</td>
-                                            <td class="pe-3">
-                                                <button type="button" class="btn btn-sm btn-outline-danger rounded-circle"
-                                                        onclick="this.closest('.ligne-row').remove(); checkNoLignes(); recalcFees();">
-                                                    <i class="bi bi-x"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    }
+                                            </div>
+                                            <div class="fee-field fee-field-out">
+                                                <label class="fee-field-label">Net</label>
+                                                <div class="fee-out fee-net">0,00</div>
+                                            </div>
+                                            <div class="fee-field fee-field-out">
+                                                <label class="fee-field-label">TTC</label>
+                                                <div class="fee-out text-success fw-semibold fee-ttc">0,00</div>
+                                            </div>
+                                        </div>
+                                    </article>
                                 }
-                            </tbody>
-                        </table>
-                    </div>
-                    <div id="noLignes" class="text-center text-body-secondary py-5 @(Model.Lignes.Any() ? "d-none" : "")">
-                        <div class="mb-2"><i class="bi bi-receipt fs-3 text-success"></i></div>
-                        Aucune ligne — ajoutez librement vos honoraires
-                        <div class="mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-success rounded-pill" onclick="addLigne()">Ajouter</button>
+                            }
                         </div>
+
+                        <div id="noLignes" class="fee-lines-empty @(Model.Lignes.Any() ? "d-none" : "")">
+                            <i class="bi bi-receipt me-1"></i>Aucune ligne — ajoutez un forfait ci-dessous
+                        </div>
+
+                        <button type="button" class="fee-add-btn" onclick="addLigne()">
+                            <i class="bi bi-plus-lg"></i>
+                            <span>Ajouter une ligne d’honoraires</span>
+                        </button>
+                    </div>
+                </section>
+
+                @* —— 6. Workflows + create —— *@
+                <section class="contrat-create-panel contrat-wizard-panel" data-step="6" id="step-workflows" hidden>
+                    <div class="contrat-create-panel-head">
+                        <span class="contrat-create-badge" style="background:#0d6efd;">6</span>
+                        <div>
+                            <h2 class="h5 fw-semibold mb-0">Workflows</h2>
+                            <p class="small text-body-secondary mb-0">
+                                @(isEdit ? "Affectation des modèles et acteurs pour les services actifs" : "Affectez les modèles / acteurs, puis créez le contrat")
+                            </p>
+                        </div>
+                    </div>
+                    <div class="contrat-create-panel-body">
+                        @{
+                            var wfVD = new ViewDataDictionary(ViewData);
+                            wfVD["prefix"] = "svc";
+                            wfVD["employees"] = employees;
+                            wfVD["cabinetRoles"] = ViewBag.CabinetRoles as List<RoleDto> ?? new List<RoleDto>();
+                            wfVD["workflowTemplates"] = ViewBag.WorkflowTemplates as List<WorkflowTemplateDto> ?? new List<WorkflowTemplateDto>();
+                        }
+                        @await Html.PartialAsync("_ContratWorkflowAffectation", null, wfVD)
+                    </div>
+                </section>
+
+                <div class="contrat-wizard-nav mt-3 mb-4">
+                    <button type="button" class="btn btn-light border rounded-pill px-4" id="wizardPrev" hidden>
+                        <i class="bi bi-arrow-left me-1"></i>Précédent
+                    </button>
+                    <div class="ms-auto d-flex gap-2">
+                        <button type="button" class="btn btn-primary rounded-pill px-4" id="wizardNext" @(isEdit ? "hidden" : null)>
+                            Suivant<i class="bi bi-arrow-right ms-1"></i>
+                        </button>
+                        <button type="submit" class="btn btn-success rounded-pill px-4" id="wizardSubmit" @(!isEdit ? "hidden" : null)>
+                            <i class="bi bi-check2 me-1"></i>@(isEdit ? "Enregistrer les modifications" : "Créer le contrat")
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-primary btn-lg rounded-pill w-100 py-3 mb-2">
-                <i class="bi bi-check2 me-1"></i>@(isEdit ? "Enregistrer" : "Créer le contrat")
-            </button>
-            <div class="text-center mb-4">
-                <a asp-action="Contrats" class="link-secondary small">Annuler</a>
-            </div>
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm rounded-4 sticky-top">
-                <div class="card-header bg-primary text-white border-0 rounded-top-4 py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">Récapitulatif</span>
+            <div class="col-lg-4">
+                <aside class="contrat-create-recap sticky-top">
+                    <div class="contrat-create-recap-head">
+                        <span class="fw-semibold">Synthèse</span>
                         <span class="badge text-bg-light text-primary rounded-pill" id="recapLignes">0</span>
                     </div>
-                </div>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
-                        <div>
-                            <div class="fw-semibold">Services</div>
-                            <div class="small text-body-secondary">Cochés</div>
+                    <div class="contrat-create-recap-body">
+                        <div class="mb-3">
+                            <div class="small text-body-secondary mb-1">Étape</div>
+                            <div class="fw-semibold" id="recapStepLabel">1 · Client</div>
                         </div>
-                        <span class="badge rounded-pill bg-info-subtle text-info-emphasis px-3" id="recapServices">0</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between py-3">
-                        <span class="text-body-secondary">Total HT</span>
-                        <span class="fw-semibold" id="sumHT">0,00</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between py-3">
-                        <span class="text-body-secondary">TVA</span>
-                        <span class="fw-semibold" id="sumTVA">0,00</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between py-3 bg-success-subtle">
-                        <span class="fw-bold text-success-emphasis">Total TTC</span>
-                        <span class="fw-bold text-success-emphasis fs-5" id="sumTTC">0,00</span>
-                    </li>
-                </ul>
-                <div class="card-body">
-                    <div class="small text-body-secondary">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Services = périmètre · Honoraires = facturation (indépendants)
+                        <div class="mb-3">
+                            <div class="small text-body-secondary mb-1">Client</div>
+                            <div class="fw-semibold" id="recapClient">—</div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="small text-body-secondary mb-1">Période</div>
+                            <div class="fw-semibold small" id="recapPeriod">—</div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="small text-body-secondary mb-1">Domaines inclus</div>
+                            <div id="recapDomaines" class="d-flex flex-wrap gap-1">
+                                <span class="text-body-secondary small" id="recapServicesLabel">Aucun</span>
+                            </div>
+                            <span class="d-none" id="recapServices">0</span>
+                        </div>
+                        <hr class="my-3" />
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-body-secondary">Total HT</span>
+                            <span class="fw-semibold" id="sumHT">0,00</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-body-secondary">TVA</span>
+                            <span class="fw-semibold" id="sumTVA">0,00</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 contrat-create-recap-ttc">
+                            <span class="fw-bold">Total TTC</span>
+                            <span class="fw-bold fs-5" id="sumTTC">0,00</span>
+                        </div>
                     </div>
-                </div>
+                </aside>
             </div>
         </div>
-    </div>
-</form>
+
+        <div class="contrat-create-mobile-cta d-lg-none">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+                <button type="button" class="btn btn-light border rounded-pill" id="wizardPrevMobile" hidden>
+                    <i class="bi bi-arrow-left"></i>
+                </button>
+                <div class="flex-grow-1 text-center">
+                    <div class="small text-body-secondary">Total TTC</div>
+                    <div class="fw-bold" id="sumTTCMobile">0,00</div>
+                </div>
+                <button type="button" class="btn btn-primary rounded-pill px-3" id="wizardNextMobile" @(isEdit ? "hidden" : null)>Suivant</button>
+                <button type="submit" class="btn btn-success rounded-pill px-3" id="wizardSubmitMobile" @(!isEdit ? "hidden" : null)>
+                    @(isEdit ? "Enregistrer" : "Créer")
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
 
 @section Scripts {
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<style>
+    .contrat-wf-affect .employee-multi + .select2-container,
+    .contrat-wf-affect .role-multi + .select2-container { width: 100% !important; }
+    .contrat-wf-affect .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
+</style>
 <script>
+window.initContratWfActorSelect2 = function (root) {
+    if (!window.jQuery || !jQuery.fn.select2) return;
+    var $root = jQuery(root || document);
+    function initOne($el, emptyMsg) {
+        if ($el.hasClass('select2-hidden-accessible')) {
+            try { $el.select2('destroy'); } catch (e) { /* ignore */ }
+        }
+        $el.select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: $el.data('placeholder') || 'Sélectionner…',
+            allowClear: true,
+            closeOnSelect: false,
+            dropdownParent: jQuery('body'),
+            language: {
+                noResults: function () { return emptyMsg; },
+                searching: function () { return 'Recherche…'; },
+                removeAllItems: function () { return 'Tout retirer'; }
+            }
+        });
+    }
+    $root.find('select.employee-multi').each(function () { initOne(jQuery(this), 'Aucun employé trouvé'); });
+    $root.find('select.role-multi').each(function () { initOne(jQuery(this), 'Aucun profil trouvé'); });
+};
+jQuery(document).on('shown.bs.collapse', '.contrat-wf-affect .collapse', function () {
+    window.initContratWfActorSelect2(this);
+});
+
 (() => {
     'use strict';
+    const TOTAL = 6;
+    const STEP_LABELS = { 1: 'Client', 2: 'Période', 3: 'Services', 4: 'Équipe', 5: 'Honoraires', 6: 'Workflows' };
     const form = document.getElementById('contratForm');
-    form.addEventListener('submit', event => {
+    const IS_EDIT = form.getAttribute('data-is-edit') === '1';
+    let current = 1;
+
+    function panel(n) { return form.querySelector('.contrat-wizard-panel[data-step="' + n + '"]'); }
+
+    function validateStep(n) {
+        var p = panel(n);
+        if (!p) return true;
+        var ok = true;
+        p.querySelectorAll('[data-step-required="' + n + '"]').forEach(function (el) {
+            if (!el.checkValidity()) {
+                ok = false;
+                el.classList.add('is-invalid');
+            } else {
+                el.classList.remove('is-invalid');
+            }
+        });
+        if (n === 3) {
+            var sel = (typeof window.spcGetSelection_svc === 'function') ? window.spcGetSelection_svc() : { count: 0 };
+            if (!sel.count) {
+                ok = false;
+                alert('Sélectionnez au moins un service à activer.');
+            }
+        }
+        if (n === 2) {
+            var d1 = document.getElementById('DateDebutContrat')?.value;
+            var d2 = document.getElementById('DateFinContrat')?.value;
+            if (d1 && d2 && d2 < d1) {
+                ok = false;
+                alert('La date de fin doit être après la date de début.');
+            }
+        }
+        return ok;
+    }
+
+    function goToStep(n, force) {
+        n = Math.max(1, Math.min(TOTAL, n));
+        // Create = sequential wizard; Edit = free tabs
+        if (!IS_EDIT && !force && n > current && !validateStep(current)) return;
+        if (!IS_EDIT && !force && n > current + 1) {
+            for (var i = current; i < n; i++) {
+                if (!validateStep(i)) { n = i; break; }
+            }
+        }
+        current = n;
+        form.setAttribute('data-current-step', String(current));
+        form.querySelectorAll('.contrat-wizard-panel').forEach(function (el) {
+            var s = parseInt(el.getAttribute('data-step'), 10);
+            var active = s === current;
+            el.classList.toggle('is-active', active);
+            if (active) el.removeAttribute('hidden');
+            else el.setAttribute('hidden', 'hidden');
+        });
+        document.querySelectorAll('#contratWizardSteps .contrat-wizard-step').forEach(function (btn) {
+            var s = parseInt(btn.getAttribute('data-goto-step'), 10);
+            btn.classList.toggle('is-active', s === current);
+            if (IS_EDIT) {
+                btn.classList.remove('is-done');
+            } else {
+                btn.classList.toggle('is-done', s < current);
+            }
+            btn.setAttribute('aria-selected', s === current ? 'true' : 'false');
+            if (s === current) btn.setAttribute('aria-current', 'step');
+            else btn.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('#contratWizardSteps .contrat-wizard-line').forEach(function (line) {
+            var before = parseInt(line.getAttribute('data-line-before'), 10);
+            line.classList.toggle('is-done', before <= current);
+        });
+        if (IS_EDIT) {
+            document.getElementById('wizardPrev').hidden = true;
+            document.getElementById('wizardPrevMobile').hidden = true;
+            document.getElementById('wizardNext').hidden = true;
+            document.getElementById('wizardNextMobile').hidden = true;
+            document.getElementById('wizardSubmit').hidden = false;
+            document.getElementById('wizardSubmitMobile').hidden = false;
+        } else {
+            var isFirst = current === 1;
+            var isLast = current === TOTAL;
+            document.getElementById('wizardPrev').hidden = isFirst;
+            document.getElementById('wizardPrevMobile').hidden = isFirst;
+            document.getElementById('wizardNext').hidden = isLast;
+            document.getElementById('wizardNextMobile').hidden = isLast;
+            document.getElementById('wizardSubmit').hidden = !isLast;
+            document.getElementById('wizardSubmitMobile').hidden = !isLast;
+        }
+        var recapStep = document.getElementById('recapStepLabel');
+        if (recapStep) recapStep.textContent = current + ' · ' + (STEP_LABELS[current] || '');
+        if (current === 6) {
+            if (typeof window.renderWfAffectation_svc === 'function') window.renderWfAffectation_svc();
+            else window.initContratWfActorSelect2(document.querySelector('.contrat-wf-affect'));
+        }
+        try { panel(current)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* ignore */ }
+    }
+
+    document.getElementById('wizardNext').addEventListener('click', function () { goToStep(current + 1); });
+    document.getElementById('wizardNextMobile').addEventListener('click', function () { goToStep(current + 1); });
+    document.getElementById('wizardPrev').addEventListener('click', function () { goToStep(current - 1, true); });
+    document.getElementById('wizardPrevMobile').addEventListener('click', function () { goToStep(current - 1, true); });
+    document.querySelectorAll('#contratWizardSteps [data-goto-step]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            goToStep(parseInt(btn.getAttribute('data-goto-step'), 10), IS_EDIT);
+        });
+    });
+
+    form.addEventListener('submit', function (event) {
+        if (typeof syncLigneModeFacturation === 'function') syncLigneModeFacturation();
         reindexLignes();
-        if (!form.checkValidity()) { event.preventDefault(); event.stopPropagation(); }
+        for (var i = 1; i <= TOTAL; i++) {
+            if (!validateStep(i)) {
+                event.preventDefault();
+                event.stopPropagation();
+                goToStep(i, true);
+                return;
+            }
+        }
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
         form.classList.add('was-validated');
     }, false);
+
+    goToStep(1, true);
 })();
 
 let ligneIndex = @(Model.Lignes.Count);
@@ -317,9 +625,11 @@ function refreshClientLegal() {
     var badge = document.getElementById('clientLegalBadge');
     var empty = document.getElementById('clientLegalEmpty');
     var chips = document.getElementById('clientLegalChips');
+    var recapClient = document.getElementById('recapClient');
     if (!c) {
         badge.classList.add('d-none');
         empty.classList.remove('d-none');
+        if (recapClient) recapClient.textContent = '—';
         return;
     }
     empty.classList.add('d-none');
@@ -327,10 +637,58 @@ function refreshClientLegal() {
     var rc = c.rc || '';
     if (c.ville) rc = rc ? (rc + ' — ' + c.ville) : c.ville;
     chips.innerHTML = chip('ICE', c.ice) + chip('IF', c.fiscalId) + chip('CNSS', c.cnss) + chip('RC', rc);
+    if (recapClient) recapClient.textContent = c.name || '—';
+}
+
+function refreshRecapPeriod() {
+    var d1 = document.getElementById('DateDebutContrat')?.value;
+    var d2 = document.getElementById('DateFinContrat')?.value;
+    var el = document.getElementById('recapPeriod');
+    if (!el) return;
+    if (!d1 && !d2) { el.textContent = '—'; return; }
+    function fr(iso) {
+        if (!iso) return '…';
+        var p = iso.split('-');
+        if (p.length !== 3) return iso;
+        return p[2] + '/' + p[1] + '/' + p[0];
+    }
+    el.textContent = fr(d1) + ' → ' + fr(d2);
+}
+
+function refreshRecapDomaines() {
+    var wrap = document.getElementById('recapDomaines');
+    var countEl = document.getElementById('recapServices');
+    if (!wrap) return;
+    var sel = (typeof window.spcGetSelection_svc === 'function')
+        ? window.spcGetSelection_svc()
+        : { count: 0, domains: [] };
+    if (countEl) countEl.textContent = String(sel.count || 0);
+    if (!sel.domains || !sel.domains.length) {
+        wrap.innerHTML = '<span class="text-body-secondary small">Aucun</span>';
+        return;
+    }
+    wrap.innerHTML = sel.domains.map(function (t) {
+        return '<span class="badge rounded-pill bg-info-subtle text-info-emphasis border">' +
+            String(t).replace(/</g, '&lt;') + '</span>';
+    }).join('') +
+        '<span class="small text-body-secondary ms-1">' + (sel.count || 0) + ' service(s)</span>';
 }
 
 document.getElementById('clientSelect').addEventListener('change', refreshClientLegal);
+document.getElementById('DateDebutContrat')?.addEventListener('change', refreshRecapPeriod);
+document.getElementById('DateFinContrat')?.addEventListener('change', refreshRecapPeriod);
 refreshClientLegal();
+refreshRecapPeriod();
+
+function syncLigneModeFacturation() {
+    var freqEl = document.getElementById('freqFacturation');
+    var freq = freqEl ? freqEl.value : 'Mensuel';
+    document.querySelectorAll('#lignesContainer .ligne-mode-facturation').forEach(function (el) {
+        el.value = freq;
+    });
+}
+var freqSelect = document.getElementById('freqFacturation');
+if (freqSelect) freqSelect.addEventListener('change', syncLigneModeFacturation);
 
 function fmt(n) {
     return (Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -355,61 +713,81 @@ function recalcFees() {
     document.getElementById('sumHT').textContent = fmt(sumHT);
     document.getElementById('sumTVA').textContent = fmt(sumTVA);
     document.getElementById('sumTTC').textContent = fmt(sumTTC);
+    var mobile = document.getElementById('sumTTCMobile');
+    if (mobile) mobile.textContent = fmt(sumTTC);
     document.getElementById('recapLignes').textContent = n;
+}
+
+function refreshFeeLineIndexes() {
+    document.querySelectorAll('#lignesContainer .ligne-row').forEach(function (row, idx) {
+        var badge = row.querySelector('.fee-line-idx');
+        if (badge) badge.textContent = String(idx + 1);
+    });
 }
 
 function addLigne() {
     document.getElementById('noLignes').classList.add('d-none');
     const i = ligneIndex++;
-    const tr = document.createElement('tr');
-    tr.className = 'ligne-row';
-    tr.innerHTML = `
-        <td class="ps-4">
-            <input name="Lignes[${i}].Description" class="form-control form-control-sm rounded-3" placeholder="Forfait mensuel" required />
+    const freqEl = document.getElementById('freqFacturation');
+    const freq = freqEl ? freqEl.value : 'Mensuel';
+    const n = document.querySelectorAll('#lignesContainer .ligne-row').length + 1;
+    const art = document.createElement('article');
+    art.className = 'fee-line ligne-row';
+    art.innerHTML = `
+        <div class="fee-line-head">
+            <span class="fee-line-idx">${n}</span>
+            <input name="Lignes[${i}].Description" class="form-control form-control-sm rounded-2 fee-desc"
+                   placeholder="Libellé (ex. Forfait mensuel)" required />
+            <button type="button" class="btn btn-sm btn-link text-danger fee-line-remove p-0" title="Supprimer"
+                onclick="this.closest('.ligne-row').remove(); checkNoLignes(); recalcFees();">
+                <i class="bi bi-trash3"></i>
+            </button>
             <input type="hidden" name="Lignes[${i}].Quantite" value="1" />
             <input type="hidden" name="Lignes[${i}].Ordre" value="${i + 1}" class="ligne-ordre" />
-        </td>
-        <td>
-            <div class="input-group input-group-sm">
-                <input name="Lignes[${i}].PrixUnitaireHT" value="0" type="number" step="0.01" min="0"
-                    class="form-control text-end fee-pu rounded-start-3" oninput="recalcFees()" />
-                <span class="input-group-text rounded-end-3">MAD</span>
+            <input type="hidden" name="Lignes[${i}].ModeFacturation" value="${freq}" class="ligne-mode-facturation" />
+        </div>
+        <div class="fee-line-body">
+            <div class="fee-field">
+                <label class="fee-field-label">HT</label>
+                <div class="input-group input-group-sm">
+                    <input name="Lignes[${i}].PrixUnitaireHT" value="0" type="number" step="0.01" min="0"
+                        class="form-control text-end fee-pu" oninput="recalcFees()" />
+                    <span class="input-group-text">MAD</span>
+                </div>
             </div>
-        </td>
-        <td>
-            <div class="input-group input-group-sm">
-                <input name="Lignes[${i}].RemisePourcentage" value="0" type="number" step="0.01" min="0" max="100"
-                    class="form-control text-end fee-remise" oninput="recalcFees()" />
-                <span class="input-group-text">%</span>
+            <div class="fee-field fee-field-sm">
+                <label class="fee-field-label">Remise</label>
+                <div class="input-group input-group-sm">
+                    <input name="Lignes[${i}].RemisePourcentage" value="0" type="number" step="0.01" min="0" max="100"
+                        class="form-control text-end fee-remise" oninput="recalcFees()" />
+                    <span class="input-group-text">%</span>
+                </div>
             </div>
-        </td>
-        <td>
-            <select name="Lignes[${i}].TauxTVA" class="form-select form-select-sm rounded-3 fee-tva" onchange="recalcFees()">
-                <option value="20" selected>20 %</option><option value="0">0 %</option>
-            </select>
-        </td>
-        <td>
-            <select name="Lignes[${i}].ModeFacturation" class="form-select form-select-sm rounded-3">
-                <option value="">Ponctuel</option>
-                <option value="Mensuel">Mensuel</option>
-                <option value="Trimestriel">Trimestriel</option>
-                <option value="Semestriel">Semestriel</option>
-                <option value="Annuel">Annuel</option>
-            </select>
-        </td>
-        <td class="text-end fw-semibold fee-net">0,00</td>
-        <td class="text-end fw-semibold text-success fee-ttc">0,00</td>
-        <td class="pe-3">
-            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle"
-                onclick="this.closest('.ligne-row').remove(); checkNoLignes(); recalcFees();"><i class="bi bi-x"></i></button>
-        </td>`;
-    document.getElementById('lignesContainer').appendChild(tr);
+            <div class="fee-field fee-field-sm">
+                <label class="fee-field-label">TVA</label>
+                <select name="Lignes[${i}].TauxTVA" class="form-select form-select-sm fee-tva" onchange="recalcFees()">
+                    <option value="20" selected>20 %</option><option value="0">0 %</option>
+                </select>
+            </div>
+            <div class="fee-field fee-field-out">
+                <label class="fee-field-label">Net</label>
+                <div class="fee-out fee-net">0,00</div>
+            </div>
+            <div class="fee-field fee-field-out">
+                <label class="fee-field-label">TTC</label>
+                <div class="fee-out text-success fw-semibold fee-ttc">0,00</div>
+            </div>
+        </div>`;
+    document.getElementById('lignesContainer').appendChild(art);
+    refreshFeeLineIndexes();
     recalcFees();
+    try { art.querySelector('.fee-desc')?.focus(); } catch (e) { /* ignore */ }
 }
 
 function checkNoLignes() {
     const count = document.querySelectorAll('#lignesContainer .ligne-row').length;
     document.getElementById('noLignes').classList.toggle('d-none', count > 0);
+    refreshFeeLineIndexes();
 }
 
 function reindexLignes() {
@@ -419,15 +797,13 @@ function reindexLignes() {
         });
         var ord = row.querySelector('.ligne-ordre');
         if (ord) ord.value = newIdx + 1;
+        var badge = row.querySelector('.fee-line-idx');
+        if (badge) badge.textContent = String(newIdx + 1);
     });
 }
 
-setInterval(function () {
-    var b = document.getElementById('svcCountBadge');
-    var el = document.getElementById('recapServices');
-    if (b && el) { var m = b.textContent.match(/(\d+)/); el.textContent = m ? m[1] : '0'; }
-}, 400);
-
+setInterval(refreshRecapDomaines, 400);
 recalcFees();
+refreshRecapDomaines();
 </script>
 }

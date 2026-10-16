@@ -1,13 +1,36 @@
 using MetaCompta.Domain.Common;
+using System.ComponentModel.DataAnnotations;
 
 namespace MetaCompta.Application.DTOs;
 
 // ===== Auth =====
-public record LoginDto(string Email, string Password);
+/// <param name="Portal">Optional: "backoffice" | "extranet" — rejects wrong account type for that portal.</param>
+public record LoginDto(string Email, string Password, string? Portal = null);
 public record RegisterDto(string Email, string Password, string FirstName, string LastName, string? Role, int? CabinetId, int? ClientId);
 public record TokenDto(string AccessToken, string RefreshToken, DateTime Expiration, UserInfoDto User);
 public record UserInfoDto(string Id, string Email, string FullName, string? Role, int? CabinetId, string? CabinetName, string? ProfileImageUrl, string PreferredLanguage, int? ClientId = null, string? ClientName = null);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+
+public class ActivateAccountDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Le mot de passe est requis.")]
+    [MinLength(8)]
+    public string Password { get; set; } = string.Empty;
+    [Required(ErrorMessage = "La confirmation du mot de passe est requise.")]
+    [Compare(nameof(Password), ErrorMessage = "Les mots de passe ne correspondent pas.")]
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class ActivationInfoDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public bool AlreadyActivated { get; set; }
+    public bool TokenValid { get; set; }
+}
 
 // ===== Contract access (Manage vs Consult) =====
 public static class ContractAccessMode
@@ -68,6 +91,28 @@ public class ClientDto
     public int EmployeeCount { get; set; }
     public int DeclarationCount { get; set; }
     public List<ServiceContratDto> ServicesFiduciaires { get; set; } = new();
+}
+
+/// <summary>Lightweight client row for Nouveau contrat picker.</summary>
+public class ClientContratPickerItemDto
+{
+    public int Id { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public string? ICE { get; set; }
+    public string? IF { get; set; }
+    public string? RC { get; set; }
+    public string? NumeroCNSS { get; set; }
+    public string? VilleSiegeSocial { get; set; }
+    public bool HasActiveContract { get; set; }
+    public string? ActiveContractReference { get; set; }
+    public string? ActiveContractStatut { get; set; }
+}
+
+/// <summary>Clients split for Nouveau contrat: without active contract first, then with.</summary>
+public class ClientContratPickerResultDto
+{
+    public List<ClientContratPickerItemDto> SansContratActif { get; set; } = new();
+    public List<ClientContratPickerItemDto> AvecContratActif { get; set; } = new();
 }
 
 // ===== Dossier Fiduciaire / Service Contrat =====
@@ -133,6 +178,77 @@ public class ContratServiceActiveLine
     public decimal? Honoraires { get; set; }
     public string? FrequenceHonoraires { get; set; } // Mensuel, Trimestriel, Semestriel, Annuel
     public bool AutoGenererDeclarations { get; set; } = true;
+    /// <summary>Optional cabinet workflow template chosen at contrat create.</summary>
+    public int? WorkflowTemplateId { get; set; }
+    /// <summary>Optional primary assignee for declarations of this TypeService.</summary>
+    public string? PrimaryAssigneeUserId { get; set; }
+    /// <summary>Per-step actors (employees and/or profiles) set at contrat create.</summary>
+    public List<ContratWorkflowStepAssignmentDto>? StepAssignments { get; set; }
+}
+
+/// <summary>Auto-proposed workflow row for contrat details (packs + équipe → template + actors per step).</summary>
+public class ContratWorkflowProposalDto
+{
+    public string TypeService { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public string DeclarationType { get; set; } = string.Empty;
+    public string? AssigneeUserId { get; set; }
+    public string? AssigneeName { get; set; }
+    public string? AssigneeRole { get; set; }
+    public int? WorkflowTemplateId { get; set; }
+    public string? WorkflowTemplateName { get; set; }
+    public bool HasTemplate { get; set; }
+    public bool HasAssignee { get; set; }
+    public List<ContratWorkflowStepProposalDto> Steps { get; set; } = new();
+}
+
+public class ContratWorkflowStepProposalDto
+{
+    public int StepOrder { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string StepType { get; set; } = string.Empty;
+    /// <summary>Employee | Role | Department | Client | AutoSystem</summary>
+    public string AssignmentType { get; set; } = "Employee";
+    public bool IsClientStep { get; set; }
+    /// <summary>
+    /// No human actors: AutoSystem, Initialisation, or DemandePieces
+    /// (demande documents is always system after Init).
+    /// </summary>
+    public bool IsSystemStep =>
+        string.Equals(AssignmentType, "AutoSystem", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(StepType, "Initialisation", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(StepType, "DemandePieces", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Primary / first employee (compat).</summary>
+    public string? AssignedToUserId { get; set; }
+    /// <summary>One or many cabinet employees for this step.</summary>
+    public List<string> AssignedToUserIds { get; set; } = new();
+    /// <summary>One or many cabinet profiles (Identity role names).</summary>
+    public List<string> AssignedToRoleNames { get; set; } = new();
+}
+
+/// <summary>Save per-step actors from contrat details (employees and/or profiles).</summary>
+public class ContratWorkflowAssignmentsSaveDto
+{
+    public int ContratId { get; set; }
+    public List<ContratWorkflowServiceAssignmentDto> Services { get; set; } = new();
+}
+
+public class ContratWorkflowServiceAssignmentDto
+{
+    public string TypeService { get; set; } = string.Empty;
+    public string DeclarationType { get; set; } = string.Empty;
+    public int SourceTemplateId { get; set; }
+    public string? PrimaryAssigneeUserId { get; set; }
+    public List<ContratWorkflowStepAssignmentDto> Steps { get; set; } = new();
+}
+
+public class ContratWorkflowStepAssignmentDto
+{
+    public int StepOrder { get; set; }
+    /// <summary>Legacy single assignee (ignored when AssignedToUserIds is set).</summary>
+    public string? AssignedToUserId { get; set; }
+    public List<string>? AssignedToUserIds { get; set; }
+    public List<string>? AssignedToRoleNames { get; set; }
 }
 
 public class GenerateDeclarationsResultDto
@@ -142,33 +258,85 @@ public class GenerateDeclarationsResultDto
     public List<string> Warnings { get; set; } = new();
 }
 
+// ===== Client Create/Edit =====
 public class ClientCreateDto
 {
+    [Required(ErrorMessage = "La raison sociale est obligatoire.")]
+    [StringLength(200, ErrorMessage = "La raison sociale ne peut pas dépasser 200 caractères.")]
     public string RaisonSociale { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "L'ICE est obligatoire.")]
+    [RegularExpression(@"^\d{15}$", ErrorMessage = "L'ICE doit contenir exactement 15 chiffres.")]
     public string? ICE { get; set; }
+
+    [Required(ErrorMessage = "L'identifiant fiscal (IF) est obligatoire.")]
+    [StringLength(50, ErrorMessage = "L'IF ne peut pas dépasser 50 caractères.")]
     public string? IF { get; set; }
+
+    [StringLength(50, ErrorMessage = "Le RC ne peut pas dépasser 50 caractères.")]
     public string? RC { get; set; }
+
+    [StringLength(50, ErrorMessage = "Le N° CNSS ne peut pas dépasser 50 caractères.")]
     public string? NumeroCNSS { get; set; }
+
+    [StringLength(50)]
     public string? NumeroPatente { get; set; }
+
     public DateTime? DateDebutActivite { get; set; }
+
+    [StringLength(20)]
     public string? CodeActivite { get; set; }
+
+    [StringLength(50)]
     public string? FormeJuridique { get; set; }
+
+    [StringLength(100)]
     public string? SecteurActivite { get; set; }
+
     public DateTime? DateCreation { get; set; }
     public decimal? CapitalSocial { get; set; }
+
+    [StringLength(300)]
     public string? AdresseSiegeSocial { get; set; }
+
+    [StringLength(100)]
     public string? VilleSiegeSocial { get; set; }
+
+    [StringLength(30)]
     public string? TelephonePrincipal { get; set; }
+
+    [EmailAddress(ErrorMessage = "L'email principal n'est pas valide.")]
+    [StringLength(150)]
     public string? EmailPrincipal { get; set; }
+
+    [StringLength(120)]
     public string? ContactNom { get; set; }
+
+    [StringLength(80)]
     public string? ContactFonction { get; set; }
+
+    [StringLength(30)]
     public string? ContactTelephone { get; set; }
+
+    [EmailAddress(ErrorMessage = "L'email du contact n'est pas valide.")]
+    [StringLength(150)]
     public string? ContactEmail { get; set; }
+
+    [StringLength(450)]
     public string? ManagerPrincipalId { get; set; }
+
+    [Required(ErrorMessage = "Le régime TVA est obligatoire.")]
+    [StringLength(30)]
     public string TypeTVA { get; set; } = "Mensuelle";
+
+    [Range(1, 12, ErrorMessage = "Le mois de clôture doit être entre 1 et 12.")]
     public int MoisClotureExercice { get; set; } = 12;
+
     public DateTime? DateDebutContrat { get; set; }
+
+    [StringLength(2000)]
     public string? NotesInternes { get; set; }
+
     public List<ServiceContratCreateDto> ServicesFiduciaires { get; set; } = new();
 }
 
@@ -182,15 +350,18 @@ public class ClientUserDto
     public string FullName => $"{FirstName} {LastName}";
     public string? Telephone { get; set; }
     public bool IsActive { get; set; }
+    public bool EmailConfirmed { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
 }
 
 public class ClientUserCreateDto
 {
+    [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
+    [Required]
     public string FirstName { get; set; } = string.Empty;
+    [Required]
     public string LastName { get; set; } = string.Empty;
     public string? Telephone { get; set; }
 }
@@ -1014,6 +1185,7 @@ public class CabinetEmployeeDto
     public string? TypeContrat { get; set; }
     public bool EstActif { get; set; }
     public bool IsActive { get => EstActif; set => EstActif = value; }
+    public bool EmailConfirmed { get; set; }
     public DateTime? DateEmbauche { get; set; }
     public DateTime? DerniereConnexion { get; set; }
     public int ClientsAssignes { get; set; }
@@ -1025,12 +1197,15 @@ public class CabinetEmployeeDto
 
 /// <summary>
 /// DTO for creating a new cabinet employee (BackOffice user).
+/// Password is set by the user via email activation link.
 /// </summary>
 public class CabinetEmployeeCreateDto
 {
+    [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
+    [Required]
     public string FirstName { get; set; } = string.Empty;
+    [Required]
     public string LastName { get; set; } = string.Empty;
     public string? CIN { get; set; }
     public string? Telephone { get; set; }
@@ -1271,8 +1446,14 @@ public class CreateDeclarationDto
     public int? DeadlineYearOffset { get; set; }
     /// <summary>Explicit period start from Init period template table.</summary>
     public DateTime? PeriodStart { get; set; }
-    /// <summary>Explicit period end / échéance from Init period template table.</summary>
+    /// <summary>Explicit taxable period end from Init period template table (not the filing deadline).</summary>
     public DateTime? PeriodEnd { get; set; }
+    /// <summary>Per-period échéance month (1–12), year-agnostic — preferred over WindowEndDay.</summary>
+    public int? DueMonth { get; set; }
+    /// <summary>Per-period échéance day (1–31).</summary>
+    public int? DueDay { get; set; }
+    /// <summary>Explicit DateLimite override (materialized due from Init row).</summary>
+    public DateTime? DateLimite { get; set; }
 }
 
 public class DeclarationShellSaveDto
@@ -1442,6 +1623,186 @@ public class CnssEmployeeImportResultDto
     public int Updated { get; set; }
     public List<string> Errors { get; set; } = new();
     public CnssEmployeeRosterDto? Roster { get; set; }
+}
+
+// ===== Domiciliation =====
+public class DomiciliationDashboardRowDto
+{
+    public int ClientId { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public string DomiciliationStatut { get; set; } = "Active";
+    public string ContratStatut { get; set; } = "Actif";
+    public string DocumentsStatut { get; set; } = "OK";
+    public int IncomingMailCount { get; set; }
+    public int PendingActions { get; set; }
+    public int OverdueActions { get; set; }
+    public DateTime? LastActivity { get; set; }
+    public string? ResponsableNom { get; set; }
+    public string? ResponsableUserId { get; set; }
+}
+
+public class CourrierDomiciliationDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientNom { get; set; }
+    public DateTime DateReception { get; set; }
+    public string? Expediteur { get; set; }
+    public string TypeCourrier { get; set; } = "Courrier";
+    public string? Reference { get; set; }
+    public string Confidentialite { get; set; } = "Normal";
+    public int? ScanDocumentId { get; set; }
+    public string? ScanDocumentTitre { get; set; }
+    public bool ScanPartageExtranet { get; set; }
+    public bool ActionRequise { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public string? ResponsableNom { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string Statut { get; set; } = "Received";
+    public bool ClientNotifie { get; set; }
+    public bool PartageDocumentClient { get; set; }
+    public string? Notes { get; set; }
+    public int? LinkedTaskItemId { get; set; }
+    public List<CourrierPieceJointeDto> Pieces { get; set; } = new();
+    public List<DemandeActionCourrierDto> ActionsClient { get; set; } = new();
+}
+
+public class CourrierPieceJointeDto
+{
+    public int Id { get; set; }
+    public int CourrierId { get; set; }
+    public int DocumentId { get; set; }
+    public string Titre { get; set; } = string.Empty;
+    public string NomFichier { get; set; } = string.Empty;
+    public string? ContentType { get; set; }
+    public long TailleFichier { get; set; }
+    public string TailleLabel => TailleFichier <= 0 ? "—"
+        : TailleFichier < 1024 ? $"{TailleFichier} o"
+        : TailleFichier < 1024 * 1024 ? $"{TailleFichier / 1024.0:0.#} Ko"
+        : $"{TailleFichier / (1024.0 * 1024.0):0.#} Mo";
+    public bool IsPrimary { get; set; }
+    public int SortOrder { get; set; }
+    public string? Label { get; set; }
+    public bool IsImage => (ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    public bool IsPdf => (ContentType ?? "").Contains("pdf", StringComparison.OrdinalIgnoreCase)
+        || NomFichier.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CourrierReceiveDto
+{
+    public int ClientId { get; set; }
+    public DateTime? DateReception { get; set; }
+    public string? Expediteur { get; set; }
+    public string TypeCourrier { get; set; } = "Courrier";
+    public string? Reference { get; set; }
+    public string Confidentialite { get; set; } = "Normal";
+    public bool ActionRequise { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string? Notes { get; set; }
+    public int? ScanDocumentId { get; set; }
+}
+
+public class CourrierStatusActionDto
+{
+    public string Action { get; set; } = string.Empty; // classify, assign, start, complete, notify, archive, close
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public bool? ActionRequise { get; set; }
+    public bool PartageDocumentClient { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeActionCourrierDto
+{
+    public int Id { get; set; }
+    public int CourrierId { get; set; }
+    public string TypeAction { get; set; } = "Pickup";
+    public string? AdresseForward { get; set; }
+    public string? ShippingReference { get; set; }
+    public string Statut { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public bool IdentityCheckDone { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class DemandeActionCreateDto
+{
+    public string TypeAction { get; set; } = "Pickup";
+    public string? AdresseForward { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeActionAdvanceDto
+{
+    public string Action { get; set; } = string.Empty;
+    public string? ShippingReference { get; set; }
+    public string? AdresseForward { get; set; }
+    public bool IdentityCheckDone { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DemandeDocumentDomiciliationDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string? ClientNom { get; set; }
+    public string DocumentType { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public string? ResponsableNom { get; set; }
+    public DateTime? DateEcheance { get; set; }
+    public string Statut { get; set; } = "Requested";
+    public int? CurrentDocumentId { get; set; }
+    public int? RootDocumentId { get; set; }
+    public string? RejectionReasonCode { get; set; }
+    public string? RejectionReasonText { get; set; }
+    public List<DocumentDto> Versions { get; set; } = new();
+}
+
+public class DemandeDocumentCreateDto
+{
+    public int ClientId { get; set; }
+    public string DocumentType { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public string? ResponsableUserId { get; set; }
+    public DateTime? DateEcheance { get; set; }
+}
+
+public class DemandeDocumentReviewDto
+{
+    public bool Approve { get; set; }
+    public string? RejectionReasonCode { get; set; }
+    public string? RejectionReasonText { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class DomiciliationTimelineDto
+{
+    public int Id { get; set; }
+    public int ClientId { get; set; }
+    public string RelatedType { get; set; } = string.Empty;
+    public int RelatedId { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string? PreviousStatus { get; set; }
+    public string? NewStatus { get; set; }
+    public string? UserName { get; set; }
+    public string? Note { get; set; }
+    public int? DocumentId { get; set; }
+    public DateTime At { get; set; }
+}
+
+public class DomiciliationClientWorkspaceDto
+{
+    public int ClientId { get; set; }
+    public string RaisonSociale { get; set; } = string.Empty;
+    public List<CourrierDomiciliationDto> Courriers { get; set; } = new();
+    public List<DemandeDocumentDomiciliationDto> DemandesDocuments { get; set; } = new();
+    public List<DomiciliationTimelineDto> Timeline { get; set; } = new();
+    public int PendingActions { get; set; }
+    public int OverdueActions { get; set; }
 }
 
 // ===== API Response =====
@@ -2127,6 +2488,17 @@ public class FactureCreateDto
     public string? Notes { get; set; }
     public List<int>? LigneContratIds { get; set; } // IDs des lignes du contrat à facturer
     public List<LigneDocumentCommercialCreateDto> Lignes { get; set; } = new(); // Lignes de la facture
+}
+
+/// <summary>Result of Hangfire / manual auto-facturation run.</summary>
+public class AutoFacturationResultDto
+{
+    public DateTime RunDate { get; set; }
+    public int ContractsScanned { get; set; }
+    public int Created { get; set; }
+    public int Skipped { get; set; }
+    public int Errors { get; set; }
+    public List<string> CreatedReferences { get; set; } = new();
 }
 
 // ===== Paiement =====

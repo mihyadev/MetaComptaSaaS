@@ -3,6 +3,7 @@
     ViewData["Title"] = "Convertir le Devis en Contrat";
     var devis = ViewBag.Devis as DevisDto;
     var typeServiceItems = (ViewData["Ref_TYPE_SERVICE"] as List<ReferenceDataDto>) ?? new();
+    var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -84,8 +85,14 @@
 
                     <!-- Services inclus -->
                     <div class="border-0 mb-4">
-                        <h6 class="fw-semibold mb-3 text-info"><i class="bi bi-check2-circle me-2"></i>Services inclus dans le contrat</h6>
-                        @{ var cvVD = new ViewDataDictionary(ViewData); cvVD["typeServiceItems"] = typeServiceItems; cvVD["checkedServices"] = new List<ContratServiceActiveLine>(); cvVD["prefix"] = "cv"; }
+                        <h6 class="fw-semibold mb-3 text-info"><i class="bi bi-check2-circle me-2"></i>Périmètre (packs)</h6>
+                        @{
+                            var cvVD = new ViewDataDictionary(ViewData);
+                            cvVD["typeServiceItems"] = typeServiceItems;
+                            cvVD["checkedServices"] = new List<ContratServiceActiveLine>();
+                            cvVD["ServiceGroups"] = ViewData["ServiceGroups"] ?? ViewBag.ServiceGroups;
+                            cvVD["prefix"] = "cv";
+                        }
                         @await Html.PartialAsync("_ServicesPicker", null, cvVD)
                     </div>
 

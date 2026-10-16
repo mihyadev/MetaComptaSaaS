@@ -1,0 +1,108 @@
+@using MetaCompta.Domain.Common
+@using MetaCompta.BackOffice.Helpers
+@model MetaCompta.Application.DTOs.CourrierDomiciliationDto
+@{
+    var canProcess = ViewBag.CanDomiciliationProcess == true
+        || PermissionHelper.HasPermission(Context.Session, ClaimDefinitions.DomiciliationProcess);
+    var canReceive = PermissionHelper.HasPermission(Context.Session, ClaimDefinitions.DomiciliationReceive) || canProcess;
+    var canNotify = ViewBag.CanDomiciliationNotify == true
+        || PermissionHelper.HasPermission(Context.Session, ClaimDefinitions.DomiciliationNotify)
+        || canProcess;
+
+    var needsScan = (Model.Pieces == null || !Model.Pieces.Any()) && !Model.ScanDocumentId.HasValue;
+    var statut = Model.Statut ?? "";
+    var terminal = statut is "Closed" or "Archived";
+    var openDemande = Model.ActionsClient?.FirstOrDefault(a =>
+        a.TypeAction is "Pickup" or "Forward"
+        && a.Statut is not ("Closed" or "HandedOver" or "Delivered"));
+    var demandeDone = Model.ActionsClient?.Any(a =>
+        (a.TypeAction is "Pickup" or "Forward" && a.Statut is "Closed" or "HandedOver" or "Delivered")
+        || (a.TypeAction is "View" or "Archive")) == true;
+
+    // ONE path only: Docs → Notify → (wait/treat client) → Close
+    string? primaryAction = null;
+    string? primaryLabel = null;
+    string primaryIcon = "bi-arrow-right-circle";
+    string? hint = null;
+
+    if (!terminal)
+    {
+        if (needsScan && canReceive)
+        {
+            primaryAction = "deposit_scan";
+            primaryLabel = "Déposer le document";
+            primaryIcon = "bi-upload";
+        }
+        else if (canNotify && !Model.ClientNotifie)
+        {
+            primaryAction = "notify";
+            primaryLabel = "Notifier le client";
+            primaryIcon = "bi-bell";
+        }
+        else if (openDemande != null)
+        {
+            hint = "Le client a demandé une action — cliquez « Demande traitée » dans le bloc Demandes client.";
+        }
+        else if (Model.ClientNotifie && !demandeDone)
+        {
+            hint = "En attente du client (Extranet).";
+        }
+        else if (canProcess && Model.ClientNotifie)
+        {
+            primaryAction = "close";
+            primaryLabel = "Clôturer";
+            primaryIcon = "bi-check2-circle";
+        }
+    }
+}
+
+@if (terminal)
+{
+    <span class="text-muted small"><i class="bi bi-lock me-1"></i>Courrier terminé.</span>
+}
+else if (!canProcess && !canNotify)
+{
+    <span class="text-muted small"><i class="bi bi-lock me-1"></i>Droits insuffisants.</span>
+}
+else
+{
+    @if (!string.IsNullOrEmpty(hint))
+    {
+        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill px-3 py-2">
+            <i class="bi bi-info-circle me-1"></i>@hint
+        </span>
+    }
+
+    @if (primaryAction == "deposit_scan")
+    {
+        <form asp-action="AttachScan" asp-route-id="@Model.Id" method="post" enctype="multipart/form-data" class="d-inline-flex align-items-center gap-2 flex-wrap">
+            @Html.AntiForgeryToken()
+            <input type="file" name="scanFiles" class="form-control form-control-sm" style="width:240px;" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp" multiple required />
+            <button type="submit" class="btn btn-warning rounded-pill px-3 py-2 fw-semibold">
+                <i class="bi @primaryIcon me-1"></i>@primaryLabel
+            </button>
+        </form>
+    }
+    else if (primaryAction == "notify")
+    {
+        <form asp-action="AdvanceCourrier" asp-route-id="@Model.Id" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Action" value="notify" />
+            <input type="hidden" name="PartageDocumentClient" value="true" />
+            <button type="submit" class="btn btn-success rounded-pill px-3 py-2 fw-semibold">
+                <i class="bi @primaryIcon me-1"></i>@primaryLabel
+            </button>
+        </form>
+    }
+    else if (primaryAction == "close")
+    {
+        <form asp-action="AdvanceCourrier" asp-route-id="@Model.Id" method="post" class="d-inline"
+              onsubmit="return confirm('Clôturer ce courrier ?');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Action" value="close" />
+            <button type="submit" class="btn btn-primary rounded-pill px-3 py-2 fw-semibold">
+                <i class="bi @primaryIcon me-1"></i>@primaryLabel
+            </button>
+        </form>
+    }
+}

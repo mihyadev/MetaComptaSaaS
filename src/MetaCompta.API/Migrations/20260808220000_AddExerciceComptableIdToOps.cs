@@ -20,7 +20,8 @@ IF COL_LENGTH('PayrollPeriods', 'ExerciceComptableId') IS NULL
     ALTER TABLE [PayrollPeriods] ADD [ExerciceComptableId] int NULL;
 IF COL_LENGTH('WorkflowInstances', 'ExerciceComptableId') IS NULL
     ALTER TABLE [WorkflowInstances] ADD [ExerciceComptableId] int NULL;
-IF COL_LENGTH('RapprochementsBancaires', 'ExerciceComptableId') IS NULL
+IF OBJECT_ID(N'dbo.RapprochementsBancaires', N'U') IS NOT NULL
+   AND COL_LENGTH('RapprochementsBancaires', 'ExerciceComptableId') IS NULL
     ALTER TABLE [RapprochementsBancaires] ADD [ExerciceComptableId] int NULL;
 
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Declarations_ExercicesComptables_ExerciceComptableId')
@@ -41,6 +42,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_WorkflowInstances
         FOREIGN KEY ([ExerciceComptableId]) REFERENCES [ExercicesComptables]([Id]) ON DELETE SET NULL;
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_RapprochementsBancaires_ExercicesComptables_ExerciceComptableId')
     AND OBJECT_ID(N'dbo.ExercicesComptables', N'U') IS NOT NULL
+    AND OBJECT_ID(N'dbo.RapprochementsBancaires', N'U') IS NOT NULL
     ALTER TABLE [RapprochementsBancaires] ADD CONSTRAINT [FK_RapprochementsBancaires_ExercicesComptables_ExerciceComptableId]
         FOREIGN KEY ([ExerciceComptableId]) REFERENCES [ExercicesComptables]([Id]) ON DELETE SET NULL;
 
@@ -54,7 +56,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PayrollPeriods_Exercic
     CREATE INDEX [IX_PayrollPeriods_ExerciceComptableId] ON [PayrollPeriods]([ExerciceComptableId]);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkflowInstances_ExerciceComptableId' AND object_id = OBJECT_ID('WorkflowInstances'))
     CREATE INDEX [IX_WorkflowInstances_ExerciceComptableId] ON [WorkflowInstances]([ExerciceComptableId]);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RapprochementsBancaires_ExerciceComptableId' AND object_id = OBJECT_ID('RapprochementsBancaires'))
+IF OBJECT_ID(N'dbo.RapprochementsBancaires', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RapprochementsBancaires_ExerciceComptableId' AND object_id = OBJECT_ID('RapprochementsBancaires'))
     CREATE INDEX [IX_RapprochementsBancaires_ExerciceComptableId] ON [RapprochementsBancaires]([ExerciceComptableId]);
 ");
         }

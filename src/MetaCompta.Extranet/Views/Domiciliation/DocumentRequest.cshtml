@@ -1,0 +1,122 @@
+@using MetaCompta.Domain.Common
+@model MetaCompta.Application.DTOs.DemandeDocumentDomiciliationDto
+@{
+    ViewData["Title"] = "Document demandé";
+    var canUpload = Model.Statut is "ClientNotified" or "WaitingClient" or "Rejected" or "Requested";
+    var statutLabel = RefCodes.StatutDemandeDocumentDomiciliation.Label(Model.Statut);
+    var statutClass = Model.Statut switch
+    {
+        "Validated" => "success",
+        "Rejected" => "danger",
+        "Uploaded" or "UnderReview" => "info",
+        "ClientNotified" or "WaitingClient" or "Requested" => "warning",
+        _ => "secondary"
+    };
+}
+
+<div class="ex-page-hero">
+    <div>
+        <a href="/Domiciliation" class="ex-icon-btn mb-2" title="Retour"><i class="bi bi-arrow-left"></i></a>
+        <h4 class="mb-1">@Model.DocumentType</h4>
+        <p class="ex-sub mb-0">Document demandé par votre cabinet</p>
+    </div>
+    <span class="badge bg-@statutClass rounded-pill px-3 py-2">@statutLabel</span>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success" role="alert"><i class="bi bi-check-circle me-1"></i>@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]</div>
+}
+
+@if (!string.IsNullOrEmpty(Model.RejectionReasonCode))
+{
+    <div class="alert alert-danger" role="alert">
+        <i class="bi bi-x-circle me-1"></i>
+        Document rejeté : <strong>@Model.RejectionReasonCode</strong>
+        @if (!string.IsNullOrEmpty(Model.RejectionReasonText)) { <span>— @Model.RejectionReasonText</span> }
+        <div class="small mt-1">Merci de déposer une nouvelle version.</div>
+    </div>
+}
+
+<div class="ex-board-card declaration-card @(canUpload ? "accent-warning" : "") mb-4">
+    <div class="ex-panel-head">
+        <div>
+            <h3><i class="bi bi-file-earmark-text text-primary me-2"></i>Demande</h3>
+            <p>@(string.IsNullOrEmpty(Model.Message) ? "Pièce à fournir pour votre dossier de domiciliation." : Model.Message)</p>
+        </div>
+        <a href="/Documents" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open me-1"></i>Mes documents</a>
+    </div>
+</div>
+
+@if (Model.Versions?.Any() == true)
+{
+    <div class="ex-board-card mb-4">
+        <div class="ex-panel-head">
+            <div>
+                <h3><i class="bi bi-clock-history text-primary me-2"></i>Historique des versions</h3>
+                <p>Dépôts précédents</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 ex-table">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Statut</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var v in Model.Versions.OrderByDescending(x => x.Version))
+                {
+                    <tr>
+                        <td class="fw-semibold">Version @v.Version</td>
+                        <td><span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill">@v.Statut</span></td>
+                        <td class="small">@v.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (canUpload)
+{
+    <div class="ex-board-card">
+        <div class="ex-panel-head">
+            <div>
+                <h3><i class="bi bi-cloud-upload text-primary me-2"></i>Déposer un document</h3>
+                <p>Uploadez d’abord le fichier dans Documents, puis saisissez son numéro ici.</p>
+            </div>
+        </div>
+        <form method="post" action="/Domiciliation/Documents/@Model.Id/Attach" class="p-3 rounded-3 bg-body-tertiary border mx-3 mb-3">
+            @Html.AntiForgeryToken()
+            <div class="row g-2 align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold mb-1">Id document</label>
+                    <input type="number" name="documentId" class="form-control form-control-sm" placeholder="Ex. 42" required />
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-send me-1"></i>Envoyer
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+}
+else
+{
+    <div class="ex-board-card">
+        <div class="ex-empty py-4">
+            <i class="bi bi-hourglass-split text-info"></i>
+            <h5 class="mt-3 fw-bold">En cours de traitement</h5>
+            <p>Cette demande est en cours de traitement par le cabinet.</p>
+        </div>
+    </div>
+}

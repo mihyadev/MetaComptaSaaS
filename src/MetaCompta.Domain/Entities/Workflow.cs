@@ -88,7 +88,9 @@ public enum WorkflowDeclarationType
     IR_SAL = 13,
     RAS_FONC = 14,
     RAS_DIV = 15,
-    DTS = 16
+    DTS = 16,
+    /// <summary>Operational domiciliation (courrier / documents) — not a fiscal declaration.</summary>
+    Domiciliation = 17
 }
 
 /// <summary>

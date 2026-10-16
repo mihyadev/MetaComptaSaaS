@@ -28,6 +28,7 @@ builder.Services.AddScoped<IDocumentFacade, DocumentFacade>();
 builder.Services.AddScoped<ITaskFacade, TaskFacade>();
 builder.Services.AddScoped<IComptabiliteFacade, ComptabiliteFacade>();
 builder.Services.AddScoped<IJuridiqueFacade, JuridiqueFacade>();
+builder.Services.AddScoped<IDomiciliationFacade, DomiciliationFacade>();
 builder.Services.AddScoped<IPlanningFacade, PlanningFacade>();
 builder.Services.AddScoped<ICabinetFacade, CabinetFacade>();
 builder.Services.AddScoped<IRapportFacade, RapportFacade>();
@@ -51,11 +52,24 @@ else
     app.UseDeveloperExceptionPage();
 }
 
-if (!app.Environment.IsProduction())
+// Only redirect when an HTTPS endpoint is configured (local launchSettings).
+// Docker serves HTTP only (ASPNETCORE_URLS=http://+:8080) — never force https://.
+var listenUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "";
+if (listenUrls.Contains("https://", StringComparison.OrdinalIgnoreCase))
 {
     app.UseHttpsRedirection();
 }
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        var path = ctx.File.Name;
+        if (path.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.ContentType = "application/javascript; charset=utf-8";
+        else if (path.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.ContentType = "text/css; charset=utf-8";
+    }
+});
 app.UseRouting();
 app.UseSession();
 app.UseAuthorization();

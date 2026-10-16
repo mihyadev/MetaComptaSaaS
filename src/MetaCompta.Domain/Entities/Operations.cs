@@ -88,6 +88,11 @@ public class TaskItem : TenantEntity
 
     public string? PiecesJointesJson { get; set; }
 
+    /// <summary>Optional link to a non-declaration entity (e.g. Courrier, DemandeDocument).</summary>
+    public string? RelatedEntityType { get; set; }
+    public int? RelatedEntityId { get; set; }
+    public string? TaskType { get; set; }
+
     // Navigation
     public virtual ICollection<TaskComment> Comments { get; set; } = new List<TaskComment>();
 }

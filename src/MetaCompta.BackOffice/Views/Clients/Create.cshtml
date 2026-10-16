@@ -29,9 +29,34 @@
     </div>
 }
 
-<form method="post" asp-action="Create" id="formCreateClient">
+<div class="mc-card mb-4" id="bnifImportCard">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+            <div>
+                <h5 class="fw-bold mb-1"><i class="bi bi-file-earmark-pdf text-danger me-2"></i>Création depuis BNIF DGI</h5>
+                <p class="text-muted mb-0 small">
+                    Importez le <strong>Bulletin de Notification du N° d'Identification Fiscale</strong>
+                    (PDF officiel tax.gov.ma / SIMPL). Les champs du formulaire seront préremplis — vous validez ensuite.
+                </p>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <label class="btn btn-outline-danger rounded-pill px-3 mb-0" for="bnifFileInput">
+                    <i class="bi bi-upload me-1"></i> Charger un BNIF PDF
+                </label>
+                <input type="file" id="bnifFileInput" accept="application/pdf,.pdf" class="d-none" />
+                <button type="button" class="btn btn-link text-muted text-decoration-none small" id="bnifSkipBtn">
+                    Ou remplir le formulaire manuellement
+                </button>
+            </div>
+        </div>
+        <div id="bnifStatus" class="mt-3" style="display:none;"></div>
+    </div>
+</div>
+
+<form method="post" asp-action="Create" id="formCreateClient" novalidate>
     @Html.AntiForgeryToken()
 
+    <div id="wizardStepAlert" class="alert alert-danger rounded-3 mb-3" role="alert"></div>
     <!-- Wizard Progress Bar -->
     <div class="mc-card mb-4">
         <div class="card-body p-3">
@@ -69,9 +94,10 @@
                     <label class="form-label fw-semibold">Raison Sociale <span class="text-danger">*</span></label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-building text-muted"></i></span>
-                        <input type="text" name="RaisonSociale" class="form-control border-start-0" value="@Model?.RaisonSociale"
+                        <input type="text" name="RaisonSociale" id="RaisonSociale" class="form-control border-start-0" value="@Model?.RaisonSociale"
                             required placeholder="Ex: ABC Consulting SARL" />
                     </div>
+                    <div class="invalid-feedback d-block field-error" data-for="RaisonSociale"></div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Forme Juridique</label>
@@ -95,18 +121,20 @@
                     <label class="form-label fw-semibold">ICE <span class="text-danger">*</span></label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-fingerprint text-muted"></i></span>
-                        <input type="text" name="ICE" class="form-control border-start-0" value="@Model?.ICE" required
-                            placeholder="15 chiffres" maxlength="15" />
+                        <input type="text" name="ICE" id="ICE" class="form-control border-start-0" value="@Model?.ICE" required
+                            placeholder="15 chiffres" maxlength="15" inputmode="numeric" />
                     </div>
-                    <div class="form-text">Identifiant Commun de l'Entreprise</div>
+                    <div class="form-text">Identifiant Commun de l'Entreprise (15 chiffres)</div>
+                    <div class="invalid-feedback d-block field-error" data-for="ICE"></div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">IF <span class="text-danger">*</span></label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-hash text-muted"></i></span>
-                        <input type="text" name="IF" class="form-control border-start-0" value="@Model?.IF" required
+                        <input type="text" name="IF" id="IF" class="form-control border-start-0" value="@Model?.IF" required
                             placeholder="Identifiant Fiscal" />
                     </div>
+                    <div class="invalid-feedback d-block field-error" data-for="IF"></div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">RC</label>
@@ -211,9 +239,10 @@
                     <label class="form-label fw-semibold">Email Principal</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
-                        <input type="email" name="EmailPrincipal" class="form-control border-start-0"
+                        <input type="email" name="EmailPrincipal" id="EmailPrincipal" class="form-control border-start-0"
                             value="@Model?.EmailPrincipal" placeholder="contact@societe.ma" />
                     </div>
+                    <div class="invalid-feedback d-block field-error" data-for="EmailPrincipal"></div>
                 </div>
 
                 <div class="col-12">
@@ -240,8 +269,9 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold">Email</label>
-                    <input type="email" name="ContactEmail" class="form-control" value="@Model?.ContactEmail"
+                    <input type="email" name="ContactEmail" id="ContactEmail" class="form-control" value="@Model?.ContactEmail"
                         placeholder="gerant@societe.ma" />
+                    <div class="invalid-feedback d-block field-error" data-for="ContactEmail"></div>
                 </div>
             </div>
         </div>
@@ -297,9 +327,12 @@
                         value="@(Model?.DateDebutContrat?.ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-01-01"))" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Manager Principal (ID)</label>
-                    <input type="text" name="ManagerPrincipalId" class="form-control"
-                        value="@Model?.ManagerPrincipalId" placeholder="ID du manager responsable" />
+                    <label class="form-label fw-semibold">Manager Principal <span class="text-muted fw-normal">(optionnel)</span></label>
+                    <input type="text" name="ManagerPrincipalId" id="ManagerPrincipalId" class="form-control"
+                        value="@Model?.ManagerPrincipalId" placeholder="Laisser vide si non assigné"
+                        autocomplete="off" />
+                    <div class="form-text">Identifiant utilisateur du cabinet uniquement. En cas de doute, laissez vide.</div>
+                    <div class="invalid-feedback d-block field-error" data-for="ManagerPrincipalId"></div>
                 </div>
             </div>
 
@@ -366,6 +399,7 @@
             background: var(--monday-blue); color: #fff; border-color: var(--monday-blue);
         }
         .wizard-step.completed .wizard-step-circle { background: var(--monday-green); color: #fff; border-color: var(--monday-green); }
+        .wizard-step.has-error .wizard-step-circle { background: #fce8eb; color: var(--monday-red); border-color: var(--monday-red); }
         .wizard-step-label { font-size: 0.75rem; color: var(--monday-muted); font-weight: 600; }
         .wizard-step.active .wizard-step-label { color: var(--monday-blue); }
         .wizard-step.completed .wizard-step-label { color: var(--monday-green); }
@@ -375,18 +409,82 @@
         }
         .wizard-connector.active { background: var(--monday-blue); }
         .step-panel { transition: opacity 0.3s ease; }
+        .field-error:empty { display: none !important; }
+        .is-invalid-field { border-color: var(--monday-red) !important; }
+        #wizardStepAlert { display: none; }
     </style>
     <script>
         $(function () {
             var currentStep = 0;
             var totalSteps = 3;
 
+            function clearFieldErrors() {
+                $('.field-error').text('');
+                $('.is-invalid-field').removeClass('is-invalid-field');
+                $('#wizardStepAlert').hide().text('');
+            }
+
+            function setError(name, message) {
+                var $input = $('[name="' + name + '"]');
+                $input.addClass('is-invalid-field');
+                $('.field-error[data-for="' + name + '"]').text(message);
+            }
+
+            function isEmail(v) {
+                return !v || /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/.test(v);
+            }
+
+            function validateStep(step) {
+                clearFieldErrors();
+                var ok = true;
+                var firstMsg = '';
+
+                function fail(name, msg) {
+                    ok = false;
+                    if (!firstMsg) firstMsg = msg;
+                    setError(name, msg);
+                }
+
+                if (step === 0) {
+                    var rs = ($('#RaisonSociale').val() || '').trim();
+                    var ice = ($('#ICE').val() || '').trim();
+                    var iff = ($('#IF').val() || '').trim();
+                    if (!rs) fail('RaisonSociale', 'La raison sociale est obligatoire.');
+                    if (!ice) fail('ICE', "L'ICE est obligatoire.");
+                    else if (!/^\d{15}$/.test(ice)) fail('ICE', "L'ICE doit contenir exactement 15 chiffres.");
+                    if (!iff) fail('IF', "L'identifiant fiscal (IF) est obligatoire.");
+                }
+                else if (step === 1) {
+                    var email = ($('#EmailPrincipal').val() || '').trim();
+                    var cemail = ($('#ContactEmail').val() || '').trim();
+                    if (email && !isEmail(email)) fail('EmailPrincipal', "L'email principal n'est pas valide.");
+                    if (cemail && !isEmail(cemail)) fail('ContactEmail', "L'email du contact n'est pas valide.");
+                }
+                else if (step === 2) {
+                    var mois = parseInt($('[name="MoisClotureExercice"]').val(), 10);
+                    if (!(mois >= 1 && mois <= 12)) {
+                        fail('MoisClotureExercice', 'Le mois de clôture doit être entre 1 et 12.');
+                    }
+                    // Manager: empty is OK; non-empty free text is allowed but user is warned via placeholder.
+                    // Backend will reject invalid IDs with a clear French message.
+                }
+
+                if (!ok) {
+                    $('#wizardStepAlert')
+                        .text(firstMsg || 'Corrigez les erreurs de cette section avant de continuer.')
+                        .show();
+                    $('.wizard-step[data-step="' + step + '"]').addClass('has-error');
+                } else {
+                    $('.wizard-step[data-step="' + step + '"]').removeClass('has-error');
+                }
+                return ok;
+            }
+
             function showStep(step) {
                 $('.step-panel').hide();
                 $('#step' + step).fadeIn(200);
                 currentStep = step;
 
-                // Update wizard progress
                 $('.wizard-step').each(function () {
                     var s = parseInt($(this).data('step'));
                     $(this).removeClass('active completed');
@@ -397,17 +495,173 @@
                     $(this).toggleClass('active', i < step);
                 });
 
-                // Update buttons
                 $('#prevBtn').toggle(step > 0);
                 $('#nextBtn').toggle(step < totalSteps - 1);
                 $('#submitBtn').toggle(step === totalSteps - 1);
             }
 
-            $('#nextBtn').click(function () { if (currentStep < totalSteps - 1) showStep(currentStep + 1); });
-            $('#prevBtn').click(function () { if (currentStep > 0) showStep(currentStep - 1); });
-            $('.wizard-step').click(function () { showStep(parseInt($(this).data('step'))); });
+            $('#nextBtn').click(function () {
+                if (!validateStep(currentStep)) return;
+                if (currentStep < totalSteps - 1) showStep(currentStep + 1);
+            });
+            $('#prevBtn').click(function () {
+                if (currentStep > 0) showStep(currentStep - 1);
+            });
+            $('.wizard-step').click(function () {
+                var target = parseInt($(this).data('step'));
+                if (target > currentStep && !validateStep(currentStep)) return;
+                // When jumping forward multiple steps, validate each intermediate
+                if (target > currentStep) {
+                    for (var s = currentStep; s < target; s++) {
+                        if (!validateStep(s)) { showStep(s); return; }
+                    }
+                }
+                showStep(target);
+            });
 
-            showStep(0);
+            $('#formCreateClient').on('submit', function (e) {
+                for (var s = 0; s < totalSteps; s++) {
+                    if (!validateStep(s)) {
+                        e.preventDefault();
+                        showStep(s);
+                        return false;
+                    }
+                }
+                // Normalize empty manager to avoid FK ""
+                var $mgr = $('#ManagerPrincipalId');
+                if ($mgr.length && !($mgr.val() || '').trim()) $mgr.val('');
+            });
+
+            function setSelectOrInput(name, value) {
+                if (value == null || value === '') return;
+                var $el = $('[name="' + name + '"]');
+                if (!$el.length) return;
+                if ($el.is('select')) {
+                    var matched = false;
+                    $el.find('option').each(function () {
+                        if (($(this).val() || '').toLowerCase() === String(value).toLowerCase()
+                            || ($(this).text() || '').toLowerCase() === String(value).toLowerCase()) {
+                            $el.val($(this).val());
+                            matched = true;
+                            return false;
+                        }
+                    });
+                    if (!matched) {
+                        // try contains
+                        $el.find('option').each(function () {
+                            var v = ($(this).val() || '').toLowerCase();
+                            if (v && String(value).toLowerCase().indexOf(v) >= 0) {
+                                $el.val($(this).val());
+                                return false;
+                            }
+                        });
+                    }
+                } else {
+                    $el.val(value);
+                }
+            }
+
+            function applyBnifData(data) {
+                if (!data) return;
+                setSelectOrInput('RaisonSociale', data.raisonSociale || data.RaisonSociale);
+                setSelectOrInput('ICE', data.ice || data.ICE);
+                setSelectOrInput('IF', data.iF || data.IF || data.if);
+                setSelectOrInput('RC', data.rc || data.RC);
+                setSelectOrInput('NumeroPatente', data.numeroPatente || data.NumeroPatente);
+                setSelectOrInput('FormeJuridique', data.formeJuridique || data.FormeJuridique);
+                setSelectOrInput('SecteurActivite', data.secteurActivite || data.SecteurActivite);
+                setSelectOrInput('AdresseSiegeSocial', data.adresseSiegeSocial || data.AdresseSiegeSocial);
+                setSelectOrInput('VilleSiegeSocial', data.villeSiegeSocial || data.VilleSiegeSocial);
+                var dc = data.dateCreation || data.DateCreation;
+                if (dc) {
+                    var d = new Date(dc);
+                    if (!isNaN(d.getTime())) {
+                        var iso = d.toISOString().slice(0, 10);
+                        $('[name="DateCreation"]').val(iso);
+                    }
+                }
+                showStep(0);
+            }
+
+            $('#bnifSkipBtn').on('click', function () {
+                $('#bnifStatus').hide();
+                $('html, body').animate({ scrollTop: $('#formCreateClient').offset().top - 80 }, 300);
+            });
+
+            $('#bnifFileInput').on('change', function () {
+                var file = this.files && this.files[0];
+                if (!file) return;
+                var $status = $('#bnifStatus');
+                $status.show().html('<div class="alert alert-info mb-0 py-2"><i class="bi bi-hourglass-split me-1"></i>Lecture du BNIF…</div>');
+
+                var fd = new FormData();
+                fd.append('file', file);
+                var token = $('#formCreateClient input[name="__RequestVerificationToken"]').val();
+                fd.append('__RequestVerificationToken', token);
+
+                $.ajax({
+                    url: '@Url.Action("ParseBnif", "Clients")',
+                    method: 'POST',
+                    data: fd,
+                    processData: false,
+                    contentType: false
+                }).done(function (res) {
+                    if (!res || !res.success) {
+                        var msg = (res && res.message) ? res.message : 'Import BNIF échoué.';
+                        $status.html('<div class="alert alert-warning mb-0 py-2"><i class="bi bi-exclamation-triangle me-1"></i>' + msg + '</div>');
+                        return;
+                    }
+                    applyBnifData(res.data);
+                    var warn = (res.warnings || []).join(' ');
+                    $status.html(
+                        '<div class="alert alert-success mb-0 py-2">' +
+                        '<i class="bi bi-check-circle me-1"></i>' + (res.message || 'BNIF importé.') +
+                        (warn ? '<div class="small mt-1 text-muted">' + warn + '</div>' : '') +
+                        '<div class="small mt-1">Vérifiez Identité → Contact → Fiscal, puis Enregistrer.</div></div>'
+                    );
+                    $('html, body').animate({ scrollTop: $('#formCreateClient').offset().top - 80 }, 300);
+                }).fail(function () {
+                    $status.html('<div class="alert alert-danger mb-0 py-2"><i class="bi bi-x-circle me-1"></i>Erreur serveur lors de la lecture du BNIF.</div>');
+                }).always(function () {
+                    $('#bnifFileInput').val('');
+                });
+            });
+
+            // If server returned validation errors, jump to the section that owns them
+            @{
+                var serverInvalid = !ViewData.ModelState.IsValid;
+                var serverKeysCsv = serverInvalid
+                    ? string.Join(",", ViewData.ModelState.Where(kv => kv.Value?.Errors.Count > 0).Select(kv => kv.Key))
+                    : "";
+                var jumpStep = 0;
+                if (serverInvalid)
+                {
+                    var sk = serverKeysCsv.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    if (sk.Any(k => k is "EmailPrincipal" or "ContactEmail" or "AdresseSiegeSocial" or "VilleSiegeSocial" or "TelephonePrincipal" or "ContactNom" or "ContactFonction" or "ContactTelephone"))
+                        jumpStep = 1;
+                    if (sk.Any(k => k is "TypeTVA" or "MoisClotureExercice" or "DateDebutContrat" or "ManagerPrincipalId" or "NotesInternes")
+                        && !sk.Any(k => k is "RaisonSociale" or "ICE" or "IF" or "RC" or "NumeroCNSS"))
+                        jumpStep = 2;
+                    if (sk.Any(k => k is "RaisonSociale" or "ICE" or "IF" or "RC" or "NumeroCNSS" or "NumeroPatente"))
+                        jumpStep = 0;
+                }
+            }
+            @if (serverInvalid)
+            {
+                <text>
+                showStep(@jumpStep);
+                $('#wizardStepAlert').text('Corrigez les erreurs affichées puis réessayez.').show();
+                </text>
+                foreach (var entry in ViewData.ModelState.Where(kv => !string.IsNullOrEmpty(kv.Key) && kv.Value?.Errors.Count > 0))
+                {
+                    var msg = entry.Value!.Errors[0].ErrorMessage?.Replace("\\", "\\\\").Replace("'", "\\'") ?? "";
+                    <text>setError('@entry.Key', '@Html.Raw(msg)');</text>
+                }
+            }
+            else
+            {
+                <text>showStep(0);</text>
+            }
         });
     </script>
 }

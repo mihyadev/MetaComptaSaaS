@@ -11,6 +11,7 @@ public class EmployeesControllerTests
     private readonly Mock<IHttpContextAccessor> _mockAccessor;
     private readonly Mock<IEmployeeFacade> _mockEmployees;
     private readonly Mock<IClientFacade> _mockClients;
+    private readonly Mock<IPayrollFacade> _mockPayroll;
     private readonly EmployeesController _controller;
 
     public EmployeesControllerTests()
@@ -19,14 +20,20 @@ public class EmployeesControllerTests
         _mockAccessor = ControllerTestHelper.CreateMockContextAccessor();
         _mockEmployees = new Mock<IEmployeeFacade>();
         _mockClients = new Mock<IClientFacade>();
+        _mockPayroll = new Mock<IPayrollFacade>();
         _mockClients.Setup(x => x.GetAllForDropdownAsync()).ReturnsAsync(new List<ClientDto>
         {
             TestDataFactory.CreateClient(1),
             TestDataFactory.CreateClient(2)
         });
 
-        _controller = new EmployeesController(_mockRefData.Object, _mockAccessor.Object, _mockEmployees.Object, _mockClients.Object);
-        ControllerTestHelper.SetupController(_controller);
+        _controller = new EmployeesController(
+            _mockRefData.Object,
+            _mockAccessor.Object,
+            _mockEmployees.Object,
+            _mockClients.Object,
+            _mockPayroll.Object);
+        ControllerTestHelper.SetupController(_controller, sharedContext: _mockAccessor.Object.HttpContext);
     }
 
     [Fact]
@@ -42,14 +49,16 @@ public class EmployeesControllerTests
     }
 
     [Fact]
-    public async Task Index_LoadsClientsForDropdown()
+    public async Task Index_LoadsSelectedClientWhenPresent()
     {
         _mockEmployees.Setup(x => x.GetAllAsync(It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<string>()))
             .ReturnsAsync(TestDataFactory.CreateEmployeePage());
+        _controller.HttpContext.Session.SetString("SelectedClientId", "1");
+        _mockClients.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(TestDataFactory.CreateClient(1));
 
         await _controller.Index();
 
-        _mockClients.Verify(x => x.GetAllForDropdownAsync(), Times.Once);
+        _mockClients.Verify(x => x.GetByIdAsync(1), Times.Once);
     }
 
     [Fact]

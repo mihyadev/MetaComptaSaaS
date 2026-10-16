@@ -142,6 +142,90 @@ public static class RefCodes
     }
 
     // ════════════════════════════════════════════════════════════
+    //  STATUT COURRIER DOMICILIATION
+    // ════════════════════════════════════════════════════════════
+
+    public static class StatutCourrierDomiciliation
+    {
+        public const string Received = "Received";
+        public const string ToProcess = "ToProcess";
+        public const string Assigned = "Assigned";
+        public const string InProgress = "InProgress";
+        public const string Completed = "Completed";
+        public const string ClientNotified = "ClientNotified";
+        public const string Archived = "Archived";
+        public const string Closed = "Closed";
+
+        public static string Label(string? statut) => statut switch
+        {
+            Received => "Reçu",
+            ToProcess => "À traiter",
+            Assigned => "Assigné",
+            InProgress => "En cours",
+            Completed => "Traitement terminé",
+            ClientNotified => "Client notifié",
+            Archived => "Archivé",
+            Closed => "Clôturé",
+            _ => statut ?? "—"
+        };
+
+        public static string Color(string? statut) => statut switch
+        {
+            Received => "#64748b",
+            ToProcess => "#f59e0b",
+            Assigned => "#3b82f6",
+            InProgress => "#2563eb",
+            Completed => "#0ea5e9",
+            ClientNotified => "#22c55e",
+            Archived or Closed => "#94a3b8",
+            _ => "#64748b"
+        };
+    }
+
+    public static class StatutDemandeActionCourrier
+    {
+        public static string Label(string? statut) => statut switch
+        {
+            "PickupRequested" => "Retrait demandé",
+            "Preparing" => "En préparation",
+            "ReadyForPickup" => "Prêt pour retrait",
+            "HandedOver" => "Remis",
+            "ForwardRequested" => "Réexpédition demandée",
+            "AddressConfirmed" => "Adresse confirmée",
+            "PreparingShipment" => "Préparation envoi",
+            "Sent" => "Envoyé",
+            "Delivered" => "Livré",
+            "Closed" => "Clôturé",
+            _ => statut ?? "—"
+        };
+
+        public static string TypeLabel(string? type) => type switch
+        {
+            "Pickup" => "Retrait",
+            "Forward" => "Réexpédition",
+            "View" => "Consultation",
+            "Archive" => "Archivage",
+            _ => type ?? "—"
+        };
+    }
+
+    public static class StatutDemandeDocumentDomiciliation
+    {
+        public static string Label(string? statut) => statut switch
+        {
+            "Requested" => "Demandé",
+            "ClientNotified" => "Client notifié",
+            "Uploaded" => "Déposé",
+            "UnderReview" => "En revue",
+            "Validated" => "Validé",
+            "Rejected" => "Rejeté",
+            "WaitingClient" => "En attente client",
+            "Closed" => "Clôturé",
+            _ => statut ?? "—"
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════
     //  STATUT CONTRAT COMMERCIAL
     // ════════════════════════════════════════════════════════════
 
@@ -331,6 +415,7 @@ public static class RefCodes
         public const string RasDiv = "RAS_DIV";
         public const string DTS = "DTS";
         public const string LiasseFiscale = "LIASSEFISCALE";
+        public const string Domiciliation = "DOMICILIATION";
     }
 
     // ════════════════════════════════════════════════════════════
@@ -357,6 +442,36 @@ public static class RefCodes
         public const string Trimestrielle = "Trimestrielle";
         public const string Annuelle = "Annuelle";
         public const string Ponctuelle = "Ponctuelle";
+    }
+
+    /// <summary>Fréquence de facturation honoraires (contrats commerciaux / auto-facturation).</summary>
+    public static class FrequenceFacturation
+    {
+        public const string Mensuel = "Mensuel";
+        public const string Trimestriel = "Trimestriel";
+        public const string Annuel = "Annuel";
+
+        public static readonly string[] All = [Mensuel, Trimestriel, Annuel];
+
+        /// <summary>Normalizes UI/legacy values (Mensuelle, etc.) to canonical codes.</summary>
+        public static string? Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var v = value.Trim();
+            if (v.Equals(Mensuel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Mensuelle, StringComparison.OrdinalIgnoreCase)
+                || v.Equals("Mensuelle", StringComparison.OrdinalIgnoreCase))
+                return Mensuel;
+            if (v.Equals(Trimestriel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Trimestrielle, StringComparison.OrdinalIgnoreCase))
+                return Trimestriel;
+            if (v.Equals(Annuel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Annuelle, StringComparison.OrdinalIgnoreCase))
+                return Annuel;
+            return null;
+        }
+
+        public static bool IsValid(string? value) => Normalize(value) != null;
     }
 
     // ════════════════════════════════════════════════════════════

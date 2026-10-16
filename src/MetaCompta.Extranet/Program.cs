@@ -24,7 +24,9 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-if (!app.Environment.IsProduction())
+// Docker is HTTP-only; do not redirect to https://localhost when no HTTPS port is bound.
+var listenUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "";
+if (listenUrls.Contains("https://", StringComparison.OrdinalIgnoreCase))
 {
     app.UseHttpsRedirection();
 }

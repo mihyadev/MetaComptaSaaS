@@ -18,6 +18,16 @@ services:
       - Jwt__Key=MetaComptaSAS-SuperSecretKey-2026-MustBe256BitsLong!!
       - Jwt__Issuer=MetaComptaAPI
       - Jwt__Audience=MetaComptaClients
+      - Email__Host=smtp.gmail.com
+      - Email__Port=587
+      - Email__EnableSsl=true
+      - Email__UserName=mohamedihya1991@gmail.com
+      - Email__Password=ypoa yoap yfgn oeve
+      - Email__FromAddress=mohamedihya1991@gmail.com
+      - Email__FromName=MetaCompta
+      - PortalUrls__BackOffice=http://localhost:7101
+      - PortalUrls__Extranet=http://localhost:7102
+      - PortalUrls__Admin=http://localhost:7103
     ports:
       - "7100:8080"
     volumes:
@@ -44,6 +54,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ApiSettings__BaseUrl=http://api:8080
+      - PortalUrls__Extranet=http://localhost:7102
+      - PortalUrls__Admin=http://localhost:7103
     ports:
       - "7101:8080"
     depends_on:

@@ -1,5 +1,6 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Filters;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -8,38 +9,120 @@ namespace MetaCompta.BackOffice.Controllers;
 
 public class HomeController : BaseController
 {
+    /// <summary>
+    /// BackOffice mini-apps (métier spaces). Declarations = suivi of ALL déclarations (fiscal + social).
+    /// Compta / Paie / Juridique = operational management apps (not declaration suivi).
+    /// </summary>
+    public static readonly string[] DomainSpaces = { "Declarations", "Compta", "Paie", "Juridique" };
+
     private readonly IDashboardFacade _dashboard;
     private readonly IComptabiliteFacade _compta;
+    private readonly IConfiguration _configuration;
 
     public HomeController(
         IReferenceDataFacade referenceData,
         IHttpContextAccessor contextAccessor,
         IDashboardFacade dashboard,
-        IComptabiliteFacade compta)
+        IComptabiliteFacade compta,
+        IConfiguration configuration)
         : base(referenceData, contextAccessor)
     {
         _dashboard = dashboard;
         _compta = compta;
+        _configuration = configuration;
     }
 
-    public IActionResult Workspace()
+    public IActionResult Workspace(string? space = null)
     {
-        // Entry gateway: no left menu until Cabinet or Dossier Client is chosen
+        // Entry gateway: no left menu until Cabinet or a métier space is chosen
         HttpContext.Session.Remove("WorkspaceMode");
+        var pending = NormalizeDomain(space)
+            ?? NormalizeDomain(HttpContext.Session.GetString("PendingWorkspaceDomain"));
+        if (pending == null)
+        {
+            // Fresh gateway (ex. « Changer d'espace ») — reset métier focus
+            HttpContext.Session.Remove("PendingWorkspaceDomain");
+            HttpContext.Session.Remove("WorkspaceDomain");
+        }
+        else
+        {
+            HttpContext.Session.SetString("PendingWorkspaceDomain", pending);
+            HttpContext.Session.SetString("WorkspaceDomain", pending);
+        }
+
         ViewBag.UserName = UserName;
         ViewBag.UserRole = UserRole;
         ViewBag.CabinetName = CabinetName;
         ViewBag.HasClient = SelectedClientId.HasValue;
         ViewBag.SelectedClientName = SelectedClientName;
+        ViewBag.PendingDomain = pending;
+        ViewBag.CanDeclarationsSpace = PermissionHelper.HasAnyDomain(HttpContext.Session, "tva", "ir", "is", "cnss");
+        ViewBag.CanComptaSpace = PermissionHelper.HasAnyDomain(HttpContext.Session, "comptabilite");
+        ViewBag.CanPaieSpace = PermissionHelper.HasAnyDomain(HttpContext.Session, "payroll", "employee");
+        ViewBag.CanJuridiqueSpace = PermissionHelper.HasAnyDomain(HttpContext.Session, "juridique");
         return View();
     }
 
     /// <summary>Enter cabinet administration space (shows cabinet sidebar menu).</summary>
     public IActionResult EnterCabinet()
     {
+        HttpContext.Session.Remove("PendingWorkspaceDomain");
+        HttpContext.Session.Remove("WorkspaceDomain");
         HttpContext.Session.SetString("WorkspaceMode", "Cabinet");
         return RedirectToAction(nameof(Index));
     }
+
+    /// <summary>
+    /// Enter a métier mini-app (Declarations / Compta / Paie / Juridique).
+    /// If a client is already selected, open the landing page; otherwise return to gateway to pick a client.
+    /// </summary>
+    public IActionResult EnterDomain(string domain)
+    {
+        var normalized = NormalizeDomain(domain);
+        if (normalized == null)
+            return RedirectToAction(nameof(Workspace));
+
+        HttpContext.Session.SetString("PendingWorkspaceDomain", normalized);
+        HttpContext.Session.SetString("WorkspaceDomain", normalized);
+        HttpContext.Session.Remove("WorkspaceMode");
+
+        if (SelectedClientId.HasValue)
+        {
+            HttpContext.Session.SetString("WorkspaceMode", "Client");
+            HttpContext.Session.Remove("PendingWorkspaceDomain");
+            return Redirect(DomainLandingUrl(normalized));
+        }
+
+        return RedirectToAction(nameof(Workspace), new { space = normalized });
+    }
+
+    public static string? NormalizeDomain(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain)) return null;
+        var raw = domain.Trim();
+        // Legacy alias: Fiscal → Suivi Déclarations (all déclarations)
+        if (string.Equals(raw, "Fiscal", StringComparison.OrdinalIgnoreCase))
+            return "Declarations";
+        return DomainSpaces.FirstOrDefault(d =>
+            string.Equals(d, raw, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static string DomainLandingUrl(string domain) => domain switch
+    {
+        "Compta" => "/Comptabilite",
+        "Paie" => "/Payroll",
+        "Juridique" => "/Juridique",
+        _ => "/Declarations" // Declarations: suivi fiscal + social
+    };
+
+    public static string DomainThemeClass(string? domain) => domain switch
+    {
+        "Declarations" => "app-declarations",
+        "Compta" => "app-compta",
+        "Paie" => "app-paie",
+        "Juridique" => "app-juridique",
+        _ => "app-cabinet"
+    };
 
     [RequirePermission(ClaimDefinitions.CabinetDetail)]
     public async Task<IActionResult> Index()
