@@ -1,3 +1,4 @@
+@using MetaCompta.Domain.Common
 @model ContratCommercialDto
 @{
     ViewData["Title"] = $"Contrat {Model.Reference}";
@@ -43,16 +44,12 @@
     var canCommercialCreate = ViewBag.CanCommercialCreate as bool? ?? false;
     var canFactureCreate = ViewBag.CanFactureCreate as bool? ?? false;
     var employees = ViewBag.Employees as List<CabinetEmployeeDto> ?? new List<CabinetEmployeeDto>();
+    var cabinetRoles = ViewBag.CabinetRoles as List<RoleDto> ?? new List<RoleDto>();
     var hasEquipe = (Model.Membres?.Count ?? 0) > 0;
 
-    var _dtlGroups = new (string Label, string Color, string[] Codes)[] {
-        ("Tenue comptable & États financiers", "primary", new[]{"COMPTABILITE","TRESORERIE","BILAN","ETATSFISCAUX","LIASSEFISCALE","EG"}),
-        ("Déclarations fiscales (DGI / SIMPL)", "info", new[]{"TVA","IR_SAL","RAS_FONC","RAS_DIV","DRF","CM","DT","DEI_TP","DRVT","CSS_SOL","DRG","IR_COMP"}),
-        ("Acomptes IS & Solde", "warning", new[]{"ACOMPTES","REG_IS"}),
-        ("Social (CNSS / Damancom) & Paie", "success", new[]{"CNSS","DTS","PAIE","DCH_ETS"}),
-        ("Secrétariat juridique annuel", "danger", new[]{"PV_AGO","DEPOT_RC"}),
-    };
-    var _usedDtl = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var selectedGroupIds = ContractServiceGroups.InferSelectedGroupIds(
+        Model.ServicesActives?.Select(s => s.TypeService) ?? Enumerable.Empty<string?>());
+    var _usedDtl = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
 
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
@@ -77,7 +74,12 @@
                 <span>·</span>
                 <span>@source</span>
                 <span>·</span>
-                <span class="badge rounded-pill text-bg-light border">@Model.ModeleFacturation</span>
+                <span class="badge rounded-pill text-bg-light border">@(Model.FrequenceFacturation switch {
+                    "Mensuel" => "Honoraires mensuels",
+                    "Trimestriel" => "Honoraires trimestriels",
+                    "Annuel" => "Honoraires annuels",
+                    _ => Model.FrequenceFacturation ?? "—"
+                })</span>
             </div>
         </div>
     </div>
@@ -119,11 +121,17 @@
                     <form asp-action="ContratSuspendre" asp-route-id="@Model.Id" method="post" class="d-inline">
                         <button type="submit" class="btn btn-warning rounded-pill px-3">Suspendre</button>
                     </form>
-                    <form asp-action="ContratTerminer" asp-route-id="@Model.Id" method="post" class="d-inline"
-                          onsubmit="return confirm('Terminer ce contrat ?');">
-                        <button type="submit" class="btn btn-dark rounded-pill px-3">Terminer</button>
-                    </form>
                 }
+            }
+            @if ((ViewBag.CanCommercialDelete as bool? ?? false)
+                && Model.Statut != RefCodes.StatutContrat.Remplace)
+            {
+                <form asp-action="ContratSupprimer" asp-route-id="@Model.Id" method="post" class="d-inline"
+                      onsubmit="return confirm('Supprimer ce contrat ?');">
+                    <button type="submit" class="btn btn-outline-danger rounded-pill px-3">
+                        <i class="bi bi-trash me-1"></i>Supprimer
+                    </button>
+                </form>
             }
             @if (Model.Statut == RefCodes.StatutContrat.Suspendu && canCommercialEdit)
             {
@@ -236,8 +244,13 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
                         <div class="fw-semibold">@Model.DateEmission.ToString("dd/MM/yyyy")</div>
                     </div>
                     <div class="col-sm-4">
-                        <div class="small text-body-secondary">Fréquence</div>
-                        <div class="fw-semibold">@(Model.FrequenceFacturation ?? "—")</div>
+                        <div class="small text-body-secondary">Périodicité des honoraires</div>
+                        <div class="fw-semibold">@(Model.FrequenceFacturation switch {
+                            "Mensuel" => "Tous les mois",
+                            "Trimestriel" => "Tous les trimestres",
+                            "Annuel" => "Tous les ans",
+                            _ => Model.FrequenceFacturation ?? "—"
+                        })</div>
                     </div>
                     <div class="col-sm-4">
                         <div class="small text-body-secondary">Version</div>
@@ -303,6 +316,171 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
             </div>
         </div>
 
+        @{
+            var wfProposalsAll = ViewBag.WorkflowProposals as List<ContratWorkflowProposalDto>
+                ?? new List<ContratWorkflowProposalDto>();
+            var wfProposals = wfProposalsAll
+                .Where(p => p.HasTemplate && p.WorkflowTemplateId.HasValue && p.Steps.Any())
+                .ToList();
+            var teamMembers = Model.Membres ?? new List<ContratMembreDto>();
+            var canEditWf = canEditEquipe && hasEquipe;
+        }
+        @if (wfProposals.Any())
+        {
+            <div class="card border-0 shadow-sm rounded-4 mb-4 wf-assign-panel" id="workflow-proposals">
+                <div class="card-header bg-white border-0 pt-3 px-3 pb-0">
+                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                        <div>
+                            <div class="fw-semibold">Workflows &amp; acteurs</div>
+                            <div class="small text-body-secondary">Responsable par service — ouvrez pour affecter employés et/ou profils par étape</div>
+                        </div>
+                        <span class="badge rounded-pill text-bg-primary-subtle text-primary-emphasis border">@wfProposals.Count service(s)</span>
+                    </div>
+                </div>
+                <div class="card-body px-3 pb-3 pt-2">
+                    @if (!hasEquipe)
+                    {
+                        <div class="alert alert-warning py-2 small mb-0">
+                            Ajoutez d’abord l’équipe du dossier ci-dessous, puis revenez affecter les acteurs.
+                        </div>
+                    }
+                    else
+                    {
+                        <form asp-action="ContratSaveWorkflowAssignments" asp-route-id="@Model.Id" method="post">
+                            <input type="hidden" name="ContratId" value="@Model.Id" />
+                            @{ var svcIdx = 0; }
+                            <div class="wf-assign-list accordion accordion-flush" id="wfAssignAccordion">
+                                @foreach (var p in wfProposals)
+                                {
+                                    var collapseId = $"wfSvc_{svcIdx}";
+                                    <div class="wf-assign-item accordion-item border rounded-3 mb-2 overflow-hidden">
+                                        <div class="wf-assign-row accordion-header">
+                                            <div class="wf-assign-main">
+                                                <button type="button"
+                                                        class="wf-assign-toggle collapsed"
+                                                        data-bs-toggle="collapse"
+                                                        data-bs-target="#@collapseId"
+                                                        aria-expanded="false"
+                                                        aria-controls="@collapseId">
+                                                    <i class="bi bi-chevron-right wf-assign-chevron"></i>
+                                                    <span class="wf-assign-title">@p.Libelle</span>
+                                                    <span class="badge rounded-pill text-bg-light border wf-assign-decl">@p.DeclarationType</span>
+                                                </button>
+                                                <span class="badge rounded-pill text-bg-success-subtle text-success-emphasis border wf-assign-tpl" title="@p.WorkflowTemplateName">
+                                                    <i class="bi bi-diagram-3 me-1"></i>@p.WorkflowTemplateName
+                                                </span>
+                                            </div>
+                                            <div class="wf-assign-primary">
+                                                <label class="visually-hidden" for="wfPrimary_@svcIdx">Responsable</label>
+                                                <select id="wfPrimary_@svcIdx"
+                                                        name="Services[@svcIdx].PrimaryAssigneeUserId"
+                                                        class="form-select form-select-sm rounded-pill"
+                                                        @(canEditWf ? null : "disabled")>
+                                                    <option value="">Responsable…</option>
+                                                    @foreach (var m in teamMembers)
+                                                    {
+                                                        var name = m.UserName
+                                                            ?? employees.FirstOrDefault(e => e.Id == m.UserId)?.NomComplet
+                                                            ?? m.UserId;
+                                                        var label = string.IsNullOrWhiteSpace(m.RoleLabel) ? name : $"{name} · {m.RoleLabel}";
+                                                        <option value="@m.UserId" selected="@(m.UserId == p.AssigneeUserId ? "selected" : null)">@label</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <input type="hidden" name="Services[@svcIdx].TypeService" value="@p.TypeService" />
+                                        <input type="hidden" name="Services[@svcIdx].DeclarationType" value="@p.DeclarationType" />
+                                        <input type="hidden" name="Services[@svcIdx].SourceTemplateId" value="@p.WorkflowTemplateId" />
+
+                                        <div id="@collapseId" class="accordion-collapse collapse" data-bs-parent="#wfAssignAccordion">
+                                            <div class="wf-assign-steps">
+                                                @{ var stepIdx = 0; }
+                                                @foreach (var st in p.Steps)
+                                                {
+                                                    <div class="wf-assign-step">
+                                                        <div class="wf-assign-step-meta">
+                                                            <span class="wf-assign-step-ord">@st.StepOrder</span>
+                                                            <div>
+                                                                <div class="fw-semibold small">@st.Name</div>
+                                                                <span class="text-body-secondary" style="font-size:0.72rem;">@st.StepType</span>
+                                                            </div>
+                                                        </div>
+                                                        <input type="hidden" name="Services[@svcIdx].Steps[@stepIdx].StepOrder" value="@st.StepOrder" />
+                                                        <div class="wf-assign-step-actor">
+                                                            @if (st.IsClientStep)
+                                                            {
+                                                                <span class="badge rounded-pill text-bg-info-subtle text-info-emphasis border">Client (extranet)</span>
+                                                            }
+                                                            else if (st.IsSystemStep)
+                                                            {
+                                                                <span class="badge rounded-pill text-bg-secondary-subtle text-secondary-emphasis border" title="Étape automatique — aucun acteur humain">
+                                                                    <i class="bi bi-cpu me-1"></i>Système
+                                                                </span>
+                                                            }
+                                                            else
+                                                            {
+                                                                var selectedUserIds = st.AssignedToUserIds?.Count > 0
+                                                                    ? st.AssignedToUserIds
+                                                                    : (!string.IsNullOrWhiteSpace(st.AssignedToUserId)
+                                                                        ? new List<string> { st.AssignedToUserId }
+                                                                        : new List<string>());
+                                                                var selectedRoles = st.AssignedToRoleNames ?? new List<string>();
+                                                                <div class="wf-assign-multi">
+                                                                    <label class="form-label mb-0" style="font-size:0.68rem;">Employés</label>
+                                                                    <select name="Services[@svcIdx].Steps[@stepIdx].AssignedToUserIds"
+                                                                            class="form-select form-select-sm employee-multi"
+                                                                            multiple
+                                                                            data-placeholder="Choisir un ou plusieurs employés…"
+                                                                            @(canEditWf ? null : "disabled")>
+                                                                        @foreach (var m in teamMembers)
+                                                                        {
+                                                                            var name = m.UserName
+                                                                                ?? employees.FirstOrDefault(e => e.Id == m.UserId)?.NomComplet
+                                                                                ?? m.UserId;
+                                                                            var label = string.IsNullOrWhiteSpace(m.RoleLabel) ? name : $"{name} · {m.RoleLabel}";
+                                                                            var sel = selectedUserIds.Contains(m.UserId, StringComparer.OrdinalIgnoreCase);
+                                                                            <option value="@m.UserId" selected="@(sel ? "selected" : null)">@label</option>
+                                                                        }
+                                                                    </select>
+                                                                    <label class="form-label mb-0 mt-1" style="font-size:0.68rem;">Profils</label>
+                                                                    <select name="Services[@svcIdx].Steps[@stepIdx].AssignedToRoleNames"
+                                                                            class="form-select form-select-sm role-multi"
+                                                                            multiple
+                                                                            data-placeholder="Choisir un ou plusieurs profils…"
+                                                                            @(canEditWf ? null : "disabled")>
+                                                                        @foreach (var role in cabinetRoles)
+                                                                        {
+                                                                            var sel = selectedRoles.Contains(role.Name, StringComparer.OrdinalIgnoreCase);
+                                                                            <option value="@role.Name" selected="@(sel ? "selected" : null)">@role.Name</option>
+                                                                        }
+                                                                    </select>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    stepIdx++;
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    svcIdx++;
+                                }
+                            </div>
+                            @if (canEditWf && svcIdx > 0)
+                            {
+                                <div class="wf-assign-footer mt-2 pt-2">
+                                    <button type="submit" class="btn btn-primary rounded-pill px-4 btn-sm">
+                                        <i class="bi bi-check2 me-1"></i>Enregistrer les acteurs
+                                    </button>
+                                </div>
+                            }
+                        </form>
+                    }
+                </div>
+            </div>
+        }
+
         @if (canEditEquipe)
         {
             <div class="card border-0 shadow-sm rounded-4 mb-4" id="equipe-form">
@@ -349,39 +527,67 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
             </div>
         }
 
-        @if (Model.ServicesActives.Any())
+        @if ((Model.ServicesActives?.Any() ?? false) || selectedGroupIds.Any())
         {
             <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-header bg-white border-0 pt-4 px-4 d-flex align-items-center gap-2">
+                <div class="card-header bg-white border-0 pt-4 px-4 d-flex flex-wrap align-items-center gap-2">
                     <span class="badge rounded-pill bg-info-subtle text-info-emphasis px-3 py-2">Périmètre</span>
-                    <span class="badge rounded-pill bg-dark">@Model.ServicesActives.Count</span>
+                    @foreach (var gid in selectedGroupIds)
+                    {
+                        var gMeta = ContractServiceGroups.Get(gid);
+                        if (gMeta == null) continue;
+                        <span class="badge rounded-pill bg-@(gMeta.Color)-subtle text-@(gMeta.Color)-emphasis border">@gMeta.ShortTitle</span>
+                    }
                 </div>
                 <div class="card-body px-4 pb-4 vstack gap-3">
-                    @foreach (var grp in _dtlGroups)
+                    @foreach (var grp in ContractServiceGroups.All)
                     {
-                        var _gSvcs = Model.ServicesActives.Where(s =>
-                            grp.Codes.Contains(s.TypeService ?? "", StringComparer.OrdinalIgnoreCase)).ToList();
-                        if (!_gSvcs.Any()) { continue; }
-                        foreach (var _s in _gSvcs) { _usedDtl.Add(_s.TypeService ?? ""); }
+                        if (!selectedGroupIds.Contains(grp.GroupId)) continue;
+                        var infoId = $"svcInfo_{grp.GroupId}";
+                        foreach (var code in grp.AttachedTypeServiceCodes) { _usedDtl.Add(code); }
                         <div class="card border-0 bg-body-tertiary rounded-4 border-start border-4 border-@(grp.Color)">
                             <div class="card-body">
-                                <div class="fw-semibold mb-2">
-                                    <span class="badge rounded-pill bg-@(grp.Color)-subtle text-@(grp.Color)-emphasis">@grp.Label</span>
-                                    <span class="small text-body-secondary">@_gSvcs.Count</span>
+                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                                    <div class="fw-semibold">
+                                        <span class="badge rounded-pill bg-@(grp.Color)-subtle text-@(grp.Color)-emphasis">@grp.Title</span>
+                                        <span class="badge rounded-pill text-bg-success-subtle text-success-emphasis border ms-1">Inclus</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-@(grp.Color) rounded-circle"
+                                            data-bs-toggle="collapse" data-bs-target="#@infoId" title="Voir le détail">
+                                        <i class="bi bi-info-lg"></i>
+                                    </button>
                                 </div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    @foreach (var svc in _gSvcs)
-                                    {
-                                        <span class="badge rounded-pill text-bg-light border px-3 py-2">
-                                            <code class="me-1">@svc.TypeService</code>@(svc.LibelleService ?? "")
-                                        </span>
-                                    }
+                                <div class="small text-body-secondary">@grp.InfoItems.Count déclaration(s) / formalité(s) — @grp.ReferenceNote</div>
+                                <div class="collapse mt-3" id="@infoId">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0" style="font-size:0.82rem;">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th style="width:3rem;">N°</th>
+                                                    <th>Déclaration / formalité</th>
+                                                    <th>Périodicité ou événement</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in grp.InfoItems)
+                                                {
+                                                    <tr>
+                                                        <td class="text-body-secondary">@item.Number</td>
+                                                        <td>@item.Label</td>
+                                                        <td class="text-body-secondary">@item.Periodicite</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     }
                     @{
-                        var _dtlOthers = Model.ServicesActives.Where(s => !_usedDtl.Contains(s.TypeService ?? "")).ToList();
+                        var _dtlOthers = Model.ServicesActives
+                            .Where(s => !_usedDtl.Contains(s.TypeService ?? ""))
+                            .ToList();
                     }
                     @if (_dtlOthers.Any())
                     {
@@ -389,7 +595,7 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
                             @foreach (var svc in _dtlOthers)
                             {
                                 <span class="badge rounded-pill text-bg-light border px-3 py-2">
-                                    <code class="me-1">@svc.TypeService</code>@(svc.LibelleService ?? "")
+                                    @(svc.LibelleService ?? svc.TypeService)
                                 </span>
                             }
                         </div>
@@ -399,8 +605,18 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
         }
 
         <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
-                <span class="badge rounded-pill bg-success-subtle text-success-emphasis px-3 py-2">Honoraires</span>
+            <div class="card-header bg-white border-0 pt-4 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <span class="badge rounded-pill bg-success-subtle text-success-emphasis px-3 py-2">Honoraires</span>
+                    <span class="ms-2 small text-body-secondary">Périodicité :
+                        <strong>@(Model.FrequenceFacturation switch {
+                            "Mensuel" => "Tous les mois",
+                            "Trimestriel" => "Tous les trimestres",
+                            "Annuel" => "Tous les ans",
+                            _ => Model.FrequenceFacturation ?? "—"
+                        })</strong>
+                    </span>
+                </div>
                 <span class="badge rounded-pill text-bg-light border">@Model.Lignes.Count ligne(s)</span>
             </div>
             <div class="table-responsive">
@@ -409,7 +625,6 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
                         <tr class="small text-body-secondary text-uppercase">
                             <th class="ps-4 fw-semibold border-0">#</th>
                             <th class="fw-semibold border-0">Description</th>
-                            <th class="fw-semibold border-0">Périodicité</th>
                             <th class="fw-semibold border-0 text-end">HT</th>
                             <th class="fw-semibold border-0 text-end">Remise</th>
                             <th class="fw-semibold border-0 text-end">TVA</th>
@@ -423,11 +638,6 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
                             <tr>
                                 <td class="ps-4 text-body-secondary">@l.Ordre</td>
                                 <td class="fw-semibold">@l.Description</td>
-                                <td>
-                                    <span class="badge rounded-pill text-bg-light border">
-                                        @(string.IsNullOrWhiteSpace(l.ModeFacturation) ? "Ponctuel" : l.ModeFacturation)
-                                    </span>
-                                </td>
                                 <td class="text-end">@l.PrixUnitaireHT.ToString("N2")</td>
                                 <td class="text-end">@((l.RemisePourcentage ?? 0).ToString("N2")) %</td>
                                 <td class="text-end">@l.TauxTVA.ToString("N0") %</td>
@@ -587,8 +797,13 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
                     <div class="modal-body">
                         <p class="text-body-secondary">Créer une facture pour <strong>@Model.Reference</strong></p>
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Fréquence</label>
-                            <input type="text" class="form-control rounded-3" value="@(Model.FrequenceFacturation ?? "Non définie")" readonly />
+                            <label class="form-label fw-semibold">Périodicité des honoraires</label>
+                            <input type="text" class="form-control rounded-3" value="@(Model.FrequenceFacturation switch {
+                                "Mensuel" => "Tous les mois",
+                                "Trimestriel" => "Tous les trimestres",
+                                "Annuel" => "Tous les ans",
+                                _ => Model.FrequenceFacturation ?? "Non définie"
+                            })" readonly />
                         </div>
                         <div class="row g-3">
                             <div class="col-md-6">
@@ -609,4 +824,41 @@ else if (Model.Statut == RefCodes.StatutContrat.Remplace && Model.RemplaceParCon
             </div>
         </div>
     </div>
+}
+
+@section Scripts {
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<style>
+    .wf-assign-panel .employee-multi + .select2-container,
+    .wf-assign-panel .role-multi + .select2-container { width: 100% !important; }
+    .wf-assign-panel .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 38px; }
+</style>
+<script>
+(function () {
+    if (!window.jQuery || !jQuery.fn.select2) return;
+    function initOne($el, emptyMsg) {
+        if ($el.hasClass('select2-hidden-accessible')) return;
+        $el.select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: $el.data('placeholder') || 'Sélectionner…',
+            allowClear: true,
+            closeOnSelect: false,
+            language: {
+                noResults: function () { return emptyMsg; },
+                searching: function () { return 'Recherche…'; },
+                removeAllItems: function () { return 'Tout retirer'; }
+            }
+        });
+    }
+    jQuery('#workflow-proposals select.employee-multi').each(function () {
+        initOne(jQuery(this), 'Aucun employé trouvé');
+    });
+    jQuery('#workflow-proposals select.role-multi').each(function () {
+        initOne(jQuery(this), 'Aucun profil trouvé');
+    });
+})();
+</script>
 }

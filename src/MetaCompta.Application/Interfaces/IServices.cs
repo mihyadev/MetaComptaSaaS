@@ -30,6 +30,8 @@ public interface IClientService
     Task<List<string>> GetActiveServicesAsync(int clientId, int cabinetId);
     /// <summary>Returns true if the client has Manage-mode access (Valide/Actif + date window).</summary>
     Task<bool> HasActiveContractAsync(int clientId, int cabinetId);
+    /// <summary>Clients for Nouveau contrat: sans contrat actif first, then avec (batch, no N+1).</summary>
+    Task<ApiResponse<ClientContratPickerResultDto>> GetForContratPickerAsync(int cabinetId);
     Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId, int? exerciceComptableId = null);
     // Enterprise service contract management
     Task<ApiResponse<List<ServiceContratDto>>> GetServiceContratsAsync(int clientId, int cabinetId, int? exerciceFiscal = null, int? exerciceComptableId = null);
@@ -216,6 +218,7 @@ public interface ICabinetService
     Task<ApiResponse<CabinetEmployeeDto>> CreateEmployeeAsync(CabinetEmployeeCreateDto dto, int cabinetId, string userId);
     Task<ApiResponse<CabinetEmployeeDto>> UpdateEmployeeAsync(string id, CabinetEmployeeUpdateDto dto, int cabinetId, string userId);
     Task<ApiResponse<bool>> ToggleEmployeeActiveAsync(string id, int cabinetId, string userId);
+    Task<ApiResponse<bool>> ResendEmployeeActivationAsync(string id, int cabinetId);
 
     // ── Roles & Permissions ──────────────────────────────────────
     Task<ApiResponse<PagedResult<RoleDto>>> GetRolesAsync(int cabinetId, int page = 1, int pageSize = 20, string? search = null);
@@ -356,6 +359,7 @@ public interface ICommercialService
     Task<ApiResponse<ContratCommercialDto>> SuspendreContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> ReactiverContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> TerminerContratAsync(int id, int cabinetId, string userId);
+    Task<ApiResponse<bool>> DeleteContratAsync(int id, int cabinetId, string userId);
     Task<ApiResponse<ContratCommercialDto>> DupliquerContratAsync(int id, int cabinetId, string userId);
     /// <summary>Create an editable rectificatif from a signed/validated contract; original is kept until the rectificatif is validated.</summary>
     Task<ApiResponse<ContratCommercialDto>> CreateRectificatifContratAsync(int id, int cabinetId, string userId, string? motif = null);
@@ -392,6 +396,12 @@ public interface IWorkflowSchedulerService
     Task ProcessDueLifecycleEndsAsync();
 }
 
+/// <summary>Daily honoraires invoice generation from active commercial contracts.</summary>
+public interface IFacturationSchedulerService
+{
+    Task<AutoFacturationResultDto> GenerateDueInvoicesAsync();
+}
+
 // ===== Client Users (Extranet) =====
 public interface IClientUserService
 {
@@ -400,6 +410,7 @@ public interface IClientUserService
     Task<ApiResponse<ClientUserDto>> CreateClientUserAsync(ClientUserCreateDto dto, int clientId, int cabinetId, string createdBy);
     Task<ApiResponse<ClientUserDto>> UpdateClientUserAsync(string userId, ClientUserUpdateDto dto, int clientId, int cabinetId, string updatedBy);
     Task<ApiResponse<bool>> ToggleClientUserActiveAsync(string userId, int clientId, int cabinetId, string updatedBy);
+    Task<ApiResponse<bool>> ResendClientUserActivationAsync(string userId, int clientId, int cabinetId);
 }
 
 // ===== Exercice context / clôture =====

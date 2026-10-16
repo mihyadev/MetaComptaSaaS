@@ -80,6 +80,16 @@ public class ClientsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Clients for Nouveau contrat: without active contract first, then with (Valide/Actif + date window).
+    /// </summary>
+    [HttpGet("for-contrat-picker")]
+    public async Task<IActionResult> GetForContratPicker()
+    {
+        var result = await _clientService.GetForContratPickerAsync(CabinetId);
+        return Ok(result);
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(int id)
     {
@@ -224,6 +234,14 @@ public class ClientUsersController : ControllerBase
     public async Task<IActionResult> Toggle(int clientId, string userId)
     {
         var result = await _service.ToggleClientUserActiveAsync(userId, clientId, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("{userId}/resend-activation")]
+    [Authorize(Policy = "client.edit")]
+    public async Task<IActionResult> ResendActivation(int clientId, string userId)
+    {
+        var result = await _service.ResendClientUserActivationAsync(userId, clientId, CabinetId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 }
@@ -1264,6 +1282,14 @@ public class CabinetManagementController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpPost("employees/{id}/resend-activation")]
+    [Authorize(Policy = ClaimDefinitions.CabinetEmployeeEdit)]
+    public async Task<IActionResult> ResendEmployeeActivation(string id)
+    {
+        var result = await _cabinetService.ResendEmployeeActivationAsync(id, CabinetId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     // Ã¢â€â‚¬Ã¢â€â‚¬ Roles & Permissions Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     [HttpGet("roles")]
@@ -1605,6 +1631,14 @@ public class ContratsController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpDelete("{id}")]
+    [Authorize(Policy = "commercial.delete")]
+    public async Task<IActionResult> DeleteContrat(int id)
+    {
+        var result = await _service.DeleteContratAsync(id, CabinetId, UserId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     [HttpPost("{id}/sync-services")]
     [Authorize(Policy = "commercial.validate")]
     public async Task<IActionResult> SyncServices(int id)
@@ -1683,7 +1717,13 @@ public class ClientContratsController : ControllerBase
 public class FacturesController : ControllerBase
 {
     private readonly ICommercialService _service;
-    public FacturesController(ICommercialService service) => _service = service;
+    private readonly IFacturationSchedulerService _facturationScheduler;
+
+    public FacturesController(ICommercialService service, IFacturationSchedulerService facturationScheduler)
+    {
+        _service = service;
+        _facturationScheduler = facturationScheduler;
+    }
 
     private int CabinetId => int.TryParse(User.FindFirst("CabinetId")?.Value, out var id) ? id : 0;
     private string UserId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
@@ -1693,6 +1733,16 @@ public class FacturesController : ControllerBase
     {
         var result = await _service.GetFacturesAsync(CabinetId, clientId, statut, page, pageSize);
         return Ok(result);
+    }
+
+    /// <summary>Manually trigger auto honoraires invoice generation (same as daily Hangfire job).</summary>
+    [HttpPost("generate-due")]
+    [Authorize(Policy = "facture.create")]
+    public async Task<IActionResult> GenerateDue()
+    {
+        var result = await _facturationScheduler.GenerateDueInvoicesAsync();
+        return Ok(ApiResponse<AutoFacturationResultDto>.Ok(result,
+            $"{result.Created} facture(s) générée(s), {result.Skipped} ignorée(s)."));
     }
 
     [HttpGet("{id}")]

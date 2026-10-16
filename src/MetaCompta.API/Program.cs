@@ -22,6 +22,13 @@ builder.Services.AddDbContext<MetaComptaDbContext>(options =>
         b => b.MigrationsAssembly("MetaCompta.API"))
     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
+// ===== Email + portal URLs (activation links) =====
+builder.Services.Configure<MetaCompta.Application.Options.EmailOptions>(
+    builder.Configuration.GetSection(MetaCompta.Application.Options.EmailOptions.SectionName));
+builder.Services.Configure<MetaCompta.Application.Options.PortalUrlsOptions>(
+    builder.Configuration.GetSection(MetaCompta.Application.Options.PortalUrlsOptions.SectionName));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+
 // ===== Identity =====
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 {
@@ -31,11 +38,17 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     options.Password.RequireNonAlphanumeric = true;
     options.Password.RequiredLength = 8;
     options.User.RequireUniqueEmail = true;
+    options.SignIn.RequireConfirmedEmail = true;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 })
 .AddEntityFrameworkStores<MetaComptaDbContext>()
 .AddDefaultTokenProviders();
+
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromHours(48);
+});
 
 // ===== JWT Authentication =====
 builder.Services.AddAuthentication(options =>
@@ -80,6 +93,7 @@ builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 // ===== Services (DI) =====
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IAccountInvitationService, AccountInvitationService>();
 builder.Services.AddScoped<IContractAccessService, ContractAccessService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
@@ -115,6 +129,7 @@ builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IUnitTakeService, UnitTakeService>();
 builder.Services.AddScoped<ICommercialService, CommercialService>();
 builder.Services.AddScoped<IWorkflowSchedulerService, WorkflowSchedulerService>();
+builder.Services.AddScoped<IFacturationSchedulerService, FacturationSchedulerService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
@@ -1578,6 +1593,11 @@ using (var scope = app.Services.CreateScope())
             "workflow-process-due-lifecycle-ends",
             svc => svc.ProcessDueLifecycleEndsAsync(),
             "*/15 * * * *"); // every 15 minutes
+
+        RecurringJob.AddOrUpdate<IFacturationSchedulerService>(
+            "commercial-auto-facturation",
+            svc => svc.GenerateDueInvoicesAsync(),
+            Cron.Daily(6)); // 06:00 server time
 
         Console.WriteLine("[Startup] Hangfire workflow scheduler synced successfully.");
     }

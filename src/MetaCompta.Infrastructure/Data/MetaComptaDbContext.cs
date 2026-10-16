@@ -755,7 +755,7 @@ public class MetaComptaDbContext : IdentityDbContext<ApplicationUser, Applicatio
             e.Property(c => c.MontantTTC).HasPrecision(18, 2);
             e.Property(c => c.MontantRemise).HasPrecision(18, 2);
             e.Property(c => c.TauxChange).HasPrecision(18, 6);
-            e.Property(c => c.ServicesActivesJson).HasMaxLength(4000);
+            e.Property(c => c.ServicesActivesJson).HasColumnType("nvarchar(max)");
             e.HasQueryFilter(c => !c.IsDeleted);
             e.HasOne(c => c.Client).WithMany(cl => cl.ContratsCommerciaux).HasForeignKey(c => c.ClientId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.BonCommande).WithOne(b => b.Contrat).HasForeignKey<ContratCommercial>(c => c.BonCommandeId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);

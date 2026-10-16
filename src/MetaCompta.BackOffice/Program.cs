@@ -52,7 +52,10 @@ else
     app.UseDeveloperExceptionPage();
 }
 
-if (!app.Environment.IsProduction())
+// Only redirect when an HTTPS endpoint is configured (local launchSettings).
+// Docker serves HTTP only (ASPNETCORE_URLS=http://+:8080) — never force https://.
+var listenUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "";
+if (listenUrls.Contains("https://", StringComparison.OrdinalIgnoreCase))
 {
     app.UseHttpsRedirection();
 }

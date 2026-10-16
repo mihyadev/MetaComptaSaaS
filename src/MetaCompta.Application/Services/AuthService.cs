@@ -38,11 +38,30 @@ public class AuthService : IAuthService
     public async Task<ApiResponse<TokenDto>> LoginAsync(LoginDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user == null || !user.IsActive)
+        if (user == null)
             return ApiResponse<TokenDto>.Fail("Email ou mot de passe incorrect.");
+
+        if (!user.EmailConfirmed)
+            return ApiResponse<TokenDto>.Fail("Compte non activé — vérifiez votre email pour activer votre compte.");
+
+        if (!user.IsActive)
+            return ApiResponse<TokenDto>.Fail("Ce compte est désactivé. Contactez votre administrateur.");
 
         if (!await _userManager.CheckPasswordAsync(user, dto.Password))
             return ApiResponse<TokenDto>.Fail("Email ou mot de passe incorrect.");
+
+        var portal = (dto.Portal ?? "").Trim().ToLowerInvariant();
+        if (portal is "backoffice" or "back-office")
+        {
+            var roles = await _userManager.GetRolesAsync(user);
+            if (user.ClientId.HasValue || roles.Any(r => string.Equals(r, "Client", StringComparison.OrdinalIgnoreCase)))
+                return ApiResponse<TokenDto>.Fail("Compte client Extranet — utilisez le portail client.");
+        }
+        else if (portal == "extranet")
+        {
+            if (!user.ClientId.HasValue)
+                return ApiResponse<TokenDto>.Fail("Compte cabinet — utilisez le BackOffice.");
+        }
 
         user.LastLoginAt = DateTime.UtcNow;
         var token = await GenerateTokenAsync(user);

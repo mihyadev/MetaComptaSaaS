@@ -10,9 +10,16 @@ namespace MetaCompta.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
-    public AuthController(IAuthService authService) => _authService = authService;
+    private readonly IAccountInvitationService _invitations;
+
+    public AuthController(IAuthService authService, IAccountInvitationService invitations)
+    {
+        _authService = authService;
+        _invitations = invitations;
+    }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var result = await _authService.LoginAsync(dto);
@@ -28,6 +35,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [AllowAnonymous]
     public async Task<IActionResult> Refresh([FromBody] string refreshToken)
     {
         var result = await _authService.RefreshTokenAsync(refreshToken);
@@ -40,6 +48,22 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value!;
         var result = await _authService.ChangePasswordAsync(userId, dto);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("activation-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ActivationInfo([FromQuery] string userId, [FromQuery] string token)
+    {
+        var result = await _invitations.GetActivationInfoAsync(userId, token ?? "");
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("activate")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Activate([FromBody] ActivateAccountDto dto)
+    {
+        var result = await _invitations.ActivateAccountAsync(dto);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 }

@@ -444,6 +444,36 @@ public static class RefCodes
         public const string Ponctuelle = "Ponctuelle";
     }
 
+    /// <summary>Fréquence de facturation honoraires (contrats commerciaux / auto-facturation).</summary>
+    public static class FrequenceFacturation
+    {
+        public const string Mensuel = "Mensuel";
+        public const string Trimestriel = "Trimestriel";
+        public const string Annuel = "Annuel";
+
+        public static readonly string[] All = [Mensuel, Trimestriel, Annuel];
+
+        /// <summary>Normalizes UI/legacy values (Mensuelle, etc.) to canonical codes.</summary>
+        public static string? Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var v = value.Trim();
+            if (v.Equals(Mensuel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Mensuelle, StringComparison.OrdinalIgnoreCase)
+                || v.Equals("Mensuelle", StringComparison.OrdinalIgnoreCase))
+                return Mensuel;
+            if (v.Equals(Trimestriel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Trimestrielle, StringComparison.OrdinalIgnoreCase))
+                return Trimestriel;
+            if (v.Equals(Annuel, StringComparison.OrdinalIgnoreCase)
+                || v.Equals(Frequence.Annuelle, StringComparison.OrdinalIgnoreCase))
+                return Annuel;
+            return null;
+        }
+
+        public static bool IsValid(string? value) => Normalize(value) != null;
+    }
+
     // ════════════════════════════════════════════════════════════
     //  TYPE LIGNE DOCUMENT
     // ════════════════════════════════════════════════════════════

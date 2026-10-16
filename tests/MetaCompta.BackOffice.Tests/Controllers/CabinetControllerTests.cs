@@ -1,7 +1,9 @@
 using MetaCompta.Application.DTOs;
 using MetaCompta.BackOffice.Controllers;
+using MetaCompta.BackOffice.Helpers;
 using MetaCompta.BackOffice.Services;
 using MetaCompta.BackOffice.Tests.Helpers;
+using MetaCompta.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MetaCompta.BackOffice.Tests.Controllers;
@@ -21,7 +23,16 @@ public class CabinetControllerTests
         var accessor = ControllerTestHelper.CreateMockContextAccessor();
 
         _controller = new CabinetController(refData.Object, accessor.Object, _cabinetMock.Object);
-        ControllerTestHelper.SetupController(_controller);
+        ControllerTestHelper.SetupController(_controller, sharedContext: accessor.Object.HttpContext);
+        PermissionHelper.SetPermissions(_controller.HttpContext.Session, new[]
+        {
+            ClaimDefinitions.CabinetEmployeeCreate,
+            ClaimDefinitions.CabinetEmployeeEdit,
+            ClaimDefinitions.CabinetEmployeeDetail,
+            ClaimDefinitions.CabinetRoleManage,
+            ClaimDefinitions.CabinetEdit,
+            ClaimDefinitions.CabinetAuditView
+        });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -32,7 +43,7 @@ public class CabinetControllerTests
     public async Task Index_ReturnsViewWithEmployees()
     {
         var page = TestDataFactory.CreateCabinetEmployeePage();
-        _cabinetMock.Setup(x => x.GetEmployeesAsync(null, 1, null)).ReturnsAsync(page);
+        _cabinetMock.Setup(x => x.GetEmployeesAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>())).ReturnsAsync(page);
 
         var result = await _controller.Index();
 
@@ -43,12 +54,13 @@ public class CabinetControllerTests
     [Fact]
     public async Task Index_WithFilters_PassesFiltersToFacade()
     {
-        _cabinetMock.Setup(x => x.GetEmployeesAsync("Fiscal", 2, "test")).ReturnsAsync(TestDataFactory.CreateCabinetEmployeePage());
+        _cabinetMock.Setup(x => x.GetEmployeesAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>()))
+            .ReturnsAsync(TestDataFactory.CreateCabinetEmployeePage());
 
         var result = await _controller.Index("Fiscal", 2, "test");
 
         Assert.IsType<ViewResult>(result);
-        _cabinetMock.Verify(x => x.GetEmployeesAsync("Fiscal", 2, "test"), Times.Once);
+        _cabinetMock.Verify(x => x.GetEmployeesAsync("Fiscal", 2, "test", It.IsAny<int>()), Times.Once);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -59,7 +71,7 @@ public class CabinetControllerTests
     public async Task CreateEmployee_Get_ReturnsViewWithEmptyDto()
     {
         _cabinetMock.Setup(x => x.GetClaimsByDomainAsync()).ReturnsAsync(new Dictionary<string, List<string>>());
-        _cabinetMock.Setup(x => x.GetRolesAsync(1, null)).ReturnsAsync(TestDataFactory.CreateRolePage());
+        _cabinetMock.Setup(x => x.GetRolesAsync(It.IsAny<int>(), It.IsAny<string?>())).ReturnsAsync(TestDataFactory.CreateRolePage());
 
         var result = await _controller.CreateEmployee();
 
@@ -87,7 +99,7 @@ public class CabinetControllerTests
         var response = ApiResponse<CabinetEmployeeDto>.Fail("Email déjà utilisé");
         _cabinetMock.Setup(x => x.CreateEmployeeAsync(dto)).ReturnsAsync(response);
         _cabinetMock.Setup(x => x.GetClaimsByDomainAsync()).ReturnsAsync(new Dictionary<string, List<string>>());
-        _cabinetMock.Setup(x => x.GetRolesAsync(1, null)).ReturnsAsync(TestDataFactory.CreateRolePage());
+        _cabinetMock.Setup(x => x.GetRolesAsync(It.IsAny<int>(), It.IsAny<string?>())).ReturnsAsync(TestDataFactory.CreateRolePage());
 
         var result = await _controller.CreateEmployee(dto);
 
@@ -105,7 +117,7 @@ public class CabinetControllerTests
         var employee = TestDataFactory.CreateCabinetEmployee("emp-1");
         _cabinetMock.Setup(x => x.GetEmployeeByIdAsync("emp-1")).ReturnsAsync(employee);
         _cabinetMock.Setup(x => x.GetClaimsByDomainAsync()).ReturnsAsync(new Dictionary<string, List<string>>());
-        _cabinetMock.Setup(x => x.GetRolesAsync(1, null)).ReturnsAsync(TestDataFactory.CreateRolePage());
+        _cabinetMock.Setup(x => x.GetRolesAsync(It.IsAny<int>(), It.IsAny<string?>())).ReturnsAsync(TestDataFactory.CreateRolePage());
 
         var result = await _controller.EditEmployee("emp-1");
 
@@ -186,7 +198,7 @@ public class CabinetControllerTests
     public async Task Roles_ReturnsViewWithRoles()
     {
         var page = TestDataFactory.CreateRolePage();
-        _cabinetMock.Setup(x => x.GetRolesAsync(1, null)).ReturnsAsync(page);
+        _cabinetMock.Setup(x => x.GetRolesAsync(It.IsAny<int>(), It.IsAny<string?>())).ReturnsAsync(page);
         _cabinetMock.Setup(x => x.GetClaimsByDomainAsync()).ReturnsAsync(new Dictionary<string, List<string>>());
 
         var result = await _controller.Roles();
@@ -318,7 +330,7 @@ public class CabinetControllerTests
     public async Task Equipes_ReturnsViewWithEmployees()
     {
         var page = TestDataFactory.CreateCabinetEmployeePage();
-        _cabinetMock.Setup(x => x.GetEmployeesAsync(null, 1, null)).ReturnsAsync(page);
+        _cabinetMock.Setup(x => x.GetEmployeesAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<int>())).ReturnsAsync(page);
 
         var result = await _controller.Equipes();
 

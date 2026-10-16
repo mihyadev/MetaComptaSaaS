@@ -296,6 +296,79 @@ public class ClientService : IClientService
     public Task<bool> HasActiveContractAsync(int clientId, int cabinetId)
         => _contractAccess.HasManageAccessAsync(clientId, cabinetId);
 
+    /// <inheritdoc />
+    public async Task<ApiResponse<ClientContratPickerResultDto>> GetForContratPickerAsync(int cabinetId)
+    {
+        var today = ContractAccessService.BusinessToday();
+        var activeStatuses = RefCodes.StatutContrat.ActiveStatuses;
+
+        var clients = await _db.Clients.AsNoTracking()
+            .Where(c => c.CabinetId == cabinetId)
+            .Select(c => new
+            {
+                c.Id,
+                c.RaisonSociale,
+                c.ICE,
+                c.IF,
+                c.RC,
+                c.NumeroCNSS,
+                c.VilleSiegeSocial
+            })
+            .OrderBy(c => c.RaisonSociale)
+            .ToListAsync();
+
+        var activeByClient = await _db.ContratsCommerciaux.AsNoTracking()
+            .Where(c => c.CabinetId == cabinetId
+                && !c.IsDeleted
+                && activeStatuses.Contains(c.Statut)
+                && (c.DateDebutContrat == null || c.DateDebutContrat <= today)
+                && (c.DateFinContrat == null || c.DateFinContrat >= today))
+            .Select(c => new { c.ClientId, c.Reference, c.Statut, c.DateDebutContrat })
+            .ToListAsync();
+
+        var activeLookup = activeByClient
+            .GroupBy(c => c.ClientId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.DateDebutContrat).First());
+
+        var sans = new List<ClientContratPickerItemDto>();
+        var avec = new List<ClientContratPickerItemDto>();
+
+        foreach (var c in clients)
+        {
+            var item = new ClientContratPickerItemDto
+            {
+                Id = c.Id,
+                RaisonSociale = c.RaisonSociale,
+                ICE = c.ICE,
+                IF = c.IF,
+                RC = c.RC,
+                NumeroCNSS = c.NumeroCNSS,
+                VilleSiegeSocial = c.VilleSiegeSocial
+            };
+
+            if (activeLookup.TryGetValue(c.Id, out var act))
+            {
+                item.HasActiveContract = true;
+                item.ActiveContractReference = act.Reference;
+                item.ActiveContractStatut = act.Statut;
+                avec.Add(item);
+            }
+            else
+            {
+                item.HasActiveContract = false;
+                sans.Add(item);
+            }
+        }
+
+        return ApiResponse<ClientContratPickerResultDto>.Ok(new ClientContratPickerResultDto
+        {
+            SansContratActif = sans,
+            AvecContratActif = avec
+        });
+    }
+
     public Task<ContractAccessContextDto> GetContractAccessContextAsync(int clientId, int cabinetId, int? exerciceComptableId = null)
         => _contractAccess.GetContractAccessContextAsync(clientId, cabinetId, exerciceComptableId);
 
@@ -611,9 +684,30 @@ public class ClientService : IClientService
         var delaiMois = svc.DelaiDeclarationMois ?? 1;
         var freq = DeclarationPeriodTemplate.NormalizeFrequency(svc.Frequence);
 
+        var isTva = string.Equals(svc.TypeService, "TVA", StringComparison.OrdinalIgnoreCase);
+
         // Walk each calendar year covered by the exercise
         for (var year = exDebut.Year; year <= exFin.Year; year++)
         {
+            if (isTva && (freq == "Mensuelle" || freq == "Trimestrielle"))
+            {
+                var morocco = freq == "Trimestrielle"
+                    ? MoroccoTvaCalendar.GenerateQuarterlyDeclarationYear(year)
+                    : MoroccoTvaCalendar.GenerateMonthlyDeclarationYear(year);
+                foreach (var row in morocco.Where(r => !r.DisplayOnly))
+                {
+                    if (row.ActivityEnd < exDebut || row.ActivityStart > exFin) continue;
+                    var start = row.ActivityStart < exDebut ? exDebut : row.ActivityStart;
+                    var end = row.ActivityEnd > exFin ? exFin : row.ActivityEnd;
+                    periods.Add((
+                        $"{row.ActivityStart:yyyy-MM}",
+                        start,
+                        end,
+                        row.Deadline));
+                }
+                continue;
+            }
+
             foreach (var slice in DeclarationPeriodTemplate.GenerateForYear(year, freq))
             {
                 if (slice.End < exDebut || slice.Start > exFin) continue;

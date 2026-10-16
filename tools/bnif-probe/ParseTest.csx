@@ -1,0 +1,15 @@
+﻿using MetaCompta.BackOffice.Services;
+var path = @"C:\Users\delli\Downloads\BNIF_68824_06_07_2026_09_12_27.pdf";
+await using var fs = File.OpenRead(path);
+var r = BnifPdfParser.Parse(fs, Path.GetFileName(path));
+Console.WriteLine($"RS={r.RaisonSociale}");
+Console.WriteLine($"ICE={r.ICE}");
+Console.WriteLine($"IF={r.IF}");
+Console.WriteLine($"TP={r.NumeroPatente}");
+Console.WriteLine($"Forme={r.FormeJuridique}");
+Console.WriteLine($"Adr={r.AdresseSiegeSocial}");
+Console.WriteLine($"Ville={r.VilleSiegeSocial}");
+Console.WriteLine($"Act={r.SecteurActivite}");
+Console.WriteLine($"Date={r.DateCreation:yyyy-MM-dd}");
+Console.WriteLine($"Fields={string.Join(",", r.FilledFields)}");
+Console.WriteLine($"Warn={string.Join(" | ", r.Warnings)}");

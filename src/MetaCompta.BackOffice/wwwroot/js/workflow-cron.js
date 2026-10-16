@@ -88,55 +88,142 @@
     function normalizePeriod(p) {
         var s = parseMd(p && (p.start || p.startMd));
         var e = parseMd(p && (p.end || p.endMd));
+        var op = parseMd(p && (p.open || p.openMd));
         var du = parseMd(p && (p.due || p.dueMd || p.echeance));
         if (p && p.startMonth && p.startDay) s = { m: +p.startMonth, d: +p.startDay };
         if (p && p.endMonth && p.endDay) e = { m: +p.endMonth, d: +p.endDay };
+        if (p && p.openMonth && p.openDay) op = { m: +p.openMonth, d: +p.openDay };
         if (p && p.dueMonth && p.dueDay) du = { m: +p.dueMonth, d: +p.dueDay };
-        // Default due = EOM of month after period end when missing
+        // Default: open/due = filing month after activity end
         if (!du && e && e.m) du = eomNextMonth(e.m);
+        if (!op && du) op = { m: du.m, d: 1 };
         var label = fixMojibake((p && p.label) || '');
-        // Prefer clean locale month name when label looks corrupted
         if (s && s.m >= 1 && s.m <= 12 && /\u00c3./.test(label)) {
             label = monthNames[s.m] || label;
         }
+        var startY = (p && p.startYearOffset != null) ? parseInt(p.startYearOffset, 10) : null;
+        var openY = (p && p.openYearOffset != null) ? parseInt(p.openYearOffset, 10) : null;
+        var dueY = (p && p.dueYearOffset != null) ? parseInt(p.dueYearOffset, 10) : null;
+        if (isNaN(startY)) startY = null;
+        if (isNaN(openY)) openY = null;
+        if (isNaN(dueY)) dueY = null;
+        // Infer filing year when not stored (Dec activity → Jan filing = +1)
+        if (openY == null && s && op) openY = (op.m < s.m) ? 1 : 0;
+        if (dueY == null && s && du) dueY = (du.m < s.m) ? 1 : 0;
+        if (startY == null) startY = 0;
         return {
             label: label,
             start: s ? md(s.m, s.d) : '',
             end: e ? md(e.m, e.d) : '',
+            open: op ? md(op.m, op.d) : '',
             due: du ? md(du.m, du.d) : '',
             startMonth: s ? s.m : null,
             startDay: s ? s.d : null,
             endMonth: e ? e.m : null,
             endDay: e ? e.d : null,
+            openMonth: op ? op.m : null,
+            openDay: op ? op.d : null,
             dueMonth: du ? du.m : null,
-            dueDay: du ? du.d : null
+            dueDay: du ? du.d : null,
+            startYearOffset: startY,
+            openYearOffset: openY != null ? openY : 0,
+            dueYearOffset: dueY != null ? dueY : 0
         };
     }
+
+    var monthShort = { 1: 'Jan', 2: 'F\u00e9v', 3: 'Mar', 4: 'Avr', 5: 'Mai', 6: 'Juin',
+        7: 'Juil', 8: 'Ao\u00fbt', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'D\u00e9c' };
 
     function monthOptionsHtml(selected) {
         var html = '';
         for (var i = 1; i <= 12; i++) {
             html += '<option value="' + i + '"' + (i === selected ? ' selected' : '') + '>'
-                + pad2(i) + ' \u2014 ' + monthNames[i] + '</option>';
+                + monthShort[i] + '</option>';
         }
         return html;
     }
 
-    /** yearHint: 'N' | 'N+1' | null (default YYYY). */
+    /** Compact day/month editor (periodic / advanced only). */
     function mdEditorHtml(prefix, m, d, label, yearHint) {
         m = m || 1; d = d || 1;
-        var yLabel = yearHint === 'N+1' ? '/N+1' : (yearHint === 'N' ? '/N' : '/YYYY');
-        var yTitle = yearHint === 'N+1'
-            ? 'Annee = annee de cl\u00f4ture + 1 (ex. d\u00e9cembre \u2192 janvier N+1)'
-            : (yearHint === 'N' ? 'Annee = annee de la p\u00e9riode' : 'Annee remplie a l\'execution');
-        return '<div class="pt-field' + (prefix === 'due' ? ' pt-due' : '') + '">'
-            + '<label class="pt-field-label">' + (label || '') + '</label>'
+        var badge = yearHint === 'N+1'
+            ? '<span class="pt-yyyy pt-yyyy-next" title="Ann\u00e9e suivante">N+1</span>'
+            : '';
+        return '<div class="pt-field' + (prefix === 'due' ? ' pt-due' : '') + '"'
+            + (label ? ' title="' + label + '"' : '') + '>'
             + '<div class="pt-md-row">'
-            + '<input type="number" class="pt-' + prefix + '-d form-control form-control-sm" min="1" max="31" value="' + d + '" title="Jour" />'
+            + '<input type="number" class="pt-' + prefix + '-d form-control form-control-sm" min="1" max="31" value="' + d + '" title="Jour" aria-label="Jour" />'
             + '<span class="pt-sep">/</span>'
-            + '<select class="pt-' + prefix + '-m form-select form-select-sm" title="Mois">' + monthOptionsHtml(m) + '</select>'
-            + '<span class="pt-yyyy' + (yearHint === 'N+1' ? ' pt-yyyy-next' : '') + '" title="' + yTitle + '">' + yLabel + '</span>'
+            + '<select class="pt-' + prefix + '-m form-select form-select-sm" title="Mois" aria-label="Mois">' + monthOptionsHtml(m) + '</select>'
+            + badge
             + '</div></div>';
+    }
+
+    function dimAbs(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+
+    /** Year token for template: YYYY / YYYY-1 / YYYY+1. */
+    function yearToken(offset) {
+        if (offset === -1) return 'YYYY-1';
+        if (offset === 0) return 'YYYY';
+        if (offset === 1) return 'YYYY+1';
+        return offset > 0 ? ('YYYY+' + offset) : ('YYYY' + offset);
+    }
+
+    function resolveYearToken(token, yyyy) {
+        if (yyyy == null || yyyy === '' || token == null) return token;
+        var y = parseInt(yyyy, 10);
+        if (!(y >= 2000 && y <= 2100)) return token;
+        if (token === 'YYYY-1') return String(y - 1);
+        if (token === 'YYYY') return String(y);
+        if (token === 'YYYY+1') return String(y + 1);
+        return String(token).replace(/YYYY/g, String(y));
+    }
+
+    /** Year offset for filing month vs activity month (Dec\to Jan = +1). */
+    function filingYearOffset(activityMonth, filingMonth) {
+        return (filingMonth < activityMonth) ? 1 : 0;
+    }
+
+    function formatTokenDate(day, month, yearOff, previewYear) {
+        var tok = yearToken(yearOff);
+        if (previewYear >= 2000 && previewYear <= 2100) {
+            return fmtDmY(day, month, previewYear + yearOff);
+        }
+        return pad2(day) + '/' + pad2(month) + '/' + tok;
+    }
+
+    /**
+     * Build display model from editable pattern rows (YYYY tokens, optional aperçu).
+     */
+    function materializeMoroccoCalendar(previewYear, freq, patternRows) {
+        var preview = parseInt(previewYear, 10);
+        var usePreview = preview >= 2000 && preview <= 2100;
+        var list = (patternRows && patternRows.length) ? patternRows.map(normalizePeriod) : generatePeriodRows(freq);
+        return list.map(function (p, i) {
+            var actOff = (freq === 'quarterly' && p.startMonth >= 10 && p.dueMonth === 1) ? -1 : 0;
+            var fileOff = filingYearOffset(p.endMonth || p.startMonth || 1, p.dueMonth || 1);
+            if (freq === 'quarterly' && p.startMonth >= 10 && p.dueMonth === 1) { actOff = -1; fileOff = 0; }
+            var actLabel = (p.label || '').replace(/\s*\(d[\u00e9e]p[\u00f4o]t[^)]*\)/i, '').trim();
+            if (!actLabel) actLabel = monthNames[p.startMonth] || ('P\u00e9riode ' + (i + 1));
+            if (usePreview) actLabel = actLabel + ' ' + (preview + actOff);
+            else actLabel = actLabel + ' ' + yearToken(actOff);
+            return {
+                index: i + 1,
+                displayOnly: false,
+                activityLabel: actLabel,
+                openStr: formatTokenDate(p.openDay || 1, p.openMonth || 1, fileOff, usePreview ? preview : null),
+                deadlineStr: formatTokenDate(p.dueDay || daysInMonthPattern(p.dueMonth || 1), p.dueMonth || 1, fileOff, usePreview ? preview : null),
+                label: p.label,
+                startMonth: p.startMonth, startDay: p.startDay || 1,
+                endMonth: p.endMonth, endDay: p.endDay || daysInMonthPattern(p.endMonth || 1),
+                openMonth: p.openMonth, openDay: p.openDay,
+                dueMonth: p.dueMonth, dueDay: p.dueDay,
+                fileYearOff: fileOff,
+                actYearOff: actOff
+            };
+        });
     }
 
     function periodFrequencyValue(freq) {
@@ -156,10 +243,10 @@
     }
 
     function tplTitle(freq) {
-        if (freq === 'quarterly') return 'TVA trimestrielle Maroc \u2014 d\u00e9clare le trimestre N-1 (CGI art. 111)';
+        if (freq === 'quarterly') return 'TVA trimestrielle Maroc \u2014 fen\u00eatre DGI (trimestre N \u2192 mois suivant)';
         if (freq === 'annually') return 'Annuel \u2014 1 periode';
         if (freq === 'periodic') return 'Periodique \u2014 periodes manuelles';
-        return 'TVA mensuelle Maroc \u2014 d\u00e9clare le mois N-1 (CGI art. 108/111)';
+        return 'TVA mensuelle Maroc \u2014 fen\u00eatre DGI (activit\u00e9 M \u2192 d\u00e9p\u00f4t M+1)';
     }
 
     function monthNameLower(m) {
@@ -167,47 +254,52 @@
         return n ? (n.charAt(0).toLowerCase() + n.slice(1)) : '';
     }
 
-    /** Morocco N+1: activity period closes, declared next month, due = EOM declaration month. */
+    /** Morocco: activity Jan…Dec, open/due in next month (editable). Open=1, due=EOM. */
     function generatePeriodRows(freq) {
         var rows = [];
         if (freq === 'quarterly') {
-            // Declaration order: T4\to Jan, T1\to Apr, T2\to Jul, T3\to Oct
             var qDefs = [
-                { label: 'Octobre\u2013d\u00e9cembre (d\u00e9cl. janvier)', sm: 10, em: 12, ed: 31, dm: 1, dd: 31 },
-                { label: 'Janvier\u2013mars (d\u00e9cl. avril)', sm: 1, em: 3, ed: 31, dm: 4, dd: 30 },
-                { label: 'Avril\u2013juin (d\u00e9cl. juillet)', sm: 4, em: 6, ed: 30, dm: 7, dd: 31 },
-                { label: 'Juillet\u2013septembre (d\u00e9cl. octobre)', sm: 7, em: 9, ed: 30, dm: 10, dd: 31 }
+                { label: 'Octobre\u2013d\u00e9cembre (d\u00e9p\u00f4t janvier)', sm: 10, em: 12, ed: 31, om: 1, od: 1, dm: 1, ay: -1, fy: 0 },
+                { label: 'Janvier\u2013mars (d\u00e9p\u00f4t avril)', sm: 1, em: 3, ed: 31, om: 4, od: 1, dm: 4, ay: 0, fy: 0 },
+                { label: 'Avril\u2013juin (d\u00e9p\u00f4t juillet)', sm: 4, em: 6, ed: 30, om: 7, od: 1, dm: 7, ay: 0, fy: 0 },
+                { label: 'Juillet\u2013septembre (d\u00e9p\u00f4t octobre)', sm: 7, em: 9, ed: 30, om: 10, od: 1, dm: 10, ay: 0, fy: 0 }
             ];
             qDefs.forEach(function (q) {
                 rows.push(normalizePeriod({
                     label: q.label,
-                    start: md(q.sm, 1), end: md(q.em, q.ed), due: md(q.dm, q.dd),
                     startMonth: q.sm, startDay: 1, endMonth: q.em, endDay: q.ed,
-                    dueMonth: q.dm, dueDay: q.dd
+                    openMonth: q.om, openDay: q.od, dueMonth: q.dm, dueDay: daysInMonthPattern(q.dm),
+                    startYearOffset: q.ay, openYearOffset: q.fy, dueYearOffset: q.fy
                 }));
             });
             return rows;
         }
         if (freq === 'annually') {
-            rows.push(normalizePeriod({ label: 'Ann\u00e9e', start: md(1, 1), end: md(12, 31), due: md(3, 31) }));
+            rows.push(normalizePeriod({
+                label: 'Ann\u00e9e', startMonth: 1, startDay: 1, endMonth: 12, endDay: 31,
+                openMonth: 3, openDay: 1, dueMonth: 3, dueDay: 31,
+                startYearOffset: 0, openYearOffset: 0, dueYearOffset: 0
+            }));
             return rows;
         }
         if (freq === 'periodic') {
-            rows.push(normalizePeriod({ label: 'Periode 1', start: md(1, 1), end: md(6, 30), due: md(7, 31) }));
+            rows.push(normalizePeriod({
+                label: 'Periode 1', startMonth: 1, startDay: 1, endMonth: 6, endDay: 30,
+                openMonth: 7, openDay: 1, dueMonth: 7, dueDay: 31,
+                startYearOffset: 0, openYearOffset: 0, dueYearOffset: 0
+            }));
             return rows;
         }
-        // Monthly declaration cycle: Jan declares Dec, Feb declares Jan, \u2026 Dec declares Nov
-        for (var declMonth = 1; declMonth <= 12; declMonth++) {
-            var activityMonth = declMonth === 1 ? 12 : (declMonth - 1);
-            var dueDay = daysInMonthPattern(declMonth);
+        for (var activityMonth = 1; activityMonth <= 12; activityMonth++) {
+            var fm = activityMonth === 12 ? 1 : (activityMonth + 1);
+            var fileOff = activityMonth === 12 ? 1 : 0;
             rows.push(normalizePeriod({
-                label: monthNames[activityMonth] + ' (d\u00e9cl. ' + monthNameLower(declMonth) + ')',
-                start: md(activityMonth, 1),
-                end: md(activityMonth, daysInMonthPattern(activityMonth)),
-                due: md(declMonth, dueDay),
+                label: monthNames[activityMonth] + ' (d\u00e9p\u00f4t ' + monthNameLower(fm) + ')',
                 startMonth: activityMonth, startDay: 1,
                 endMonth: activityMonth, endDay: daysInMonthPattern(activityMonth),
-                dueMonth: declMonth, dueDay: dueDay
+                openMonth: fm, openDay: 1,
+                dueMonth: fm, dueDay: daysInMonthPattern(fm),
+                startYearOffset: 0, openYearOffset: fileOff, dueYearOffset: fileOff
             }));
         }
         return rows;
@@ -228,32 +320,221 @@
         var box = card && card.querySelector('.period-template-editor');
         if (!box) return [];
         var rows = [];
-        var nodes = box.querySelectorAll('.pt-card');
-        if (!nodes.length) nodes = box.querySelectorAll('tbody tr');
+        var nodes = box.querySelectorAll('.pt-card:not(.pt-display-only)');
+        if (!nodes.length) nodes = box.querySelectorAll('tbody tr:not(.pt-display-only)');
         nodes.forEach(function (tr) {
-            var label = (tr.querySelector('.pt-label') || {}).value || '';
+            var labelEl = tr.querySelector('.pt-label');
+            var label = labelEl ? (labelEl.value || labelEl.getAttribute('data-value') || '') : '';
             var sm = parseInt((tr.querySelector('.pt-start-m') || {}).value, 10) || 0;
             var sd = parseInt((tr.querySelector('.pt-start-d') || {}).value, 10) || 0;
             var em = parseInt((tr.querySelector('.pt-end-m') || {}).value, 10) || 0;
             var ed = parseInt((tr.querySelector('.pt-end-d') || {}).value, 10) || 0;
+            var om = parseInt((tr.querySelector('.pt-open-m') || {}).value, 10) || 0;
+            var od = parseInt((tr.querySelector('.pt-open-d') || {}).value, 10) || 0;
             var dm = parseInt((tr.querySelector('.pt-due-m') || {}).value, 10) || 0;
             var dd = parseInt((tr.querySelector('.pt-due-d') || {}).value, 10) || 0;
+            var startYEl = tr.querySelector('.pt-start-y');
+            var openYEl = tr.querySelector('.pt-open-y');
+            var dueYEl = tr.querySelector('.pt-due-y');
+            var startY = startYEl ? parseInt(startYEl.value, 10) : 0;
+            var openY = openYEl ? parseInt(openYEl.value, 10) : null;
+            var dueY = dueYEl ? parseInt(dueYEl.value, 10) : null;
             if (!sm && !em && !label) return;
-            if (sd) sd = Math.min(Math.max(1, sd), daysInMonth(sm || 1));
-            if (ed) ed = Math.min(Math.max(1, ed), daysInMonth(em || 1));
+            if (!em) em = sm;
+            if (!sd) sd = 1;
+            if (!ed) ed = daysInMonthPattern(em || 1);
+            sd = Math.min(Math.max(1, sd), daysInMonth(sm || 1));
+            ed = Math.min(Math.max(1, ed), daysInMonth(em || 1));
             if (!dm && em) {
                 var auto = eomNextMonth(em);
-                dm = auto.m; dd = auto.d;
+                dm = auto.m; dd = dd || auto.d;
             }
-            if (dd) dd = Math.min(Math.max(1, dd), daysInMonth(dm || 1));
+            if (!om) om = dm;
+            if (!od) od = 1;
+            // Fin / échéance = always last day of selected month (28/29/30/31)
+            if (dm) dd = daysInMonthPattern(dm);
+            else if (dd) dd = Math.min(Math.max(1, dd), daysInMonth(dm || 1));
+            if (od) od = Math.min(Math.max(1, od), daysInMonth(om || 1));
+            if (isNaN(startY)) startY = 0;
+            if (openY == null || isNaN(openY)) openY = (om && sm && om < sm) ? 1 : 0;
+            if (dueY == null || isNaN(dueY)) dueY = (dm && sm && dm < sm) ? 1 : 0;
+            if (!label && sm) label = monthNames[sm] + ' (d\u00e9p\u00f4t ' + monthNameLower(dm || om) + ')';
             rows.push(normalizePeriod({
-                label: label.trim(),
-                startMonth: sm, startDay: sd || 1,
-                endMonth: em, endDay: ed || 1,
-                dueMonth: dm || null, dueDay: dd || null
+                label: String(label).trim(),
+                startMonth: sm, startDay: sd,
+                endMonth: em, endDay: ed,
+                openMonth: om, openDay: od,
+                dueMonth: dm || null, dueDay: dd || null,
+                startYearOffset: startY,
+                openYearOffset: openY,
+                dueYearOffset: dueY
             }));
         });
         return rows;
+    }
+
+    /** N offset select: -2 … +2 (shown next to typed YYYY). */
+    function yearNOptionsHtml(selected) {
+        var opts = [-2, -1, 0, 1, 2];
+        var html = '';
+        var sel = (selected == null || isNaN(selected)) ? 0 : selected;
+        opts.forEach(function (off) {
+            var label = off === 0 ? '0' : (off > 0 ? ('+' + off) : String(off));
+            html += '<option value="' + off + '"' + (off === sel ? ' selected' : '') + '>'
+                + label + '</option>';
+        });
+        return html;
+    }
+
+    /** Inline: typed YYYY + select N. */
+    function yearInlineHtml(prefix, yOff, yyyyText) {
+        var txt = (yyyyText && String(yyyyText).trim()) ? String(yyyyText).trim() : 'YYYY';
+        return '<span class="pt-year-inline">'
+            + '<input type="text" class="pt-' + prefix + '-yyyy form-control form-control-sm pt-yyyy-input" value="'
+            + txt.replace(/"/g, '&quot;') + '" maxlength="8" title="Ann\u00e9e (saisir YYYY ou une ann\u00e9e)" />'
+            + '<select class="pt-' + prefix + '-y form-select form-select-sm pt-nselect" title="N (offset)">'
+            + yearNOptionsHtml(yOff || 0) + '</select>'
+            + '</span>';
+    }
+
+    /** Simple day + month + YYYY (typed) + N (select), inline. */
+    function simpleDayMonthHtml(prefix, m, d, yOff, opts) {
+        opts = opts || {};
+        var dayVal = d || 1;
+        var dayExtra = opts.dayReadonly
+            ? ' readonly tabindex="-1" title="Dernier jour du mois (28/29/30/31)"'
+            : ' title="Jour"';
+        var dayCls = 'pt-' + prefix + '-d form-control form-control-sm'
+            + (opts.dayReadonly ? ' pt-day-eom' : '');
+        return '<div class="pt-md-row pt-simple">'
+            + '<input type="number" class="' + dayCls + '" min="1" max="31" value="' + dayVal + '"' + dayExtra + ' />'
+            + '<span class="pt-sep">/</span>'
+            + '<select class="pt-' + prefix + '-m form-select form-select-sm" title="Mois">' + monthOptionsHtml(m || 1) + '</select>'
+            + yearInlineHtml(prefix, yOff, opts.yyyyText)
+            + '</div>';
+    }
+
+    function renderMoroccoCalendarEditor(card, patternRows, freq) {
+        var box = card && card.querySelector('.period-template-editor');
+        if (!box) return;
+        patternRows = (patternRows || generatePeriodRows(freq)).map(normalizePeriod);
+        var html = '<div class="period-template-box pt-morocco pt-simple-ui">'
+            + '<div class="pt-head">'
+            + '<div class="pt-head-main">'
+            + '<span>Calendrier TVA Maroc</span>'
+            + '<strong>' + tplTitle(freq) + '</strong>'
+            + '<div class="pt-head-hint">1) Mois + YYYY / N \u00b7 2) D\u00e9but jour/mois + YYYY / N \u00b7 3) Fin = dernier jour du mois (28/29/30/31) + YYYY / N.</div>'
+            + '</div></div>'
+            + '<div class="pt-scroll">'
+            + '<table class="pt-cal-table pt-morocco-table"><thead><tr>'
+            + '<th class="pt-col-n">#</th>'
+            + '<th>Mois d\'activit\u00e9</th>'
+            + '<th>D\u00e9but</th>'
+            + '<th class="pt-col-due">Fin / \u00e9ch\u00e9ance</th>'
+            + '</tr></thead><tbody>';
+        patternRows.forEach(function (r, i) {
+            var actM = r.startMonth || 1;
+            var openM = r.openMonth || ((actM === 12) ? 1 : actM + 1);
+            var dueM = r.dueMonth || openM;
+            var dueD = daysInMonthPattern(dueM);
+            var actOff = (r.startYearOffset != null) ? r.startYearOffset : 0;
+            var openOff = (r.openYearOffset != null) ? r.openYearOffset : filingYearOffset(actM, openM);
+            var dueOff = (r.dueYearOffset != null) ? r.dueYearOffset : filingYearOffset(actM, dueM);
+            var label = monthNames[actM] + ' (d\u00e9p\u00f4t ' + monthNameLower(dueM) + ')';
+            html += '<tr class="pt-card" data-idx="' + i + '">'
+                + '<td class="pt-col-n"><span class="pt-badge">' + (i + 1) + '</span></td>'
+                + '<td class="pt-col-act">'
+                + '<div class="pt-md-row pt-simple">'
+                + '<select class="pt-start-m form-select form-select-sm" title="Mois d\'activit\u00e9">' + monthOptionsHtml(actM) + '</select>'
+                + yearInlineHtml('start', actOff)
+                + '</div>'
+                + '<input type="hidden" class="pt-label" value="' + label.replace(/"/g, '&quot;') + '" />'
+                + '<input type="hidden" class="pt-start-d" value="1" />'
+                + '<input type="hidden" class="pt-end-m" value="' + actM + '" />'
+                + '<input type="hidden" class="pt-end-d" value="' + daysInMonthPattern(actM) + '" />'
+                + '</td>'
+                + '<td class="pt-col-open">' + simpleDayMonthHtml('open', openM, r.openDay != null ? r.openDay : 1, openOff) + '</td>'
+                + '<td class="pt-col-due">' + simpleDayMonthHtml('due', dueM, dueD, dueOff, { dayReadonly: true }) + '</td>'
+                + '</tr>';
+        });
+        html += '</tbody></table></div>'
+            + '<div class="pt-foot">'
+            + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter</button>'
+            + '<span class="small text-muted">Saisir YYYY puis choisir N (0, +1, -1\u2026). Fin = dernier jour du mois choisi.</span>'
+            + '</div></div>';
+        box.innerHTML = html;
+
+        function syncDueEom(tr) {
+            if (!tr) return;
+            var dueMEl = tr.querySelector('.pt-due-m');
+            var dueDEl = tr.querySelector('.pt-due-d');
+            var m = parseInt(dueMEl && dueMEl.value, 10) || 1;
+            if (dueDEl) dueDEl.value = String(daysInMonthPattern(m));
+        }
+
+        function onPeriodMonthChange(sel) {
+            var tr = closest(sel, '.pt-card');
+            if (!tr) return;
+            var m = parseInt(sel.value, 10) || 1;
+            var endM = tr.querySelector('.pt-end-m');
+            var endD = tr.querySelector('.pt-end-d');
+            var lab = tr.querySelector('.pt-label');
+            var dueM = parseInt((tr.querySelector('.pt-due-m') || {}).value, 10) || (m === 12 ? 1 : m + 1);
+            if (endM) endM.value = String(m);
+            if (endD) endD.value = String(daysInMonthPattern(m));
+            if (lab) lab.value = monthNames[m] + ' (d\u00e9p\u00f4t ' + monthNameLower(dueM) + ')';
+            var off = filingYearOffset(m, dueM);
+            var openY = tr.querySelector('.pt-open-y');
+            var dueY = tr.querySelector('.pt-due-y');
+            if (openY) openY.value = String(off);
+            if (dueY) dueY.value = String(off);
+            syncDueEom(tr);
+        }
+
+        box.querySelectorAll('.pt-start-m').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                onPeriodMonthChange(sel);
+                syncPeriodTable(card);
+            });
+        });
+        box.querySelectorAll('.pt-due-m').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                var tr = closest(sel, '.pt-card');
+                syncDueEom(tr);
+                if (tr) {
+                    var actM = parseInt((tr.querySelector('.pt-start-m') || {}).value, 10) || 1;
+                    var dueM = parseInt(sel.value, 10) || 1;
+                    var lab = tr.querySelector('.pt-label');
+                    if (lab) lab.value = monthNames[actM] + ' (d\u00e9p\u00f4t ' + monthNameLower(dueM) + ')';
+                    var off = filingYearOffset(actM, dueM);
+                    var dueY = tr.querySelector('.pt-due-y');
+                    if (dueY) dueY.value = String(off);
+                }
+                syncPeriodTable(card);
+            });
+        });
+        box.querySelectorAll('.pt-open-d, .pt-open-m, .pt-open-y, .pt-open-yyyy, .pt-due-y, .pt-due-yyyy, .pt-start-y, .pt-start-yyyy').forEach(function (inp) {
+            inp.addEventListener('change', function () {
+                var tr = closest(inp, '.pt-card');
+                if (tr) {
+                    var actM = parseInt((tr.querySelector('.pt-start-m') || {}).value, 10) || 1;
+                    var dueM = parseInt((tr.querySelector('.pt-due-m') || {}).value, 10) || 1;
+                    var lab = tr.querySelector('.pt-label');
+                    if (lab) lab.value = monthNames[actM] + ' (d\u00e9p\u00f4t ' + monthNameLower(dueM) + ')';
+                }
+                syncPeriodTable(card);
+            });
+            if (inp.classList.contains('pt-yyyy-input')) {
+                inp.addEventListener('input', function () { syncPeriodTable(card); });
+            }
+        });
+        card.querySelectorAll('.period-tpl-btn').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-tpl') === freq);
+        });
+        toggleGlobalWindowFields(card, true);
+        var prev = card.querySelector('.echeance-work-preview');
+        if (prev) prev.innerHTML = '';
+        syncPeriodTable(card);
     }
 
     function renderPeriodEditor(card, rows, freq) {
@@ -261,34 +542,41 @@
         if (!box) return;
         freq = freq || 'monthly';
         rows = (rows || []).map(normalizePeriod);
+        if (freq === 'monthly' || freq === 'quarterly') {
+            renderMoroccoCalendarEditor(card, rows, freq);
+            return;
+        }
         var html = '<div class="period-template-box period-template-pro">'
             + '<div class="pt-head">'
-            + '<div><span>Modele de periodes</span><strong>' + tplTitle(freq) + '</strong></div>'
-            + '<div class="pt-head-hint">Activit\u00e9 N \u2192 d\u00e9claration mois N+1 \u2014 D\u00e9but / Cl\u00f4ture / \u00c9ch\u00e9ance</div>'
+            + '<span>Mod\u00e8le de p\u00e9riodes</span>'
+            + '<strong>' + tplTitle(freq) + '</strong>'
             + '</div>'
-            + '<div class="pt-scroll pt-cards">';
+            + '<div class="pt-scroll">'
+            + '<table class="pt-table"><thead><tr>'
+            + '<th class="pt-col-n">#</th>'
+            + '<th class="pt-col-label">P\u00e9riode</th>'
+            + '<th class="pt-col-md">D\u00e9but</th>'
+            + '<th class="pt-col-md">Cl\u00f4ture</th>'
+            + '<th class="pt-col-due">\u00c9ch\u00e9ance</th>'
+            + '<th class="pt-col-del"></th>'
+            + '</tr></thead><tbody>';
         rows.forEach(function (r, i) {
             var s = parseMd(r.start) || { m: 1, d: 1 };
             var e = parseMd(r.end) || { m: 1, d: 1 };
             var du = parseMd(r.due) || eomNextMonth(e.m);
-            var dueNextYear = !!(du && e && du.m < e.m);
             var safeLabel = String(r.label || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-            html += '<div class="pt-card" data-idx="' + i + '">'
-                + '<div class="pt-card-top">'
-                + '<div class="pt-card-title"><span class="pt-badge">' + (i + 1) + '</span>'
-                + '<input type="text" class="pt-label form-control form-control-sm" value="' + safeLabel + '" placeholder="Periode d\'activite (d\u00e9cl. mois suivant)" /></div>'
-                + '<button type="button" class="pt-del" title="Supprimer" onclick="WfCron.removePeriodRow(this)"><i class="bi bi-trash"></i></button>'
-                + '</div>'
-                + '<div class="pt-card-grid">'
-                + mdEditorHtml('start', s.m, s.d, 'D\u00e9but activit\u00e9', 'N')
-                + mdEditorHtml('end', e.m, e.d, 'Cl\u00f4ture activit\u00e9', 'N')
-                + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance d\u00e9claration (mois N+1)', dueNextYear ? 'N+1' : 'N')
-                + '</div></div>';
+            html += '<tr class="pt-card" data-idx="' + i + '">'
+                + '<td class="pt-col-n"><span class="pt-badge">' + (i + 1) + '</span></td>'
+                + '<td class="pt-col-label"><input type="text" class="pt-label form-control form-control-sm" value="' + safeLabel + '" /></td>'
+                + '<td class="pt-col-md">' + mdEditorHtml('start', s.m, s.d, 'D\u00e9but', 'N') + '</td>'
+                + '<td class="pt-col-md">' + mdEditorHtml('end', e.m, e.d, 'Cl\u00f4ture', 'N') + '</td>'
+                + '<td class="pt-col-due">' + mdEditorHtml('due', du.m, du.d, '\u00c9ch\u00e9ance', 'N') + '</td>'
+                + '<td class="pt-col-del"><button type="button" class="pt-del" title="Supprimer" onclick="WfCron.removePeriodRow(this)"><i class="bi bi-trash"></i></button></td>'
+                + '</tr>';
         });
-        html += '</div>'
+        html += '</tbody></table></div>'
             + '<div class="pt-foot">'
-            + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter une periode</button>'
-            + '<span class="small text-muted">Ex. janvier d\u00e9clare d\u00e9cembre (01/12\u201331/12) \u2014 \u00e9ch\u00e9ance 31/01.</span>'
+            + '<button type="button" class="btn btn-sm btn-outline-primary pt-add" onclick="WfCron.addPeriodRow(this.closest(\'.step-card\'))"><i class="bi bi-plus-lg"></i> Ajouter</button>'
             + '</div></div>';
         box.innerHTML = html;
         box.querySelectorAll('.pt-label, .pt-start-d, .pt-start-m, .pt-end-d, .pt-end-m, .pt-due-d, .pt-due-m').forEach(function (inp) {
@@ -320,19 +608,28 @@
         var builder = card.querySelector('.cron-builder');
         var freq = (builder && builder.dataset.periodTpl) || freqFromPeriodTemplate(cfg.periodTemplate || cfg.periodFrequency) || 'monthly';
 
-        // Persist year-agnostic patterns (start/end/due per row)
+        // Persist year-agnostic MM-DD patterns; YYYY is a runtime parameter
+        cfg.yearMode = 'YYYY';
+        delete cfg.calendarYear;
+        delete cfg.previewYearEnabled;
         cfg.periods = periods.map(function (p) {
             return {
                 label: p.label,
                 start: p.start,
                 end: p.end,
+                open: p.open,
                 due: p.due,
                 startMonth: p.startMonth,
                 startDay: p.startDay,
                 endMonth: p.endMonth,
                 endDay: p.endDay,
+                openMonth: p.openMonth,
+                openDay: p.openDay,
                 dueMonth: p.dueMonth,
-                dueDay: p.dueDay
+                dueDay: p.dueDay,
+                startYearOffset: p.startYearOffset != null ? p.startYearOffset : 0,
+                openYearOffset: p.openYearOffset != null ? p.openYearOffset : 0,
+                dueYearOffset: p.dueYearOffset != null ? p.dueYearOffset : 0
             };
         });
         cfg.periodTemplate = periodFrequencyValue(freq) || 'Mensuelle';
@@ -380,11 +677,16 @@
         return pad2(Math.min(Math.max(day, 1), dim)) + '/' + pad2(month) + '/' + year;
     }
 
-    /** Morocco calendar preview: activity year may be Y-1 when due is January (N+1 rule). */
+    /** Preview merged into Morocco calendar editor — clear legacy duplicate. */
     function updateEcheanceWorkPreview(card, periods, cfg) {
         var el = card && card.querySelector('.echeance-work-preview');
         if (!el) return;
-        var year = new Date().getFullYear();
+        var freq = freqFromPeriodTemplate((cfg && (cfg.periodTemplate || cfg.periodFrequency)) || '') || 'monthly';
+        if (freq === 'monthly' || freq === 'quarterly') {
+            el.innerHTML = '';
+            return;
+        }
+        var year = (cfg && cfg.calendarYear) || new Date().getFullYear();
         var list = periods || [];
         if (!list.length) {
             el.innerHTML = '<span class="text-muted">Aucune p\u00e9riode</span>';
@@ -396,68 +698,14 @@
             var du = parseMd(p.due);
             if (!du && e) du = eomNextMonth(e.m);
             if (!e || !du) return '';
-            // Dec activity + Jan due \u2192 activity in Y-1, deadline in Y (for this declaration cycle row)
-            var crossesYear = du.m < e.m;
-            var activityYear = crossesYear ? (year - 1) : year;
-            var dueYear = year;
-            // If due is January and we are showing the Dec\to Jan N+1 row of *same* activity year:
-            // when end is Dec and due Jan, for filings in `year` activity is year-1.
-            // When previewing Dec activity of `year` (due Jan year+1), dueYear = year+1.
-            // Seed order starts with Dec\to Jan: first row uses activityYear=year-1, dueYear=year.
-            // Later Dec is not in the 12-row seed (Nov\to Dec is last). Add note in title.
-            if (crossesYear && idx === 0) {
-                activityYear = year - 1;
-                dueYear = year;
-            } else if (crossesYear) {
-                activityYear = year;
-                dueYear = year + 1;
-            } else {
-                activityYear = year;
-                dueYear = year;
-            }
-            var startStr = s ? fmtDmY(s.d, s.m, activityYear) : '\u2014';
-            var closeStr = fmtDmY(e.d, e.m, activityYear);
-            var dueStr = fmtDmY(du.d, du.m, dueYear);
-            var declLabel = monthNames[du.m] + ' ' + dueYear;
-            var actLabel = (p.label || ('Periode ' + (idx + 1))).replace(/\s*\(d[\u00e9e]cl\.[^)]*\)/i, '').trim();
-            return '<tr>'
-                + '<td class="pt-cal-n">' + (idx + 1) + '</td>'
-                + '<td class="pt-cal-label">' + actLabel.replace(/</g, '&lt;') + ' ' + activityYear + '</td>'
-                + '<td class="pt-cal-start">' + startStr + '</td>'
-                + '<td class="pt-cal-close">' + closeStr + '</td>'
-                + '<td class="pt-cal-decl">' + declLabel + '</td>'
-                + '<td class="pt-cal-due">' + dueStr + '</td>'
-                + '</tr>';
+            var actLabel = (p.label || ('Periode ' + (idx + 1))).replace(/</g, '&lt;');
+            return '<tr><td class="pt-cal-n">' + (idx + 1) + '</td>'
+                + '<td>' + actLabel + '</td>'
+                + '<td class="pt-cal-due">' + fmtDmY(du.d, du.m, year) + '</td></tr>';
         }).join('');
-        // Append Dec Y \to Jan Y+1 (13th monthly / 5th quarterly row) for full Morocco year view
-        var freq = (cfg && (cfg.periodTemplate || cfg.periodFrequency)) || '';
-        var extra = '';
-        if (/mens/i.test(freq) || list.length === 12) {
-            extra = '<tr class="pt-cal-extra">'
-                + '<td class="pt-cal-n">13</td>'
-                + '<td class="pt-cal-label">D\u00e9cembre ' + year + '</td>'
-                + '<td class="pt-cal-start">' + fmtDmY(1, 12, year) + '</td>'
-                + '<td class="pt-cal-close">' + fmtDmY(31, 12, year) + '</td>'
-                + '<td class="pt-cal-decl">' + monthNames[1] + ' ' + (year + 1) + '</td>'
-                + '<td class="pt-cal-due">' + fmtDmY(31, 1, year + 1) + '</td>'
-                + '</tr>';
-        } else if (/trim/i.test(freq) || list.length === 4) {
-            extra = '<tr class="pt-cal-extra">'
-                + '<td class="pt-cal-n">5</td>'
-                + '<td class="pt-cal-label">Octobre\u2013d\u00e9cembre ' + year + '</td>'
-                + '<td class="pt-cal-start">' + fmtDmY(1, 10, year) + '</td>'
-                + '<td class="pt-cal-close">' + fmtDmY(31, 12, year) + '</td>'
-                + '<td class="pt-cal-decl">' + monthNames[1] + ' ' + (year + 1) + '</td>'
-                + '<td class="pt-cal-due">' + fmtDmY(31, 1, year + 1) + '</td>'
-                + '</tr>';
-        }
-        el.innerHTML = '<div class="pt-cal-wrap">'
-            + '<div class="pt-cal-title">Calendrier Maroc ' + year
-            + ' \u2014 p\u00e9riode d\'activit\u00e9 N, d\u00e9claration mois N+1 (CGI art. 108/111)</div>'
-            + '<table class="pt-cal-table"><thead><tr>'
-            + '<th>#</th><th>P\u00e9riode d\'activit\u00e9</th><th>D\u00e9but</th><th>Cl\u00f4ture</th>'
-            + '<th>Mois de d\u00e9claration</th><th>\u00c9ch\u00e9ance en ligne</th>'
-            + '</tr></thead><tbody>' + rowsHtml + extra + '</tbody></table></div>';
+        el.innerHTML = '<div class="pt-cal-wrap"><table class="pt-cal-table"><thead><tr>'
+            + '<th>#</th><th>P\u00e9riode</th><th>\u00c9ch\u00e9ance</th></tr></thead><tbody>'
+            + rowsHtml + '</tbody></table></div>';
     }
 
     function loadPeriodTemplate(card, freq) {
@@ -499,6 +747,9 @@
         var builder = card.querySelector('.cron-builder');
         if (builder) builder.dataset.periodTpl = freq;
 
+        cfg.yearMode = 'YYYY';
+        if (cfg.calendarYear && !cfg.previewYear) cfg.previewYear = cfg.calendarYear;
+
         // Seed visible echeance fields from ActionConfigJson before sync
         var startEl = card.querySelector('.window-start-day');
         var endEl = card.querySelector('.window-end-day');
@@ -509,17 +760,24 @@
 
         var rows;
         if (Array.isArray(cfg.periods) && cfg.periods.length) {
-            rows = cfg.periods.map(normalizePeriod);
+            var raw = cfg.periods;
+            var missingYearOff = raw.some(function (p) {
+                return p == null || p.openYearOffset == null || p.dueYearOffset == null;
+            });
+            rows = raw.map(normalizePeriod);
             var missingDue = rows.some(function (p) { return !p.dueMonth || !p.dueDay; });
-            // Legacy Jan-first monthly / T1-first quarterly \u2192 rebuild Morocco N+1 order
-            var wrongOrder = (freq === 'monthly' && rows[0] && rows[0].startMonth !== 12)
+            var missingOpen = rows.some(function (p) { return !p.openMonth || !p.openDay; });
+            // Monthly must start with January activity; quarterly with Oct–Déc
+            var wrongOrder = (freq === 'monthly' && rows[0] && rows[0].startMonth !== 1)
                 || (freq === 'quarterly' && rows[0] && rows[0].startMonth !== 10);
-            if ((missingDue || wrongOrder) && (freq === 'monthly' || freq === 'quarterly')) {
+            if ((missingDue || missingOpen || missingYearOff || wrongOrder)
+                && (freq === 'monthly' || freq === 'quarterly')) {
                 rows = generatePeriodRows(freq);
             }
         } else {
             rows = generatePeriodRows(freq);
         }
+        writeCfg(card, cfg);
         renderPeriodEditor(card, rows, freq);
         syncPeriodTable(card);
     }

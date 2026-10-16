@@ -23,6 +23,8 @@ public interface IClientFacade
     Task<ApiResponse<bool>?> DeleteAsync(int id);
     /// <summary>Load all clients for dropdown (no paging).</summary>
     Task<List<ClientDto>> GetAllForDropdownAsync();
+    /// <summary>Clients for Nouveau contrat: sans contrat actif / avec contrat actif.</summary>
+    Task<ClientContratPickerResultDto> GetForContratPickerAsync();
     /// <summary>Get active service type codes for a client (e.g. ["TVA","IS","Paie"]).</summary>
     Task<List<string>> GetActiveServicesAsync(int clientId);
     /// <summary>Returns true if the client has Manage-mode access (Valide/Actif + dates).</summary>
@@ -40,6 +42,7 @@ public interface IClientFacade
     Task<ApiResponse<ClientUserDto>?> CreateClientUserAsync(int clientId, ClientUserCreateDto dto);
     Task<ApiResponse<ClientUserDto>?> UpdateClientUserAsync(int clientId, string userId, ClientUserUpdateDto dto);
     Task<ApiResponse<bool>?> ToggleClientUserActiveAsync(int clientId, string userId);
+    Task<ApiResponse<bool>?> ResendClientUserActivationAsync(int clientId, string userId);
 }
 
 /// <summary>
@@ -266,6 +269,7 @@ public interface ICabinetFacade
     Task<ApiResponse<CabinetEmployeeDto>?> CreateEmployeeAsync(CabinetEmployeeCreateDto dto);
     Task<ApiResponse<CabinetEmployeeDto>?> UpdateEmployeeAsync(string id, CabinetEmployeeUpdateDto dto);
     Task<ApiResponse<bool>?> ToggleEmployeeActiveAsync(string id);
+    Task<ApiResponse<bool>?> ResendEmployeeActivationAsync(string id);
 
     // Roles & Permissions
     Task<PagedResult<RoleDto>?> GetRolesAsync(int page = 1, string? search = null);
@@ -404,6 +408,7 @@ public interface ICommercialFacade
     Task<ApiResponse<ContratCommercialDto>?> SuspendreContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> ReactiverContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> TerminerContratAsync(int id);
+    Task<ApiResponse<bool>?> DeleteContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> DupliquerContratAsync(int id);
     Task<ApiResponse<ContratCommercialDto>?> CreateRectificatifContratAsync(int id, string? motif = null);
     Task<ApiResponse<int>?> SyncServicesFromContratAsync(int contratId);

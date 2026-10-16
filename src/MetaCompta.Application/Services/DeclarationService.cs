@@ -36,6 +36,13 @@ public class DeclarationService : IDeclarationService
     private async Task<ApiResponse<ExerciceComptableDto>> RequireExerciceAsync(int clientId, int cabinetId, int? preferredId = null)
         => await _exerciceContext.RequireOpenExerciceAsync(clientId, cabinetId, preferredId);
 
+    /// <summary>Hangfire passes "SYSTEM" which is not a Users row — AssistantId is FK.</summary>
+    private static string? ResolveAssistantUserId(string? userId)
+        => string.IsNullOrWhiteSpace(userId)
+           || string.Equals(userId, "SYSTEM", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : userId;
+
     private async Task<string?> EnsureDeclarationExerciceOpenAsync(Declaration declaration, int cabinetId)
     {
         if (declaration.ExerciceComptableId is not int exoId) return null;
@@ -368,7 +375,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId,
             DonneesJson = "{}"
         };
@@ -832,7 +839,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.CreeeParSysteme,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1207,7 +1214,7 @@ public class DeclarationService : IDeclarationService
             DateFin = fin,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1431,7 +1438,7 @@ public class DeclarationService : IDeclarationService
             DateFin = fin,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);
@@ -1531,7 +1538,7 @@ public class DeclarationService : IDeclarationService
             DateFin = periodEnd,
             DateLimite = dateLimite,
             Statut = RefCodes.StatutDeclaration.ACompleter,
-            AssistantId = userId,
+            AssistantId = ResolveAssistantUserId(userId),
             CreatedBy = userId
         };
         _db.Declarations.Add(declaration);

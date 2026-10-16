@@ -22,7 +22,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-if (!app.Environment.IsProduction())
+var listenUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "";
+if (listenUrls.Contains("https://", StringComparison.OrdinalIgnoreCase))
 {
     app.UseHttpsRedirection();
 }

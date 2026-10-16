@@ -76,7 +76,8 @@ public class CabinetController : BaseController
         var result = await _cabinet.CreateEmployeeAsync(dto);
         if (result?.Success == true)
         {
-            TempData["Success"] = $"Employé {dto.FirstName} {dto.LastName} créé avec succès.";
+            TempData["Success"] = result.Message
+                ?? $"Employé {dto.FirstName} {dto.LastName} créé. Un email d'activation a été envoyé.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -173,6 +174,19 @@ public class CabinetController : BaseController
         var employee = await _cabinet.GetEmployeeByIdAsync(id);
         if (employee == null) return NotFound();
         return View(employee);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequirePermission(ClaimDefinitions.CabinetEmployeeEdit)]
+    public async Task<IActionResult> ResendEmployeeActivation(string id)
+    {
+        var result = await _cabinet.ResendEmployeeActivationAsync(id);
+        if (result?.Success == true)
+            TempData["Success"] = result.Message ?? "Email d'activation renvoyé.";
+        else
+            TempData["Error"] = result?.Message ?? "Impossible de renvoyer l'invitation.";
+        return RedirectToAction(nameof(EmployeeDetails), new { id });
     }
 
     [HttpPost]

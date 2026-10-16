@@ -60,6 +60,12 @@ public sealed class ClientFacade : IClientFacade
         return result?.Data?.Items ?? new List<ClientDto>();
     }
 
+    public async Task<ClientContratPickerResultDto> GetForContratPickerAsync()
+    {
+        var result = await _api.GetAsync<ClientContratPickerResultDto>("api/clients/for-contrat-picker");
+        return result?.Data ?? new ClientContratPickerResultDto();
+    }
+
     public async Task<List<string>> GetActiveServicesAsync(int clientId)
     {
         try
@@ -139,6 +145,9 @@ public sealed class ClientFacade : IClientFacade
 
     public async Task<ApiResponse<bool>?> ToggleClientUserActiveAsync(int clientId, string userId)
         => await _api.PutAsync<bool>($"api/clients/{clientId}/users/{userId}/toggle", new { });
+
+    public async Task<ApiResponse<bool>?> ResendClientUserActivationAsync(int clientId, string userId)
+        => await _api.PostAsync<bool>($"api/clients/{clientId}/users/{userId}/resend-activation", new { });
 }
 
 public sealed class EmployeeFacade : IEmployeeFacade
@@ -917,6 +926,9 @@ public sealed class CabinetFacade : ICabinetFacade
     public async Task<ApiResponse<bool>?> ToggleEmployeeActiveAsync(string id)
         => await _api.PutAsync<bool>($"api/cabinet/employees/{id}/toggle", new { });
 
+    public async Task<ApiResponse<bool>?> ResendEmployeeActivationAsync(string id)
+        => await _api.PostAsync<bool>($"api/cabinet/employees/{id}/resend-activation", new { });
+
     // ── Roles & Permissions ───────────────────────────────────
 
     public async Task<PagedResult<RoleDto>?> GetRolesAsync(int page = 1, string? search = null)
@@ -1360,6 +1372,9 @@ public sealed class CommercialFacade : ICommercialFacade
 
     public async Task<ApiResponse<ContratCommercialDto>?> TerminerContratAsync(int id)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/terminer", new { });
+
+    public async Task<ApiResponse<bool>?> DeleteContratAsync(int id)
+        => await _api.DeleteAsync<bool>($"api/contrats/{id}");
 
     public async Task<ApiResponse<ContratCommercialDto>?> DupliquerContratAsync(int id)
         => await _api.PostAsync<ContratCommercialDto>($"api/contrats/{id}/dupliquer", new { });

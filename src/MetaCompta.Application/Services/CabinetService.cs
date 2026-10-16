@@ -17,17 +17,20 @@ public class CabinetService : ICabinetService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly IEffectivePermissionService _permissions;
+    private readonly IAccountInvitationService _invitations;
 
     public CabinetService(
         MetaComptaDbContext db,
         UserManager<ApplicationUser> userManager,
         RoleManager<ApplicationRole> roleManager,
-        IEffectivePermissionService permissions)
+        IEffectivePermissionService permissions,
+        IAccountInvitationService invitations)
     {
         _db = db;
         _userManager = userManager;
         _roleManager = roleManager;
         _permissions = permissions;
+        _invitations = invitations;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -97,7 +100,8 @@ public class CabinetService : ICabinetService
     public async Task<ApiResponse<PagedResult<CabinetEmployeeDto>>> GetEmployeesAsync(
         int cabinetId, string? departement = null, int page = 1, int pageSize = 20, string? search = null)
     {
-        var query = _db.Users.Where(u => u.CabinetId == cabinetId);
+        // Cabinet staff only — Extranet client users (ClientId set) must not appear in employee pickers.
+        var query = _db.Users.Where(u => u.CabinetId == cabinetId && u.ClientId == null);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -132,6 +136,7 @@ public class CabinetService : ICabinetService
                 CIN = user.CIN,
                 Role = roles.FirstOrDefault(),
                 EstActif = user.IsActive,
+                EmailConfirmed = user.EmailConfirmed,
                 DateEmbauche = user.DateEmbauche ?? user.CreatedAt,
                 DerniereConnexion = user.LastLoginAt,
                 ProfileImageUrl = user.ProfileImageUrl,
@@ -157,7 +162,8 @@ public class CabinetService : ICabinetService
 
     public async Task<ApiResponse<CabinetEmployeeDto>> GetEmployeeByIdAsync(string id, int cabinetId)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && u.CabinetId == cabinetId);
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.Id == id && u.CabinetId == cabinetId && u.ClientId == null);
         if (user == null)
             return ApiResponse<CabinetEmployeeDto>.Fail("Employé non trouvé.");
 
@@ -183,6 +189,7 @@ public class CabinetService : ICabinetService
             NumeroCNSS = user.NumeroCNSS,
             TypeContrat = user.TypeContrat,
             EstActif = user.IsActive,
+            EmailConfirmed = user.EmailConfirmed,
             DateEmbauche = user.DateEmbauche ?? user.CreatedAt,
             DerniereConnexion = user.LastLoginAt,
             ProfileImageUrl = user.ProfileImageUrl,
@@ -218,12 +225,14 @@ public class CabinetService : ICabinetService
             DateEmbauche = dto.DateEmbauche ?? DateTime.UtcNow,
             TypeContrat = dto.TypeContrat,
             CabinetId = cabinetId,
-            IsActive = true,
+            IsActive = false,
+            EmailConfirmed = false,
             CreatedAt = DateTime.UtcNow,
             PreferredLanguage = "fr-FR"
         };
 
-        var createResult = await _userManager.CreateAsync(user, dto.Password);
+        // Invite flow: create without password; user sets it via activation email.
+        var createResult = await _userManager.CreateAsync(user);
         if (!createResult.Succeeded)
             return ApiResponse<CabinetEmployeeDto>.Fail(
                 "Erreur lors de la création du compte.",
@@ -250,16 +259,28 @@ public class CabinetService : ICabinetService
         }
         await SyncUserPermissionsAsync(user, perms);
 
-        await LogAuditAsync(cabinetId, userId, "Creation", "CabinetEmployee",
-            $"Employé '{user.FullName}' ({user.Email}) créé avec le rôle '{dto.Role}'.");
+        var cabinet = await _db.Cabinets.FindAsync(cabinetId);
+        var invite = await _invitations.SendActivationEmailAsync(
+            user, ActivationPortal.BackOffice, cabinet?.Name ?? "Cabinet");
 
-        return await GetEmployeeByIdAsync(user.Id, cabinetId);
+        await LogAuditAsync(cabinetId, userId, "Creation", "CabinetEmployee",
+            $"Employé '{user.FullName}' ({user.Email}) créé avec le rôle '{dto.Role}' (invitation email).");
+
+        var created = await GetEmployeeByIdAsync(user.Id, cabinetId);
+        if (created.Success && created.Data != null)
+        {
+            created.Message = invite.Success
+                ? "Employé créé. Un email d'activation a été envoyé."
+                : invite.Message ?? "Employé créé, mais l'email d'activation a échoué.";
+        }
+        return created;
     }
 
     public async Task<ApiResponse<CabinetEmployeeDto>> UpdateEmployeeAsync(
         string id, CabinetEmployeeUpdateDto dto, int cabinetId, string userId)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && u.CabinetId == cabinetId);
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.Id == id && u.CabinetId == cabinetId && u.ClientId == null);
         if (user == null)
             return ApiResponse<CabinetEmployeeDto>.Fail("Employé non trouvé.");
 
@@ -305,7 +326,8 @@ public class CabinetService : ICabinetService
 
     public async Task<ApiResponse<bool>> ToggleEmployeeActiveAsync(string id, int cabinetId, string userId)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && u.CabinetId == cabinetId);
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.Id == id && u.CabinetId == cabinetId && u.ClientId == null);
         if (user == null)
             return ApiResponse<bool>.Fail("Employé non trouvé.");
 
@@ -317,6 +339,9 @@ public class CabinetService : ICabinetService
 
         return ApiResponse<bool>.Ok(true, user.IsActive ? "Employé activé." : "Employé désactivé.");
     }
+
+    public Task<ApiResponse<bool>> ResendEmployeeActivationAsync(string id, int cabinetId)
+        => _invitations.ResendActivationAsync(id, cabinetId, ActivationPortal.BackOffice);
 
     // ═══════════════════════════════════════════════════════════
     // ROLES & PERMISSIONS

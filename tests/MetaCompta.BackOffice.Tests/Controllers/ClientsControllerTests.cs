@@ -11,6 +11,10 @@ public class ClientsControllerTests
     private readonly Mock<IHttpContextAccessor> _mockAccessor;
     private readonly Mock<IClientFacade> _mockClients;
     private readonly Mock<ICommercialFacade> _mockCommercial;
+    private readonly Mock<IWorkflowFacade> _mockWorkflow;
+    private readonly Mock<ICabinetFacade> _mockCabinet;
+    private readonly Mock<IComptabiliteFacade> _mockCompta;
+    private readonly Mock<IDepartmentFacade> _mockDepartments;
     private readonly ClientsController _controller;
 
     public ClientsControllerTests()
@@ -19,8 +23,20 @@ public class ClientsControllerTests
         _mockAccessor = ControllerTestHelper.CreateMockContextAccessor();
         _mockClients = new Mock<IClientFacade>();
         _mockCommercial = new Mock<ICommercialFacade>();
-        _controller = new ClientsController(_mockRefData.Object, _mockAccessor.Object, _mockClients.Object, _mockCommercial.Object);
-        ControllerTestHelper.SetupController(_controller);
+        _mockWorkflow = new Mock<IWorkflowFacade>();
+        _mockCabinet = new Mock<ICabinetFacade>();
+        _mockCompta = new Mock<IComptabiliteFacade>();
+        _mockDepartments = new Mock<IDepartmentFacade>();
+        _controller = new ClientsController(
+            _mockRefData.Object,
+            _mockAccessor.Object,
+            _mockClients.Object,
+            _mockCommercial.Object,
+            _mockWorkflow.Object,
+            _mockCabinet.Object,
+            _mockCompta.Object,
+            _mockDepartments.Object);
+        ControllerTestHelper.SetupController(_controller, sharedContext: _mockAccessor.Object.HttpContext);
     }
 
     // ── Index ────────────────────────────────────────────────────

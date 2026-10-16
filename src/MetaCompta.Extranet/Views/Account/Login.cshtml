@@ -44,6 +44,12 @@
                     <p class="text-body-secondary mb-0">Connectez-vous à votre espace client</p>
                 </div>
 
+                @if (TempData["Success"] != null)
+                {
+                    <div class="alert alert-success py-2 rounded-4">
+                        <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+                    </div>
+                }
                 @if (!ViewData.ModelState.IsValid)
                 {
                     <div class="alert alert-danger py-2 rounded-4">
